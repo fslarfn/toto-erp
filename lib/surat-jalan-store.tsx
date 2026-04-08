@@ -1,0 +1,139 @@
+"use client";
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { supabase } from "@/lib/supabase-client";
+
+/* ================================================================
+   SURAT JALAN STORE — Supabase-backed
+================================================================ */
+
+export type SJType = "customer" | "pewarnaan";
+
+export type SuratJalanRow = {
+    id: string;
+    type: SJType;
+    tanggal: string;
+    noSJ: string;
+    vendor: string;
+    ekspedisi: string;
+    dibuat_oleh: string;
+    items: SJItem[];
+};
+
+export type SJItem = {
+    pesananId: number;
+    customer: string;
+    deskripsi: string;
+    ukuran: string;
+    qty: string;
+    noInv: string;
+};
+
+function dbToSuratJalan(r: Record<string, unknown>, items: Record<string, unknown>[]): SuratJalanRow {
+    return {
+        id: r.id as string,
+        type: (r.type as SJType) || "customer",
+        tanggal: (r.tanggal as string) || "",
+        noSJ: (r.no_sj as string) || "",
+        vendor: (r.vendor as string) || "",
+        ekspedisi: (r.ekspedisi as string) || "",
+        dibuat_oleh: (r.dibuat_oleh as string) || "",
+        items: items.map(it => ({
+            pesananId: (it.pesanan_id as number) || 0,
+            customer: (it.customer as string) || "",
+            deskripsi: (it.deskripsi as string) || "",
+            ukuran: (it.ukuran as string) || "",
+            qty: (it.qty as string) || "",
+            noInv: (it.no_inv as string) || "",
+        })),
+    };
+}
+
+type Ctx = {
+    suratJalans: SuratJalanRow[];
+    loading: boolean;
+    addSJ: (sj: Omit<SuratJalanRow, "id">) => string;
+    deleteSJ: (id: string) => void;
+};
+
+const SJCtx = createContext<Ctx | null>(null);
+
+export function SuratJalanProvider({ children }: { children: ReactNode }) {
+    const [suratJalans, setSuratJalans] = useState<SuratJalanRow[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const { data: headers } = await supabase
+                    .from("surat_jalan")
+                    .select("*")
+                    .order("tanggal", { ascending: false });
+
+                if (!cancelled && headers) {
+                    const ids = headers.map(h => h.id);
+                    let itemsData: Record<string, unknown>[] = [];
+                    if (ids.length > 0) {
+                        const { data: items } = await supabase
+                            .from("surat_jalan_items")
+                            .select("*")
+                            .in("surat_jalan_id", ids);
+                        if (items) itemsData = items;
+                    }
+                    setSuratJalans(headers.map(h =>
+                        dbToSuratJalan(h, itemsData.filter(it => (it as Record<string, unknown>).surat_jalan_id === h.id))
+                    ));
+                }
+            } catch { /* keep empty */ }
+            finally { if (!cancelled) setLoading(false); }
+        })();
+        return () => { cancelled = true; };
+    }, []);
+
+    const addSJ = useCallback((sj: Omit<SuratJalanRow, "id">): string => {
+        const id = `SJ-${Date.now()}`;
+        setSuratJalans(prev => [{ ...sj, id }, ...prev]);
+        (async () => {
+            await supabase.from("surat_jalan").insert({
+                id,
+                type: sj.type,
+                tanggal: sj.tanggal,
+                no_sj: sj.noSJ,
+                vendor: sj.vendor,
+                ekspedisi: sj.ekspedisi,
+                dibuat_oleh: sj.dibuat_oleh,
+            });
+            if (sj.items.length > 0) {
+                await supabase.from("surat_jalan_items").insert(
+                    sj.items.map(it => ({
+                        surat_jalan_id: id,
+                        pesanan_id: it.pesananId,
+                        customer: it.customer,
+                        deskripsi: it.deskripsi,
+                        ukuran: it.ukuran,
+                        qty: it.qty,
+                        no_inv: it.noInv,
+                    }))
+                );
+            }
+        })();
+        return id;
+    }, []);
+
+    const deleteSJ = useCallback((id: string) => {
+        setSuratJalans(prev => prev.filter(s => s.id !== id));
+        supabase.from("surat_jalan").delete().eq("id", id).then();
+    }, []);
+
+    return (
+        <SJCtx.Provider value={{ suratJalans, loading, addSJ, deleteSJ }}>
+            {children}
+        </SJCtx.Provider>
+    );
+}
+
+export function useSuratJalan() {
+    const ctx = useContext(SJCtx);
+    if (!ctx) throw new Error("useSuratJalan must be used inside SuratJalanProvider");
+    return ctx;
+}
