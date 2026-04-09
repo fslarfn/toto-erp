@@ -115,19 +115,45 @@ export default function PesananPage() {
 
     const inputRefs = useRef<(HTMLInputElement | null)[][]>([]);
 
+    const now = new Date();
+    const [month, setMonth] = useState<number | "all">("all");
+    const [year, setYear] = useState(now.getFullYear());
+    const years: number[] = [];
+    for (let y = 2023; y <= now.getFullYear() + 1; y++) years.push(y);
+    const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+
     /* ── Computed data ─────────────────────────────────────── */
+    const filteredRows = useMemo(() => {
+        return rows.filter(r => {
+            if (!isRowFilled(r)) return true;
+            if (!r.tanggal) return true;
+            const y = parseInt(r.tanggal.slice(0, 4));
+            if (y !== year) return false;
+            if (month !== "all") {
+                const m = parseInt(r.tanggal.slice(5, 7));
+                if (m !== month) return false;
+            }
+            return true;
+        });
+    }, [rows, year, month]);
+
     const lastFilledIdx = useMemo(() => {
-        for (let i = rows.length - 1; i >= 0; i--) {
-            if (isRowFilled(rows[i])) return i;
+        for (let i = filteredRows.length - 1; i >= 0; i--) {
+            if (isRowFilled(filteredRows[i])) return i;
         }
         return -1;
-    }, [rows]);
+    }, [filteredRows]);
 
     const filledCount = useMemo(() =>
-        rows.filter(r => isRowFilled(r)).length, [rows]);
+        filteredRows.filter(r => isRowFilled(r)).length, [filteredRows]);
 
     const totalBrowsePages = useMemo(() =>
-        Math.max(1, Math.ceil(rows.length / PAGE_SIZE)), [rows.length]);
+        Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE)), [filteredRows.length]);
+
+    // Reset input start when filter changes
+    useEffect(() => {
+        setInputStartIdx(null);
+    }, [month, year]);
 
     // Initialize input start index after loading
     useEffect(() => {
@@ -150,12 +176,12 @@ export default function PesananPage() {
     const displayRows = useMemo(() => {
         if (viewMode === "input" && inputStartIdx !== null) {
             // Last 100 data + 100 empty = ~200 rows
-            return rows.slice(inputStartIdx, inputStartIdx + PAGE_SIZE + EMPTY_BUFFER);
+            return filteredRows.slice(inputStartIdx, inputStartIdx + PAGE_SIZE + EMPTY_BUFFER);
         } else {
             const start = (browsePage - 1) * PAGE_SIZE;
-            return rows.slice(start, start + PAGE_SIZE);
+            return filteredRows.slice(start, start + PAGE_SIZE);
         }
-    }, [viewMode, inputStartIdx, browsePage, rows]);
+    }, [viewMode, inputStartIdx, browsePage, filteredRows]);
 
     const displayFilledCount = useMemo(() =>
         displayRows.filter(r => isRowFilled(r)).length, [displayRows]);
@@ -321,7 +347,7 @@ export default function PesananPage() {
 
     /* ── Export ─────────────────────────────────────────────── */
     const exportExcel = () => {
-        const data = rows.filter((r) => r.customer || r.deskripsi || r.tanggal).map((r, i) => ({
+        const data = filteredRows.filter((r) => r.customer || r.deskripsi || r.tanggal).map((r, i) => ({
             "No": i + 1, "Tanggal": r.tanggal, "Nama Customer": r.customer,
             "Deskripsi Pesanan": r.deskripsi, "Ukuran": r.ukuran, "Qty": r.qty,
         }));
@@ -366,6 +392,19 @@ export default function PesananPage() {
                         }
                     </span>
                 </div>
+
+                <div style={{ display: "flex", gap: 6, alignItems: "center", marginLeft: 8 }}>
+                    <select value={month} onChange={(e) => setMonth(e.target.value === "all" ? "all" : +e.target.value)}
+                        style={{ border: "1px solid #D1BFA3", borderRadius: 5, padding: "2px 6px", fontSize: 11, background: "#FFFBF7", color: "#5C4033" }}>
+                        <option value="all">Semua Bulan</option>
+                        {MONTH_NAMES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+                    </select>
+                    <select value={year} onChange={(e) => setYear(+e.target.value)}
+                        style={{ border: "1px solid #D1BFA3", borderRadius: 5, padding: "2px 6px", fontSize: 11, background: "#FFFBF7", color: "#5C4033" }}>
+                        {years.map((y) => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                </div>
+
                 <span style={{ fontSize: 10, color: "#C5A882", marginLeft: 4 }}>↑↓←→ navigasi · Shift+drag seleksi · Ctrl+C salin · Ctrl+V tempel · drag 🟦 fill bawah</span>
                 <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
                     <button onClick={() => { if (confirm("Reset semua data?")) resetRows(); }}
