@@ -71,43 +71,63 @@ export function PesananProvider({ children }: { children: ReactNode }) {
         let cancelled = false;
         (async () => {
             try {
-                const { data, error } = await supabase
-                    .from("pesanan_rows")
-                    .select("*")
-                    .order("id", { ascending: true });
+                let allData: any[] = [];
+                let from = 0;
+                let to = 999;
+                let hasMore = true;
 
-                if (!cancelled && data && !error) {
-                    if (data.length > 0) {
-                        const mapped = data.map((r: Record<string, unknown>) => ({
-                            id: r.id as number,
-                            tanggal: (r.tanggal as string) || "",
-                            customer: (r.customer as string) || "",
-                            deskripsi: (r.deskripsi as string) || "",
-                            ukuran: (r.ukuran as string) || "",
-                            qty: (r.qty as string) || "",
-                            harga: (r.harga as string) || "",
-                            no_inv: (r.no_inv as string) || "",
-                            no_sj: (r.no_sj as string) || "",
-                            di_produksi: !!r.di_produksi,
-                            di_warna: !!r.di_warna,
-                            siap_kirim: !!r.siap_kirim,
-                            di_kirim: !!r.di_kirim,
-                            ekspedisi: (r.ekspedisi as string) || "",
-                            color_marker: (r.color_marker as string) || "",
-                            printed_at: (r.printed_at as string) || "",
-                            po_label: (r.po_label as string) || "",
-                            is_packing: !!r.is_packing,
-                            is_paid: !!r.is_paid,
-                            production_note: (r.production_note as string) || "",
-                            metode_kirim: (r.metode_kirim as string) || "",
-                        }));
-                        // Append empty rows buffer after data
-                        const lastId = mapped[mapped.length - 1].id;
-                        const emptyBuf = Array.from({ length: EMPTY_BUFFER }, (_, i) => makeEmptyRow(lastId + i + 1));
-                        setRows([...mapped, ...emptyBuf]);
+                while (hasMore && !cancelled) {
+                    const { data, error } = await supabase
+                        .from("pesanan_rows")
+                        .select("*")
+                        .order("id", { ascending: true })
+                        .range(from, to);
+
+                    if (error) throw error;
+                    if (data && data.length > 0) {
+                        allData = [...allData, ...data];
+                        if (data.length < 1000) {
+                            hasMore = false;
+                        } else {
+                            from += 1000;
+                            to += 1000;
+                        }
+                    } else {
+                        hasMore = false;
                     }
                 }
-            } catch {
+
+                if (!cancelled && allData.length > 0) {
+                    const mapped = allData.map((r: Record<string, unknown>) => ({
+                        id: r.id as number,
+                        tanggal: (r.tanggal as string) || "",
+                        customer: (r.customer as string) || "",
+                        deskripsi: (r.deskripsi as string) || "",
+                        ukuran: (r.ukuran as string) || "",
+                        qty: (r.qty as string) || "",
+                        harga: (r.harga as string) || "",
+                        no_inv: (r.no_inv as string) || "",
+                        no_sj: (r.no_sj as string) || "",
+                        di_produksi: !!r.di_produksi,
+                        di_warna: !!r.di_warna,
+                        siap_kirim: !!r.siap_kirim,
+                        di_kirim: !!r.di_kirim,
+                        ekspedisi: (r.ekspedisi as string) || "",
+                        color_marker: (r.color_marker as string) || "",
+                        printed_at: (r.printed_at as string) || "",
+                        po_label: (r.po_label as string) || "",
+                        is_packing: !!r.is_packing,
+                        is_paid: !!r.is_paid,
+                        production_note: (r.production_note as string) || "",
+                        metode_kirim: (r.metode_kirim as string) || "",
+                    }));
+                    // Append empty rows buffer after data
+                    const lastId = mapped[mapped.length - 1].id;
+                    const emptyBuf = Array.from({ length: EMPTY_BUFFER }, (_, i) => makeEmptyRow(lastId + i + 1));
+                    setRows([...mapped, ...emptyBuf]);
+                }
+            } catch (err) {
+                console.error("Fetch Error:", err);
                 // Supabase not available — keep empty rows
             } finally {
                 if (!cancelled) setLoading(false);
