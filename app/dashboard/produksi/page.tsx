@@ -520,9 +520,9 @@ function TabRiwayatPO() {
         })();
     }, []);
 
-    const baseRows = rows.filter(r => (r.customer || r.deskripsi) && r.printed_at);
+    const baseRows = rows.filter(r => (r.customer || r.deskripsi));
     const filtered = baseRows.filter(r => {
-        const d = r.printed_at;
+        const d = r.printed_at || r.tanggal;
         const matchDate = !d || (parseInt(d.slice(0, 4)) === year && parseInt(d.slice(5, 7)) === month);
         const q = search.toLowerCase();
         const matchSearch = !q || [r.customer, r.deskripsi, r.po_label, r.ekspedisi, r.metode_kirim].join(" ").toLowerCase().includes(q);
@@ -532,7 +532,7 @@ function TabRiwayatPO() {
 
     // Summary stats
     const totalAll = baseRows.filter(r => {
-        const d = r.printed_at;
+        const d = r.printed_at || r.tanggal;
         return !d || (parseInt(d.slice(0, 4)) === year && parseInt(d.slice(5, 7)) === month);
     });
     const totalDikirim = totalAll.filter(r => r.di_kirim).length;

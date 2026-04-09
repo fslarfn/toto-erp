@@ -1,7 +1,9 @@
 "use client";
+import { useState } from "react";
 import { useStore } from "@/lib/store";
-import { useAuth, roleLabels } from "@/lib/auth";
-import { formatCurrency, formatDate, PRODUCTION_STATUS_LABELS } from "@/lib/utils";
+import { usePesanan, isRowFilled } from "@/lib/pesanan-store";
+import { useAuth } from "@/lib/auth";
+import { formatCurrency, formatDate, PRODUCTION_STATUS_LABELS, parseIdNum } from "@/lib/utils";
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
     ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart, Bar
@@ -18,19 +20,70 @@ const PROD_COLORS: Record<string, string> = {
 
 export default function DashboardPage() {
     const { orders, cashFlow, materials, bankAccounts } = useStore();
+    const { rows: pesananRows } = usePesanan();
     const { user } = useAuth();
 
     const now = new Date();
-    const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const [month, setMonth] = useState(now.getMonth() + 1);
+    const [year, setYear] = useState(now.getFullYear());
 
-    const thisMonthOrders = orders.filter((o) => o.orderDate.startsWith(thisMonth));
-    const totalRevenue = cashFlow.filter((c) => c.type === "income").reduce((s, c) => s + c.amount, 0);
-    const totalExpense = cashFlow.filter((c) => c.type === "expense").reduce((s, c) => s + c.amount, 0);
+    const selectedPeriod = `${year}-${String(month).padStart(2, "0")}`;
+
+    // Filter orders dari useStore
+    const filteredStoreOrders = orders.filter((o) => o.orderDate.startsWith(selectedPeriod));
+    
+    // Filter rows dari usePesanan
+    const filteredPesananRows = pesananRows.filter((r) => {
+        if (!isRowFilled(r)) return false;
+        return r.tanggal.startsWith(selectedPeriod);
+    });
+
+    // Gabungkan data untuk metrik
+    const totalOrderCount = filteredStoreOrders.length + filteredPesananRows.length;
+    
+    const storeOrdersValue = filteredStoreOrders.reduce((s, o) => s + o.totalPrice, 0);
+    const pesananRowsValue = filteredPesananRows.reduce((s, r) => {
+        const u = parseIdNum(r.ukuran);
+        const q = parseIdNum(r.qty);
+        const h = parseIdNum(r.harga);
+        return s + (u * q * h);
+    }, 0);
+    
+    const totalOrderValue = storeOrdersValue + pesananRowsValue;
+
+    // Filter cashFlow berdasarkan periode
+    const filteredCashFlow = cashFlow.filter(c => c.date.startsWith(selectedPeriod));
+    const totalRevenueFromCashFlow = filteredCashFlow.filter((c) => c.type === "income").reduce((s, c) => s + c.amount, 0);
+    const totalExpense = filteredCashFlow.filter((c) => c.type === "expense").reduce((s, c) => s + c.amount, 0);
+
+    // Tambahkan pendapatan dari pesananRows yang sudah lunas (is_paid) di periode terpilih
+    const paidPesananRowsValue = filteredPesananRows.filter(r => r.is_paid).reduce((s, r) => {
+        const u = parseIdNum(r.ukuran);
+        const q = parseIdNum(r.qty);
+        const h = parseIdNum(r.harga);
+        return s + (u * q * h);
+    }, 0);
+
+    const totalRevenue = totalRevenueFromCashFlow + paidPesananRowsValue;
     const netProfit = totalRevenue - totalExpense;
-    const totalAR = orders.filter((o) => o.paymentStatus !== "lunas").reduce((s, o) => s + (o.totalPrice - o.paidAmount), 0);
+
+    // Piutang gabungan (Saldo yang belum dibayar)
+    const storeAR = orders.filter((o) => o.paymentStatus !== "lunas").reduce((s, o) => s + (o.totalPrice - o.paidAmount), 0);
+    const pesananAR = pesananRows.filter(r => isRowFilled(r) && !r.is_paid).reduce((s, r) => {
+        const u = parseIdNum(r.ukuran);
+        const q = parseIdNum(r.qty);
+        const h = parseIdNum(r.harga);
+        return s + (u * q * h);
+    }, 0);
+    const totalAR = storeAR + pesananAR;
+
     const totalSaldo = bankAccounts.reduce((s, b) => s + b.balance, 0);
     const lowStock = materials.filter((m) => m.currentStock <= m.minimumStock).length;
-    const activeJobs = orders.filter((o) => o.productionStatus !== "di_kirim").length;
+    
+    // Active jobs gabungan
+    const activeStoreJobs = orders.filter((o) => o.productionStatus !== "di_kirim").length;
+    const activePesananJobs = pesananRows.filter(r => isRowFilled(r) && !r.di_kirim).length;
+    const activeJobs = activeStoreJobs + activePesananJobs;
 
     // Monthly chart data
     const monthlyData = (() => {
@@ -48,20 +101,34 @@ export default function DashboardPage() {
         }));
     })();
 
-    // Payment pie
+    // Payment pie gabungan (berdasarkan periode terpilih agar konsisten)
+    const countPaidStore = filteredStoreOrders.filter((o) => o.paymentStatus === "lunas").length;
+    const countPartStore = filteredStoreOrders.filter((o) => o.paymentStatus === "bayar_sebagian").length;
+    const countUnpaidStore = filteredStoreOrders.filter((o) => o.paymentStatus === "belum_bayar").length;
+
+    const countPaidPesanan = filteredPesananRows.filter(r => r.is_paid).length;
+    const countUnpaidPesanan = filteredPesananRows.filter(r => !r.is_paid).length;
+
     const paymentPie = [
-        { name: "Belum Bayar", value: orders.filter((o) => o.paymentStatus === "belum_bayar").length },
-        { name: "Bayar Sebagian", value: orders.filter((o) => o.paymentStatus === "bayar_sebagian").length },
-        { name: "Lunas", value: orders.filter((o) => o.paymentStatus === "lunas").length },
+        { name: "Lunas", value: countPaidStore + countPaidPesanan },
+        { name: "Bayar Sebagian", value: countPartStore },
+        { name: "Belum Lunas", value: countUnpaidStore + countUnpaidPesanan },
     ].filter((d) => d.value > 0);
 
-    // Production status bar
-    const prodData = Object.entries(
-        orders.reduce((acc, o) => {
-            acc[o.productionStatus] = (acc[o.productionStatus] || 0) + 1;
-            return acc;
-        }, {} as Record<string, number>)
-    ).map(([status, count]) => ({
+    // Production status bar gabungan
+    const prodCounts: Record<string, number> = {};
+    orders.forEach(o => { prodCounts[o.productionStatus] = (prodCounts[o.productionStatus] || 0) + 1; });
+    pesananRows.forEach(r => {
+        if (!isRowFilled(r)) return;
+        let status = "belum_produksi";
+        if (r.di_kirim) status = "di_kirim";
+        else if (r.siap_kirim) status = "siap_kirim";
+        else if (r.di_warna) status = "di_warna";
+        else if (r.di_produksi) status = "di_produksi";
+        prodCounts[status] = (prodCounts[status] || 0) + 1;
+    });
+
+    const prodData = Object.entries(prodCounts).map(([status, count]) => ({
         name: PRODUCTION_STATUS_LABELS[status] ?? status,
         count,
         fill: PROD_COLORS[status] ?? "#D1BFA3",
@@ -72,7 +139,7 @@ export default function DashboardPage() {
     return (
         <div className="page-content space-y-5">
             {/* Page header */}
-            <div className="page-header">
+            <div className="page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
                 <div>
                     <h1 className="page-title-h1">Dashboard Performa Usaha</h1>
                     <p className="page-subtitle">
@@ -80,14 +147,28 @@ export default function DashboardPage() {
                         {now.toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
                     </p>
                 </div>
+
+                {/* Month/Year Filter */}
+                <div style={{ display: "flex", gap: "0.5rem", background: "white", padding: "4px 8px", borderRadius: 8, border: "1px solid var(--border-light)" }}>
+                    <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))}
+                        style={{ border: "none", outline: "none", fontSize: 13, color: "#5C4033", fontWeight: 600, cursor: "pointer", background: "transparent" }}>
+                        {["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"].map((m, i) => (
+                            <option key={i + 1} value={i + 1}>{m}</option>
+                        ))}
+                    </select>
+                    <select value={year} onChange={(e) => setYear(parseInt(e.target.value))}
+                        style={{ border: "none", outline: "none", fontSize: 13, color: "#5C4033", fontWeight: 600, cursor: "pointer", background: "transparent" }}>
+                        {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                </div>
             </div>
 
             {/* KPI Cards */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1rem" }}>
                 {[
-                    { label: "Order Bulan Ini", value: `${thisMonthOrders.length} order`, sub: formatCurrency(thisMonthOrders.reduce((s, o) => s + o.totalPrice, 0)), bg: "#FDF3E7", border: "#E8DCCF", icon: "📦" },
+                    { label: "Order Bulan Ini", value: `${totalOrderCount} order`, sub: formatCurrency(totalOrderValue), bg: "#FDF3E7", border: "#E8DCCF", icon: "📦" },
                     { label: "Total Saldo", value: formatCurrency(totalSaldo), sub: `${bankAccounts.length} rekening`, bg: "#FDF3E7", border: "#E8DCCF", icon: "🏦" },
-                    { label: "Piutang Belum Lunas", value: formatCurrency(totalAR), sub: `${orders.filter((o) => o.paymentStatus !== "lunas").length} invoice`, bg: "#FEF2F2", border: "#FECACA", icon: "⚠️" },
+                    { label: "Piutang Belum Lunas", value: formatCurrency(totalAR), sub: `${orders.filter((o) => o.paymentStatus !== "lunas").length + pesananRows.filter(r => isRowFilled(r) && !r.is_paid).length} invoice`, bg: "#FEF2F2", border: "#FECACA", icon: "⚠️" },
                     { label: "Laba Bersih", value: formatCurrency(netProfit), sub: `Rev ${formatCurrency(totalRevenue)}`, bg: netProfit >= 0 ? "#F0FDF4" : "#FEF2F2", border: netProfit >= 0 ? "#BBF7D0" : "#FECACA", icon: netProfit >= 0 ? "📈" : "📉" },
                 ].map((card) => (
                     <div key={card.label} className="stat-card" style={{ borderColor: card.border, background: card.bg }}>
@@ -108,7 +189,17 @@ export default function DashboardPage() {
                 </div>
                 <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                     {Object.entries(PRODUCTION_STATUS_LABELS).map(([key, label]) => {
-                        const count = orders.filter((o) => o.productionStatus === key).length;
+                        const countStore = orders.filter((o) => o.productionStatus === key).length;
+                        const countPesanan = pesananRows.filter(r => {
+                            if (!isRowFilled(r)) return false;
+                            let status = "belum_produksi";
+                            if (r.di_kirim) status = "di_kirim";
+                            else if (r.siap_kirim) status = "siap_kirim";
+                            else if (r.di_warna) status = "di_warna";
+                            else if (r.di_produksi) status = "di_produksi";
+                            return status === key;
+                        }).length;
+                        const count = countStore + countPesanan;
                         return (
                             <span key={key} className={`badge status-${key}`} style={{ fontSize: 12, padding: "3px 12px" }}>
                                 {label}: <strong style={{ marginLeft: 4 }}>{count}</strong>

@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { useAuth, roleLabels } from "@/lib/auth";
+import { useAuth, roleLabels, getRoleDisplay } from "@/lib/auth";
 import { PesananProvider } from "@/lib/pesanan-store";
 import { SuratJalanProvider } from "@/lib/surat-jalan-store";
 import { SJBahanProvider } from "@/lib/sj-bahan-store";
@@ -131,7 +131,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                 <div className="text-xs mb-2 px-1 truncate" style={{ color: "#B89678" }}>
                                     <span className="font-semibold" style={{ color: "var(--text-dark)" }}>{user.name}</span>
                                     <br />
-                                    <span>{roleLabels[user.role]}</span>
+                                    <span>{getRoleDisplay(user)}</span>
                                 </div>
                             )}
                             <button onClick={handleLogout} title="Logout">
@@ -180,7 +180,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                 <div className="flex items-center gap-3">
                                     <div className="text-right hidden sm:block">
                                         <div className="text-sm font-semibold">{user.name}</div>
-                                        <div className="text-xs opacity-80">{roleLabels[user.role]}</div>
+                                        <div className="text-xs opacity-80">{getRoleDisplay(user)}</div>
                                     </div>
                                     <div
                                         className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm"

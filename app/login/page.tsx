@@ -35,14 +35,17 @@ export default function LoginPage() {
             <div style={styles.bgGlow1} />
             <div style={styles.bgGlow2} />
 
-            <div style={{
-                ...styles.container,
-                opacity: mounted ? 1 : 0,
-                transform: mounted ? "translateY(0)" : "translateY(20px)",
-                transition: "all 0.6s cubic-bezier(0.16, 1, 0.3, 1)",
-            }}>
-                {/* Left Panel — Branding */}
-                <div style={styles.leftPanel}>
+            <div 
+                className="login-container"
+                style={{
+                    ...styles.container,
+                    opacity: mounted ? 1 : 0,
+                    transform: mounted ? "translateY(0)" : "translateY(20px)",
+                    transition: "all 0.6s cubic-bezier(0.16, 1, 0.3, 1)",
+                }}
+            >
+                {/* Left Panel — Branding (Hidden on Mobile) */}
+                <div className="login-left-panel" style={styles.leftPanel}>
                     <div style={styles.leftContent}>
                         {/* Logo */}
                         <div style={styles.logoWrapper}>
@@ -81,20 +84,26 @@ export default function LoginPage() {
 
                 {/* Right Panel — Login Form */}
                 <div style={styles.rightPanel}>
-                    {/* Mobile Logo */}
-                    <div style={styles.mobileLogo}>
+                    {/* Mobile Logo Group (Only visible on Mobile) */}
+                    <div className="mobile-only-header" style={styles.mobileHeader}>
                         <div style={styles.mobileLogoIcon}>
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                                <polyline points="9 22 9 12 15 12 15 22" />
                             </svg>
                         </div>
-                        <span style={styles.mobileLogoText}>ERP TOTO</span>
+                        <div style={{ textAlign: "left" }}>
+                            <h2 style={{ fontSize: 20, fontWeight: 800, color: "#1E293B", margin: 0, lineHeight: 1 }}>ERP TOTO</h2>
+                            <p style={{ fontSize: 11, color: "#94A3B8", margin: "2px 0 0" }}>Sistem Informasi Manufaktur</p>
+                        </div>
                     </div>
 
-                    <h2 style={styles.formTitle}>Selamat Datang 👋</h2>
-                    <p style={styles.formSubtitle}>Masuk ke dashboard untuk mengelola bisnis Anda</p>
+                    <div className="form-header">
+                        <h2 style={styles.formTitle}>Selamat Datang 👋</h2>
+                        <p style={styles.formSubtitle}>Masuk ke dashboard untuk mengelola bisnis Anda</p>
+                    </div>
 
-                    <form onSubmit={handleSubmit}>
+                    <form onSubmit={handleSubmit} style={{ width: "100%" }}>
                         {/* Username */}
                         <div style={styles.fieldGroup}>
                             <label style={styles.label}>Username</label>
@@ -184,27 +193,7 @@ export default function LoginPage() {
                         </button>
                     </form>
 
-                    {/* Demo hint */}
-                    <div style={styles.demoBox}>
-                        <div style={styles.demoTitle}>💡 Akun Demo</div>
-                        <div style={styles.demoGrid}>
-                            {["owner", "finance", "sales", "produksi", "barang"].map(u => (
-                                <button
-                                    key={u}
-                                    type="button"
-                                    onClick={() => { setUsername(u); setPassword("toto2025"); setError(""); }}
-                                    style={styles.demoChip}
-                                >
-                                    {u}
-                                </button>
-                            ))}
-                        </div>
-                        <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 8 }}>
-                            Klik salah satu → password otomatis terisi
-                        </div>
-                    </div>
-
-                    <p style={{ textAlign: "center", fontSize: 12, color: "#CBD5E1", marginTop: 20 }}>
+                    <p style={{ textAlign: "center", fontSize: 11, color: "#CBD5E1", marginTop: 40 }}>
                         © {new Date().getFullYear()} CV Toto Aluminium Manufacture
                     </p>
                 </div>
@@ -218,15 +207,45 @@ export default function LoginPage() {
                 @keyframes spin {
                     to { transform: rotate(360deg); }
                 }
-                @media (max-width: 768px) {
-                    .login-left-panel { display: none !important; }
+                
+                @media (max-width: 900px) {
+                    .login-container {
+                        max-width: 450px !important;
+                        flex-direction: column !important;
+                        min-height: auto !important;
+                    }
+                    .login-left-panel {
+                        display: none !important;
+                    }
+                    .mobile-only-header {
+                        display: flex !important;
+                    }
+                    .form-header {
+                        text-align: center !important;
+                    }
+                    .form-header h2 {
+                        font-size: 24px !important;
+                    }
+                }
+
+                @media (max-width: 480px) {
+                    .login-container {
+                        border-radius: 0 !important;
+                        box-shadow: none !important;
+                        background: white !important;
+                        height: 100vh !important;
+                        width: 100vw !important;
+                        max-width: none !important;
+                    }
+                    #app-page-wrapper {
+                        padding: 0 !important;
+                    }
                 }
             `}</style>
         </div>
     );
 }
 
-/* ──────── STYLES ──────── */
 const styles: Record<string, React.CSSProperties> = {
     page: {
         minHeight: "100vh",
@@ -275,6 +294,7 @@ const styles: Record<string, React.CSSProperties> = {
         boxShadow: "0 40px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05)",
         position: "relative",
         zIndex: 1,
+        background: "white",
     },
     /* LEFT PANEL */
     leftPanel: {
@@ -386,48 +406,48 @@ const styles: Record<string, React.CSSProperties> = {
         display: "flex",
         flexDirection: "column",
         justifyContent: "center",
+        alignItems: "center",
     },
-    mobileLogo: {
+    mobileHeader: {
         display: "none",
         alignItems: "center",
-        gap: 10,
-        marginBottom: 24,
-        justifyContent: "center",
+        gap: 12,
+        marginBottom: 32,
+        width: "100%",
     },
     mobileLogoIcon: {
-        width: 38,
-        height: 38,
-        borderRadius: 10,
+        width: 44,
+        height: 44,
+        borderRadius: 12,
         background: "linear-gradient(135deg, #7C5A3C, #A67B5B)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-    },
-    mobileLogoText: {
-        fontSize: 20,
-        fontWeight: 800,
-        color: "#5C4033",
+        boxShadow: "0 4px 10px rgba(124, 90, 60, 0.2)",
     },
     formTitle: {
-        fontSize: 26,
+        fontSize: 28,
         fontWeight: 700,
         color: "#1E293B",
-        margin: "0 0 6px",
+        margin: "0 0 8px",
+        width: "100%",
     },
     formSubtitle: {
         fontSize: 14,
         color: "#94A3B8",
-        margin: "0 0 28px",
+        margin: "0 0 32px",
+        width: "100%",
     },
     fieldGroup: {
-        marginBottom: 18,
+        marginBottom: 20,
+        width: "100%",
     },
     label: {
         display: "block",
         fontSize: 13,
         fontWeight: 600,
         color: "#475569",
-        marginBottom: 6,
+        marginBottom: 8,
     },
     inputWrapper: {
         position: "relative",
@@ -443,15 +463,15 @@ const styles: Record<string, React.CSSProperties> = {
     },
     input: {
         width: "100%",
-        padding: "12px 14px 12px 44px",
+        padding: "13px 14px 13px 44px",
         borderRadius: 12,
         border: "1.5px solid #E2E8F0",
-        fontSize: 14,
+        fontSize: 15,
         color: "#1E293B",
         background: "#F8FAFC",
         outline: "none",
         boxSizing: "border-box",
-        transition: "border-color 0.2s, box-shadow 0.2s",
+        transition: "all 0.2s",
     },
     eyeBtn: {
         position: "absolute",
@@ -467,27 +487,29 @@ const styles: Record<string, React.CSSProperties> = {
         display: "flex",
         alignItems: "center",
         gap: 8,
-        padding: "10px 14px",
-        borderRadius: 10,
+        padding: "12px 14px",
+        borderRadius: 12,
         background: "#FEF2F2",
         border: "1px solid #FECACA",
         color: "#DC2626",
-        fontSize: 13,
+        fontSize: 14,
         fontWeight: 500,
-        marginBottom: 16,
+        marginBottom: 20,
+        width: "100%",
+        boxSizing: "border-box",
     },
     submitBtn: {
         width: "100%",
-        padding: "13px 0",
+        padding: "14px 0",
         borderRadius: 12,
         border: "none",
         background: "linear-gradient(135deg, #7C5A3C 0%, #A67B5B 100%)",
         color: "white",
-        fontSize: 15,
+        fontSize: 16,
         fontWeight: 700,
         cursor: "pointer",
         transition: "all 0.2s",
-        marginTop: 4,
+        marginTop: 8,
         boxShadow: "0 4px 12px rgba(124, 90, 60, 0.3)",
     },
     spinner: {
@@ -498,34 +520,5 @@ const styles: Record<string, React.CSSProperties> = {
         borderTopColor: "white",
         borderRadius: "50%",
         animation: "spin 0.7s linear infinite",
-    },
-    demoBox: {
-        marginTop: 24,
-        padding: "14px 16px",
-        borderRadius: 14,
-        background: "#F8FAFC",
-        border: "1.5px solid #E2E8F0",
-    },
-    demoTitle: {
-        fontSize: 13,
-        fontWeight: 600,
-        color: "#64748B",
-        marginBottom: 10,
-    },
-    demoGrid: {
-        display: "flex",
-        flexWrap: "wrap",
-        gap: 6,
-    },
-    demoChip: {
-        padding: "5px 14px",
-        borderRadius: 20,
-        border: "1.5px solid #E2E8F0",
-        background: "white",
-        color: "#64748B",
-        fontSize: 12,
-        fontWeight: 600,
-        cursor: "pointer",
-        transition: "all 0.15s",
     },
 };

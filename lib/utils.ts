@@ -112,3 +112,25 @@ export const DELIVERY_STATUS_COLORS: Record<string, string> = {
     belum_kirim: "bg-orange-100 text-orange-700",
     sudah_kirim: "bg-green-100 text-green-700",
 };
+/**
+ * Parse angka format Indonesia:
+ * - Titik sebagai pemisah ribuan: "230.000" → 230000
+ * - Koma sebagai pemisah desimal: "1,7" → 1.7
+ */
+export function parseIdNum(s: string | number | undefined | null): number {
+    if (s === undefined || s === null) return 0;
+    if (typeof s === "number") return s;
+    const str = s.trim();
+    if (!str) return 0;
+    // Jika ada koma → koma adalah desimal, titik adalah ribuan
+    if (str.includes(",")) {
+        return parseFloat(str.replace(/\./g, "").replace(",", ".")) || 0;
+    }
+    // Tidak ada koma:
+    // Jika titik diikuti tepat 3 digit di akhir → ribuan (e.g. "230.000")
+    if (/^\d{1,3}(\.\d{3})+$/.test(str)) {
+        return parseFloat(str.replace(/\./g, "")) || 0;
+    }
+    // Titik sebagai desimal biasa (e.g. "1.7")
+    return parseFloat(str.replace(/[^0-9.]/g, "")) || 0;
+}

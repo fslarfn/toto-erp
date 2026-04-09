@@ -13,7 +13,7 @@ interface AuthContextType {
 
 const roleAccess: Record<UserRole, string[]> = {
     owner: ["dashboard", "pesanan", "status-barang", "keuangan", "stok-bahan", "produksi", "admin"],
-    finance: ["dashboard", "pesanan", "status-barang", "keuangan"],
+    finance: ["dashboard", "pesanan", "status-barang", "keuangan", "stok-bahan", "produksi", "admin"],
     sales: ["pesanan", "status-barang"],
     produksi: ["dashboard", "pesanan", "status-barang", "stok-bahan", "produksi"],
     barang: ["dashboard", "pesanan", "status-barang", "stok-bahan", "produksi"],
@@ -23,9 +23,16 @@ const roleLabels: Record<UserRole, string> = {
     owner: "Owner / Manager",
     finance: "Admin Finance",
     sales: "Admin Sales",
-    produksi: "Bagian Produksi",
-    barang: "Admin Barang",
+    produksi: "PIC Produksi",
+    barang: "PIC Barang",
 };
+
+export function getRoleDisplay(user: User | null) {
+    if (!user) return "";
+    if (user.username === "faisal") return "Manager";
+    if (user.username === "yuni") return "Admin Barang";
+    return roleLabels[user.role] || user.role;
+}
 
 const LS_USER_KEY = "totobaru_user";
 
@@ -68,41 +75,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 return true;
             }
 
-            // Fallback: hardcoded demo login if Supabase unavailable
-            if (password === "toto2025") {
-                const mockUsers: User[] = [
-                    { id: "1", name: "Owner", username: "owner", role: "owner" },
-                    { id: "2", name: "Admin Finance", username: "finance", role: "finance" },
-                    { id: "3", name: "Admin Sales", username: "sales", role: "sales" },
-                    { id: "4", name: "Produksi", username: "produksi", role: "produksi" },
-                    { id: "5", name: "Admin Barang", username: "barang", role: "barang" },
-                ];
-                const found = mockUsers.find(u => u.username === username.toLowerCase().trim());
-                if (found) {
-                    setUser(found);
-                    localStorage.setItem(LS_USER_KEY, JSON.stringify(found));
-                    return true;
-                }
-            }
-
             return false;
         } catch {
-            // Supabase unavailable — use fallback
-            if (password === "toto2025") {
-                const mockUsers: User[] = [
-                    { id: "1", name: "Owner", username: "owner", role: "owner" },
-                    { id: "2", name: "Admin Finance", username: "finance", role: "finance" },
-                    { id: "3", name: "Admin Sales", username: "sales", role: "sales" },
-                    { id: "4", name: "Produksi", username: "produksi", role: "produksi" },
-                    { id: "5", name: "Admin Barang", username: "barang", role: "barang" },
-                ];
-                const found = mockUsers.find(u => u.username === username.toLowerCase().trim());
-                if (found) {
-                    setUser(found);
-                    localStorage.setItem(LS_USER_KEY, JSON.stringify(found));
-                    return true;
-                }
-            }
             return false;
         }
     };
