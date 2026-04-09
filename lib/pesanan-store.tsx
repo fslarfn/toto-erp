@@ -129,12 +129,16 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                 .single();
 
             if (existing.data) {
-                await supabase.from("pesanan_rows").update(patch).eq("id", id);
+                const { metode_kirim: _, ...patchDB } = patch;
+                if (Object.keys(patchDB).length > 0) {
+                    await supabase.from("pesanan_rows").update(patchDB).eq("id", id);
+                }
             } else {
                 const row = { ...makeEmptyRow(id), ...patch };
+                const { metode_kirim: _, ...dbRow } = row;
                 const hasData = row.tanggal || row.customer || row.deskripsi || row.ukuran || row.qty;
                 if (hasData) {
-                    await supabase.from("pesanan_rows").insert(row);
+                    await supabase.from("pesanan_rows").insert(dbRow);
                 }
             }
         }, 300);
@@ -167,11 +171,22 @@ export function PesananProvider({ children }: { children: ReactNode }) {
         setRows([...base, ...emptyBuf]);
 
         (async () => {
-            await supabase.from("pesanan_rows").delete().gte("id", 0);
+            const { error: delErr } = await supabase.from("pesanan_rows").delete().gte("id", 0);
+            if (delErr) {
+                console.error("Delete Error:", delErr);
+                alert("Gagal menghapus data lama: " + delErr.message);
+                return;
+            }
+            
             const rowsWithData = base.filter(r => isRowFilled(r));
             for (let i = 0; i < rowsWithData.length; i += 100) {
-                const chunk = rowsWithData.slice(i, i + 100);
-                await supabase.from("pesanan_rows").insert(chunk);
+                const chunk = rowsWithData.slice(i, i + 100).map(({ metode_kirim: _, ...r }) => r);
+                const { error: insErr } = await supabase.from("pesanan_rows").insert(chunk);
+                if (insErr) {
+                    console.error("Insert Error:", insErr);
+                    alert("Gagal menyimpan data baru: " + insErr.message);
+                    return;
+                }
             }
         })();
     }, []);
