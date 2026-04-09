@@ -41,7 +41,6 @@ const NAV_ITEMS = [
         section: "SDM",
         items: [
             { href: "/dashboard/karyawan", label: "Karyawan", module: "keuangan", icon: KaryawanIcon },
-            { href: "/dashboard/absensi", label: "Absensi", module: "keuangan", icon: ClockIcon },
         ],
     },
 ];

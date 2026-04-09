@@ -424,7 +424,7 @@ export default function PesananPage() {
             {/* ── Pagination Bar ──────────────────────────────────── */}
             <div style={{
                 display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                padding: "8px 14px", background: "white", borderTop: "1px solid #E6D5BE", flexShrink: 0,
+                padding: "8px 14px", background: "white", borderTop: "1px solid #E6D5BE", flexShrink: 0, flexWrap: "wrap"
             }}>
                 {/* Browse older pages */}
                 <button
@@ -439,7 +439,7 @@ export default function PesananPage() {
                 </button>
 
                 {/* Page numbers */}
-                <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap", justifyContent: "center" }}>
                     {Array.from({ length: Math.min(totalBrowsePages, 7) }, (_, i) => {
                         let pageNum: number;
                         if (totalBrowsePages <= 7) {
@@ -477,7 +477,16 @@ export default function PesananPage() {
                 </button>
 
                 {/* Divider */}
-                <div style={{ width: 1, height: 24, background: "#E6D5BE", margin: "0 4px" }} />
+                <div style={{ width: 1, height: 24, background: "#E6D5BE", margin: "0 4px", display: "none" }} />
+
+                {/* +100 Baris button */}
+                <button onClick={() => addRows(100)}
+                    style={{
+                        border: "1px solid #D1BFA3", borderRadius: 6, padding: "5px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                        background: "#DCFCE7", color: "#15803D", display: "flex", alignItems: "center", gap: 6,
+                    }}>
+                    ➕ 100 Baris
+                </button>
 
                 {/* Input Terbaru button */}
                 <button onClick={goToInput}

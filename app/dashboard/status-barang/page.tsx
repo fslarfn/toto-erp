@@ -166,11 +166,11 @@ function StatusTable({ filtered, viewMode, colorRowId, setColorRowId, update, st
                                 )}
                             </td>
 
-                            <ROCell width={70} align="center">{fmtDate(row.tanggal)}</ROCell>
-                            <ROCell width={130}>{row.customer}</ROCell>
-                            <ROCell width={200}>{row.deskripsi}</ROCell>
-                            <ROCell width={60} align="center">{row.ukuran}</ROCell>
-                            <ROCell width={44} align="center">{row.qty}</ROCell>
+                            <InlineCell value={row.tanggal} onChange={(v) => update(row.id, { tanggal: v })} width={70} align="center" />
+                            <InlineCell value={row.customer} onChange={(v) => update(row.id, { customer: v })} width={130} />
+                            <InlineCell value={row.deskripsi} onChange={(v) => update(row.id, { deskripsi: v })} width={200} />
+                            <InlineCell value={row.ukuran} onChange={(v) => update(row.id, { ukuran: v })} width={60} align="center" />
+                            <InlineCell value={row.qty} onChange={(v) => update(row.id, { qty: v })} width={44} align="center" />
 
                             {viewMode === "detail" && <>
                                 <InlineCell value={row.no_inv} onChange={(v) => update(row.id, { no_inv: v })} width={90} mono />

@@ -40,8 +40,10 @@ const inp: React.CSSProperties = {
 /* -- Print CSS (injected once) ----------------------------------- */
 const PRINT_STYLE = `
 @media print {
-    body > *:not(#print-root) { display: none !important; }
-    #print-root { display: block !important; position: fixed; inset: 0; background: white; z-index: 99999; padding: 0; }
+    body * { visibility: hidden; }
+    #print-root, #print-root * { visibility: visible; }
+    #print-root { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; background: white; z-index: 99999; }
+    .no-print, .no-print * { display: none !important; }
     @page { size: A4; margin: 12mm 14mm; }
 }
 `;
@@ -471,7 +473,7 @@ function TabDataKaryawan() {
    TAB 2: DATA GAJI - mekanisme mirip payroll.html
 ================================================================ */
 function TabDataGaji() {
-    const { karyawan, gaji, upsertGaji } = useKaryawan();
+    const { karyawan, gaji, upsertGaji, kasbon, updateKasbon } = useKaryawan();
     const now = new Date();
     const [month, setMonth] = useState(now.getMonth() + 1);
     const [year, setYear] = useState(now.getFullYear());
@@ -800,13 +802,43 @@ function TabDataGaji() {
    TAB 3: KASBON / BON KARYAWAN
 ================================================================ */
 function TabKasbon() {
-    const { karyawan, kasbon, addKasbon, updateKasbon, deleteKasbon } = useKaryawan();
+    const { karyawan, kasbon, gaji, addKasbon, updateKasbon, deleteKasbon } = useKaryawan();
     const [search, setSearch] = useState("");
     const [filterKId, setFilterKId] = useState<number | "all">("all");
     const [showForm, setShowForm] = useState(false);
     const [form, setForm] = useState({ karyawan_id: 0, tanggal: new Date().toISOString().slice(0, 10), nominal: 0, bayar: 0, keterangan: "" });
 
-    const filtered = kasbon.filter(b => {
+    const kasbonWithAuto = React.useMemo(() => {
+        const map: Record<number, number> = {};
+        gaji.forEach(g => {
+            if (g.kasbon_potong) map[g.karyawan_id] = (map[g.karyawan_id] || 0) + g.kasbon_potong;
+        });
+
+        const arr = JSON.parse(JSON.stringify(kasbon)) as (typeof kasbon[0] & { auto_bayar: number })[];
+        const grouped: Record<number, typeof arr> = {};
+        arr.forEach(b => {
+            grouped[b.karyawan_id] = grouped[b.karyawan_id] || [];
+            grouped[b.karyawan_id].push(b);
+        });
+
+        for (const kId in grouped) {
+            let left = map[kId] || 0;
+            // urutkan dari ID terkecil (terlama)
+            grouped[kId].sort((a, b) => a.id - b.id);
+            grouped[kId].forEach(b => {
+                b.auto_bayar = 0;
+                const gap = b.nominal - (b.bayar || 0);
+                if (gap > 0 && left > 0) {
+                    const deduct = Math.min(gap, left);
+                    b.auto_bayar = deduct;
+                    left -= deduct;
+                }
+            });
+        }
+        return arr;
+    }, [kasbon, gaji]);
+
+    const filtered = kasbonWithAuto.filter(b => {
         const k = karyawan.find(k => k.id === b.karyawan_id);
         if (filterKId !== "all" && b.karyawan_id !== filterKId) return false;
         if (search && !k?.nama.toLowerCase().includes(search.toLowerCase())) return false;
@@ -814,7 +846,7 @@ function TabKasbon() {
     });
 
     const totalKasbon = filtered.reduce((s, b) => s + b.nominal, 0);
-    const totalSisa = filtered.reduce((s, b) => s + (b.nominal - b.bayar), 0);
+    const totalSisa = filtered.reduce((s, b) => s + (b.nominal - b.bayar - b.auto_bayar), 0);
 
     return (
         <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
@@ -858,7 +890,7 @@ function TabKasbon() {
                             <tr><td colSpan={8} style={{ textAlign: "center", padding: "3rem", color: "#C5A882" }}>Belum ada catatan kasbon.</td></tr>
                         ) : filtered.sort((a, b) => b.tanggal.localeCompare(a.tanggal)).map((b, i) => {
                             const k = karyawan.find(k => k.id === b.karyawan_id);
-                            const sisa = b.nominal - b.bayar;
+                            const sisa = b.nominal - b.bayar - b.auto_bayar;
                             const lunas = sisa <= 0;
                             return (
                                 <tr key={b.id} style={{ background: lunas ? "#F0FDF4" : (i % 2 === 0 ? "white" : "#FAFAF8") }}>
@@ -867,9 +899,13 @@ function TabKasbon() {
                                     <td style={{ padding: "7px 10px", borderRight: "1px solid #E6D5BE", borderBottom: "1px solid #E6D5BE", fontWeight: 700 }}>{k?.nama || "-"}</td>
                                     <td style={{ padding: "7px 10px", borderRight: "1px solid #E6D5BE", borderBottom: "1px solid #E6D5BE", fontWeight: 700, color: "#B91C1C" }}>{fmtRp(b.nominal)}</td>
                                     <td style={{ padding: "7px 10px", borderRight: "1px solid #E6D5BE", borderBottom: "1px solid #E6D5BE" }}>
-                                        <input type="number" min={0} max={b.nominal} value={b.bayar || ""}
-                                            onChange={e => updateKasbon(b.id, { bayar: +e.target.value })}
-                                            style={{ width: 100, border: "1px solid #D1BFA3", borderRadius: 5, padding: "2px 6px", fontSize: 11, textAlign: "right" }} />
+                                        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                                            <input type="number" min={0} max={b.nominal - b.auto_bayar} value={b.bayar || ""}
+                                                onChange={e => updateKasbon(b.id, { bayar: +e.target.value })}
+                                                placeholder="Manual..." title="Hanya diisi jika bayar cash"
+                                                style={{ width: 80, border: "1px solid #D1BFA3", borderRadius: 5, padding: "2px 6px", fontSize: 11, textAlign: "right" }} />
+                                            {b.auto_bayar > 0 && <span style={{ fontSize: 10, color: "#15803D", fontWeight: 600, background: "#D1FAE5", padding: "2px 6px", borderRadius: 4 }}>+ {fmtRp(b.auto_bayar)} (Gaji)</span>}
+                                        </div>
                                     </td>
                                     <td style={{ padding: "7px 10px", borderRight: "1px solid #E6D5BE", borderBottom: "1px solid #E6D5BE", fontWeight: 700 }}>
                                         {lunas
