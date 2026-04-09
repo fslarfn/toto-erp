@@ -116,7 +116,7 @@ export default function PesananPage() {
     const inputRefs = useRef<(HTMLInputElement | null)[][]>([]);
 
     const now = new Date();
-    const [month, setMonth] = useState<number | "all">("all");
+    const [month, setMonth] = useState<number | "all">(now.getMonth() + 1);
     const [year, setYear] = useState(now.getFullYear());
     const years: number[] = [];
     for (let y = 2023; y <= now.getFullYear() + 1; y++) years.push(y);
