@@ -38,6 +38,7 @@ export default function TagihanPage() {
     const { rows, updateRow } = usePesanan();
     const now = new Date();
     const [year, setYear] = useState(now.getFullYear());
+    const [month, setMonth] = useState<number | "all">("all");
     const [search, setSearch] = useState("");
     const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -46,9 +47,17 @@ export default function TagihanPage() {
 
     /* ── Hanya baris yang punya No Invoice ───────────────── */
     const baseRows = useMemo(() =>
-        rows.filter((r) => (r.customer || r.deskripsi) && r.no_inv && r.tanggal &&
-            parseInt(r.tanggal.slice(0, 4)) === year),
-        [rows, year]);
+        rows.filter((r) => {
+            if (!(r.customer || r.deskripsi) || !r.no_inv || !r.tanggal) return false;
+            const y = parseInt(r.tanggal.slice(0, 4));
+            if (y !== year) return false;
+            if (month !== "all") {
+                const m = parseInt(r.tanggal.slice(5, 7));
+                if (m !== month) return false;
+            }
+            return true;
+        }),
+        [rows, year, month]);
 
     /* ── Group by no_inv → hitung total per invoice ──────── */
     const invoiceMap = useMemo(() => {
@@ -132,6 +141,14 @@ export default function TagihanPage() {
                     <select value={year} onChange={(e) => setYear(+e.target.value)}
                         style={{ border: "1px solid #D1BFA3", borderRadius: 6, padding: "4px 8px", fontSize: 12, color: "#5C4033", background: "#FFFBF7", height: 30 }}>
                         {years.map((y) => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 11, color: "#B89678", fontWeight: 600 }}>Bulan:</span>
+                    <select value={month} onChange={(e) => setMonth(e.target.value === "all" ? "all" : +e.target.value)}
+                        style={{ border: "1px solid #D1BFA3", borderRadius: 6, padding: "4px 8px", fontSize: 12, color: "#5C4033", background: "#FFFBF7", height: 30 }}>
+                        <option value="all">Semua Bulan</option>
+                        {MONTH_NAMES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
                     </select>
                 </div>
                 <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
