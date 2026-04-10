@@ -128,12 +128,71 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                 }
             } catch (err) {
                 console.error("Fetch Error:", err);
-                // Supabase not available — keep empty rows
             } finally {
                 if (!cancelled) setLoading(false);
             }
         })();
         return () => { cancelled = true; };
+    }, []);
+
+    // Realtime Subscription
+    useEffect(() => {
+        const channel = supabase
+            .channel("realtime_pesanan")
+            .on(
+                "postgres_changes",
+                { event: "*", schema: "public", table: "pesanan_rows" },
+                (payload) => {
+                    const { eventType, new: newRow, old: oldRow } = payload;
+
+                    setRows((prev) => {
+                        if (eventType === "UPDATE" || eventType === "INSERT") {
+                            const row = newRow as Record<string, any>;
+                            const mapped: PesananRow = {
+                                id: row.id,
+                                tanggal: row.tanggal || "",
+                                customer: row.customer || "",
+                                deskripsi: row.deskripsi || "",
+                                ukuran: row.ukuran || "",
+                                qty: row.qty || "",
+                                harga: row.harga || "",
+                                no_inv: row.no_inv || "",
+                                no_sj: row.no_sj || "",
+                                di_produksi: !!row.di_produksi,
+                                di_warna: !!row.di_warna,
+                                siap_kirim: !!row.siap_kirim,
+                                di_kirim: !!row.di_kirim,
+                                ekspedisi: row.ekspedisi || "",
+                                color_marker: row.color_marker || "",
+                                printed_at: row.printed_at || "",
+                                po_label: row.po_label || "",
+                                is_packing: !!row.is_packing,
+                                is_paid: !!row.is_paid,
+                                production_note: row.production_note || "",
+                                metode_kirim: row.metode_kirim || "",
+                            };
+
+                            const exists = prev.find((r) => r.id === mapped.id);
+                            if (exists) {
+                                return prev.map((r) => (r.id === mapped.id ? { ...r, ...mapped } : r));
+                            } else {
+                                const dataRows = prev.filter(r => isRowFilled(r));
+                                const emptyRows = prev.filter(r => !isRowFilled(r));
+                                return [...dataRows, mapped, ...emptyRows];
+                            }
+                        } else if (eventType === "DELETE") {
+                            const id = (oldRow as any).id;
+                            return prev.filter((r) => r.id !== id);
+                        }
+                        return prev;
+                    });
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, []);
 
     const updateRow = useCallback((id: number, patch: Partial<PesananRow>) => {

@@ -206,6 +206,52 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return () => { cancelled = true; };
     }, []);
 
+    // Realtime Subscriptions
+    useEffect(() => {
+        const channel = supabase
+            .channel("realtime_general_store")
+            // 1. Orders
+            .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, (payload) => {
+                const { eventType, new: n, old: o } = payload;
+                if (eventType === "INSERT") setOrders(prev => [dbToOrder(n as Record<string, any>), ...prev]);
+                else if (eventType === "UPDATE") setOrders(prev => prev.map(x => x.id === (n as any).id ? dbToOrder(n as Record<string, any>) : x));
+                else if (eventType === "DELETE") setOrders(prev => prev.filter(x => x.id === (o as any).id));
+            })
+            // 2. Materials
+            .on("postgres_changes", { event: "*", schema: "public", table: "materials" }, (payload) => {
+                const { eventType, new: n, old: o } = payload;
+                if (eventType === "INSERT") setMaterials(prev => [...prev, dbToMaterial(n as Record<string, any>)]);
+                else if (eventType === "UPDATE") setMaterials(prev => prev.map(x => x.id === (n as any).id ? dbToMaterial(n as Record<string, any>) : x));
+                else if (eventType === "DELETE") setMaterials(prev => prev.filter(x => x.id === (o as any).id));
+            })
+            // 3. Cash Flow
+            .on("postgres_changes", { event: "*", schema: "public", table: "cash_flow" }, (payload) => {
+                const { eventType, new: n, old: o } = payload;
+                if (eventType === "INSERT") setCashFlow(prev => [dbToCashFlow(n as Record<string, any>), ...prev]);
+                else if (eventType === "UPDATE") setCashFlow(prev => prev.map(x => x.id === (n as any).id ? dbToCashFlow(n as Record<string, any>) : x));
+                else if (eventType === "DELETE") setCashFlow(prev => prev.filter(x => x.id === (o as any).id));
+            })
+            // 4. Payments
+            .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, (payload) => {
+                const { eventType, new: n, old: o } = payload;
+                if (eventType === "INSERT") setPayments(prev => [dbToPayment(n as Record<string, any>), ...prev]);
+                else if (eventType === "UPDATE") setPayments(prev => prev.map(x => x.id === (n as any).id ? dbToPayment(n as Record<string, any>) : x));
+                else if (eventType === "DELETE") setPayments(prev => prev.filter(x => x.id === (o as any).id));
+            })
+            // 5. Bank Accounts
+            .on("postgres_changes", { event: "*", schema: "public", table: "bank_accounts" }, (payload) => {
+                const { eventType, new: n, old: o } = payload;
+                if (eventType === "INSERT") setBankAccounts(prev => [...prev, dbToBankAccount(n as Record<string, any>)]);
+                else if (eventType === "UPDATE") setBankAccounts(prev => prev.map(x => x.id === (n as any).id ? dbToBankAccount(n as Record<string, any>) : x));
+                else if (eventType === "DELETE") setBankAccounts(prev => prev.filter(x => x.id === (o as any).id));
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, []);
+
     const addOrder = useCallback((orderData: Parameters<AppStore["addOrder"]>[0]) => {
         const nums = generateNumbers(orders.length);
         const newOrder: Order = {

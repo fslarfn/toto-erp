@@ -96,6 +96,49 @@ export function TagihanBahanProvider({ children }: { children: ReactNode }) {
         return () => { cancelled = true; };
     }, []);
 
+    // Realtime Subscriptions
+    useEffect(() => {
+        const channel = supabase
+            .channel("realtime_tagihan_bahan_store")
+            // 1. Headers (tagihan_bahan)
+            .on("postgres_changes", { event: "*", schema: "public", table: "tagihan_bahan" }, (payload) => {
+                const { eventType, new: n, old: o } = payload;
+                if (eventType === "INSERT") {
+                    setTagihanList(prev => [dbToTagihan(n, []), ...prev]);
+                } else if (eventType === "UPDATE") {
+                    setTagihanList(prev => prev.map(x => x.id === n.id ? { ...x, ...dbToTagihan(n, x.items) } : x));
+                } else if (eventType === "DELETE") {
+                    setTagihanList(prev => prev.filter(x => x.id === o.id));
+                }
+            })
+            // 2. Items (tagihan_bahan_items)
+            .on("postgres_changes", { event: "*", schema: "public", table: "tagihan_bahan_items" }, async (payload) => {
+                const { new: ni, old: oi } = payload;
+                const hId = ((ni as any)?.tagihan_id || (oi as any)?.tagihan_id) as string;
+                if (!hId) return;
+
+                const { data } = await supabase.from("tagihan_bahan_items").select("*").eq("tagihan_id", hId);
+                if (data) {
+                    setTagihanList(prev => prev.map(h => h.id === hId ? {
+                        ...h,
+                        items: data.map((it: Record<string, any>) => ({
+                            id: it.id,
+                            namaBahan: it.nama_bahan,
+                            qty: it.qty,
+                            ukuran: it.ukuran,
+                            hargaSatuan: it.harga_satuan,
+                            total: it.total,
+                        }))
+                    } : h));
+                }
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, []);
+
     const addTagihan = useCallback((t: Omit<TagihanBahan, "id">): string => {
         const id = `TB-${Date.now()}`;
         const newT = { ...t, id };

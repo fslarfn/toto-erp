@@ -90,6 +90,49 @@ export function SuratJalanProvider({ children }: { children: ReactNode }) {
         return () => { cancelled = true; };
     }, []);
 
+    // Realtime Subscriptions
+    useEffect(() => {
+        const channel = supabase
+            .channel("realtime_surat_jalan_store")
+            // 1. Headers (surat_jalan)
+            .on("postgres_changes", { event: "*", schema: "public", table: "surat_jalan" }, (payload) => {
+                const { eventType, new: n, old: o } = payload;
+                if (eventType === "INSERT") {
+                    setSuratJalans(prev => [dbToSuratJalan(n, []), ...prev]);
+                } else if (eventType === "UPDATE") {
+                    setSuratJalans(prev => prev.map(x => x.id === n.id ? { ...x, ...dbToSuratJalan(n, x.items) } : x));
+                } else if (eventType === "DELETE") {
+                    setSuratJalans(prev => prev.filter(x => x.id === o.id));
+                }
+            })
+            // 2. Items (surat_jalan_items)
+            .on("postgres_changes", { event: "*", schema: "public", table: "surat_jalan_items" }, async (payload) => {
+                const { new: ni, old: oi } = payload;
+                const sjId = ((ni as any)?.surat_jalan_id || (oi as any)?.surat_jalan_id) as string;
+                if (!sjId) return;
+
+                const { data } = await supabase.from("surat_jalan_items").select("*").eq("surat_jalan_id", sjId);
+                if (data) {
+                    setSuratJalans(prev => prev.map(sj => sj.id === sjId ? {
+                        ...sj,
+                        items: data.map((it: Record<string, any>) => ({
+                            pesananId: it.pesanan_id,
+                            customer: it.customer,
+                            deskripsi: it.deskripsi,
+                            ukuran: it.ukuran,
+                            qty: it.qty,
+                            noInv: it.no_inv,
+                        }))
+                    } : sj));
+                }
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, []);
+
     const addSJ = useCallback((sj: Omit<SuratJalanRow, "id">): string => {
         const id = `SJ-${Date.now()}`;
         setSuratJalans(prev => [{ ...sj, id }, ...prev]);

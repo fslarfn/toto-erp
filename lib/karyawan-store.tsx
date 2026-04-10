@@ -94,13 +94,45 @@ export function KaryawanProvider({ children }: { children: ReactNode }) {
         return () => { cancelled = true; };
     }, []);
 
+    // Realtime Subscriptions
+    useEffect(() => {
+        const channel = supabase
+            .channel("realtime_karyawan_store")
+            // 1. Karyawan
+            .on("postgres_changes", { event: "*", schema: "public", table: "karyawan" }, (payload) => {
+                const { eventType, new: n, old: o } = payload;
+                if (eventType === "INSERT") setKaryawan(prev => [...prev, n as DataKaryawan]);
+                else if (eventType === "UPDATE") setKaryawan(prev => prev.map(x => x.id === (n as any).id ? (n as DataKaryawan) : x));
+                else if (eventType === "DELETE") setKaryawan(prev => prev.filter(x => x.id === (o as any).id));
+            })
+            // 2. Gaji
+            .on("postgres_changes", { event: "*", schema: "public", table: "gaji" }, (payload) => {
+                const { eventType, new: n, old: o } = payload;
+                if (eventType === "INSERT") setGaji(prev => [...prev, n as GajiRecord]);
+                else if (eventType === "UPDATE") setGaji(prev => prev.map(x => x.id === (n as any).id ? (n as GajiRecord) : x));
+                else if (eventType === "DELETE") setGaji(prev => prev.filter(x => x.id === (o as any).id));
+            })
+            // 3. Kasbon
+            .on("postgres_changes", { event: "*", schema: "public", table: "kasbon" }, (payload) => {
+                const { eventType, new: n, old: o } = payload;
+                if (eventType === "INSERT") setKasbon(prev => [...prev, n as KasbonRecord]);
+                else if (eventType === "UPDATE") setKasbon(prev => prev.map(x => x.id === (n as any).id ? (n as KasbonRecord) : x));
+                else if (eventType === "DELETE") setKasbon(prev => prev.filter(x => x.id === (o as any).id));
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, []);
+
     const addKaryawan = useCallback((k: Omit<DataKaryawan, "id">) => {
         // Optimistic — we'll get the real ID back from Supabase
-        const tempId = Date.now();
-        const newK = { ...k, id: tempId };
+        const tempId: number = Date.now();
+        const newK: DataKaryawan = { ...k, id: tempId };
         setKaryawan(p => [...p, newK]);
         (async () => {
-            const { data } = await supabase.from("karyawan").insert(k).select().single();
+            const { data } = await supabase.from("karyawan").insert(k as any).select().single();
             if (data) {
                 // Replace temp ID with real one
                 setKaryawan(p => p.map(x => x.id === tempId ? (data as DataKaryawan) : x));
@@ -125,13 +157,13 @@ export function KaryawanProvider({ children }: { children: ReactNode }) {
                 const updated = [...p];
                 updated[idx] = { ...updated[idx], ...g };
                 // Update in DB
-                supabase.from("gaji").update(g).eq("karyawan_id", g.karyawan_id).eq("periode", g.periode).then();
+                supabase.from("gaji").update(g as any).eq("karyawan_id", g.karyawan_id).eq("periode", g.periode).then();
                 return updated;
             }
-            const tempId = Date.now();
+            const tempId: number = Date.now();
             // Insert in DB
             (async () => {
-                const { data } = await supabase.from("gaji").insert(g).select().single();
+                const { data } = await supabase.from("gaji").insert(g as any).select().single();
                 if (data) {
                     setGaji(prev => prev.map(x => x.id === tempId ? (data as GajiRecord) : x));
                 }
@@ -141,10 +173,10 @@ export function KaryawanProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const addKasbon = useCallback((k: Omit<KasbonRecord, "id">) => {
-        const tempId = Date.now();
+        const tempId: number = Date.now();
         setKasbon(p => [...p, { ...k, id: tempId }]);
         (async () => {
-            const { data } = await supabase.from("kasbon").insert(k).select().single();
+            const { data } = await supabase.from("kasbon").insert(k as any).select().single();
             if (data) {
                 setKasbon(p => p.map(x => x.id === tempId ? (data as KasbonRecord) : x));
             }

@@ -95,6 +95,52 @@ export function SJBahanProvider({ children }: { children: ReactNode }) {
         return () => { cancelled = true; };
     }, []);
 
+    // Realtime Subscriptions
+    useEffect(() => {
+        const channel = supabase
+            .channel("realtime_sj_bahan_store")
+            // 1. Headers (sj_bahan)
+            .on("postgres_changes", { event: "*", schema: "public", table: "sj_bahan" }, (payload) => {
+                const { eventType, new: n, old: o } = payload;
+                if (eventType === "INSERT") {
+                    setSjBahan(prev => [dbToSJBahan(n, []), ...prev]);
+                } else if (eventType === "UPDATE") {
+                    setSjBahan(prev => prev.map(x => x.id === n.id ? { ...x, ...dbToSJBahan(n, x.items) } : x));
+                } else if (eventType === "DELETE") {
+                    setSjBahan(prev => prev.filter(x => x.id === o.id));
+                }
+            })
+            // 2. Items (sj_bahan_items) - Simple approach: re-fetch items for affected SJ if changed
+            // Or just update the nested array
+            .on("postgres_changes", { event: "*", schema: "public", table: "sj_bahan_items" }, async (payload) => {
+                const { new: ni, old: oi } = payload;
+                const sjId = ((ni as any)?.sj_bahan_id || (oi as any)?.sj_bahan_id) as string;
+                if (!sjId) return;
+
+                // For accuracy with nested data, we re-fetch items for this SJ ID
+                const { data } = await supabase.from("sj_bahan_items").select("*").eq("sj_bahan_id", sjId);
+                if (data) {
+                    setSjBahan(prev => prev.map(sj => sj.id === sjId ? {
+                        ...sj,
+                        items: data.map((it: Record<string, any>) => ({
+                            materialId: it.material_id,
+                            kode: it.kode,
+                            nama: it.nama,
+                            jumlahBatang: it.jumlah_batang,
+                            panjangPerBatang: it.panjang_per_batang,
+                            totalMeter: it.total_meter,
+                            catatan: it.catatan,
+                        }))
+                    } : sj));
+                }
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, []);
+
     const addSJBahan = useCallback((sj: Omit<SJBahanRow, "id">): string => {
         const id = `SJB-${Date.now()}`;
         setSjBahan(prev => [{ ...sj, id }, ...prev]);

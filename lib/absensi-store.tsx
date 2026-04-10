@@ -124,21 +124,38 @@ export function AbsensiProvider({ children }: { children: ReactNode }) {
         return () => { cancelled = true; };
     }, []);
 
+    // Realtime Subscription
+    useEffect(() => {
+        const channel = supabase
+            .channel("realtime_absensi")
+            .on("postgres_changes", { event: "*", schema: "public", table: "absensi" }, (payload) => {
+                const { eventType, new: n, old: o } = payload;
+                if (eventType === "INSERT") setAbsensi(prev => [dbToAbsensi(n as Record<string, any>), ...prev]);
+                else if (eventType === "UPDATE") setAbsensi(prev => prev.map(x => x.id === (n as any).id ? dbToAbsensi(n as Record<string, any>) : x));
+                else if (eventType === "DELETE") setAbsensi(prev => prev.filter(x => x.id === (o as any).id));
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, []);
+
     const addAbsensi = useCallback((a: Omit<AbsensiRecord, "id">) => {
-        const tempId = Date.now();
-        const newRec = { ...a, id: tempId };
+        const tempId: number = Date.now();
+        const newRec: AbsensiRecord = { ...a, id: tempId };
         setAbsensi(prev => [newRec, ...prev]);
         (async () => {
             const { data } = await supabase.from("absensi").insert(absensiToDb(a)).select().single();
             if (data) {
-                setAbsensi(prev => prev.map(x => x.id === tempId ? dbToAbsensi(data) : x));
+                setAbsensi(prev => prev.map(x => x.id === tempId ? dbToAbsensi(data as Record<string, any>) : x));
             }
         })();
     }, []);
 
     const updateAbsensiPulang = useCallback((karyawan_id: number, tanggal: string, jam_keluar: string, foto_keluar_base64: string) => {
         setAbsensi(prev => {
-            const next = prev.map(a => {
+            const next = prev.map((a: AbsensiRecord) => {
                 if (a.karyawan_id === karyawan_id && a.tanggal === tanggal && !a.jam_keluar) {
                     const [hm, mm] = a.jam_masuk.split(":").map(Number);
                     const [hk, mk] = jam_keluar.split(":").map(Number);
