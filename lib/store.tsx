@@ -22,6 +22,7 @@ interface AppStore {
     deleteCashFlow: (id: string) => void;
     addPayment: (p: Omit<Payment, "id">) => void;
     updateBankBalance: (id: string, delta: number) => void;
+    recalculateBalances: () => void;
 }
 
 const StoreContext = createContext<AppStore | null>(null);
@@ -348,7 +349,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 if (o.id === payment.orderId) {
                     const newPaid = o.paidAmount + payment.amountPaid;
                     const newStatus = newPaid >= o.totalPrice ? "lunas" : newPaid > 0 ? "bayar_sebagian" : "belum_bayar";
-                    // Also update order in DB
                     supabase.from("orders").update({ paid_amount: newPaid, payment_status: newStatus }).eq("id", o.id).then();
                     return { ...o, paidAmount: newPaid, paymentStatus: newStatus as Order["paymentStatus"] };
                 }
@@ -356,8 +356,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             })
         );
         supabase.from("payments").insert(paymentToDb(newPayment)).then();
-    }, []);
 
+        // Update Bank Balance
+        const bank = bankAccounts.find(b => b.name === payment.bankAccount);
+        if (bank) {
+            updateBankBalance(bank.id, payment.amountPaid);
+        }
+    }, [bankAccounts, updateBankBalance]);
+
+    const recalculateBalances = useCallback(() => {
+        bankAccounts.forEach(bank => {
+            const cfIncome = cashFlow.filter(c => c.bankAccount === bank.name && c.type === "income").reduce((s, c) => s + c.amount, 0);
+            const cfExpense = cashFlow.filter(c => c.bankAccount === bank.name && c.type === "expense").reduce((s, c) => s + c.amount, 0);
+            const paymentsTotal = payments.filter(p => p.bankAccount === bank.name).reduce((s, p) => s + p.amountPaid, 0);
+            
+            const newBalance = cfIncome - cfExpense + paymentsTotal;
+            if (bank.balance !== newBalance) {
+                setBankAccounts(prev => prev.map(b => b.id === bank.id ? { ...b, balance: newBalance } : b));
+                supabase.from("bank_accounts").update({ balance: newBalance }).eq("id", bank.id).then();
+            }
+        });
+    }, [bankAccounts, cashFlow, payments]);
 
     return (
         <StoreContext.Provider value={{
@@ -365,6 +384,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             addOrder, updateOrder, deleteOrder,
             addMaterial, updateMaterial, deleteMaterial,
             addCashFlow, deleteCashFlow, addPayment, updateBankBalance,
+            recalculateBalances,
         }}>
             {children}
         </StoreContext.Provider>
