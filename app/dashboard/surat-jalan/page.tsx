@@ -45,17 +45,47 @@ function TabCustomer() {
     const [dibuatOleh, setDibuatOleh] = useState("");
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
     const [search, setSearch] = useState("");
+    const [noInvInput, setNoInvInput] = useState("");
+    const [searchedInv, setSearchedInv] = useState<string | null>(null);
     const [flash, setFlash] = useState(false);
     const [lastNoSJ, setLastNoSJ] = useState("");
 
-    // Hanya item siap_kirim = true yang belum di_kirim
-    const candidates = useMemo(() =>
-        rows.filter((r) => (r.customer || r.deskripsi) && r.siap_kirim && !r.di_kirim)
-            .filter((r) => {
-                if (!search) return true;
-                return [r.customer, r.deskripsi, r.no_inv].join(" ").toLowerCase().includes(search.toLowerCase());
-            }),
-        [rows, search]);
+    // Logic candidates: 
+    // Jika searchedInv ada -> filter by no_inv (dan !di_kirim)
+    // Jika tidak ada -> filter by siap_kirim && !di_kirim (perilaku lama)
+    const candidates = useMemo(() => {
+        let base = rows.filter((r) => (r.customer || r.deskripsi) && !r.di_kirim);
+
+        if (searchedInv) {
+            // Case A: Cari invoice spesifik
+            base = base.filter(r => r.no_inv && r.no_inv.trim() === searchedInv.trim());
+        } else {
+            // Case B: Browsing item siap kirim secara umum
+            base = base.filter(r => r.siap_kirim);
+        }
+
+        // Apply general text search filter
+        if (search) {
+            const s = search.toLowerCase();
+            base = base.filter(r =>
+                [r.customer, r.deskripsi, r.no_inv].join(" ").toLowerCase().includes(s)
+            );
+        }
+
+        return base;
+    }, [rows, searchedInv, search]);
+
+    const handleSearchInv = () => {
+        const val = noInvInput.trim();
+        setSearchedInv(val || null);
+        // Auto-select if found? Maybe let user choose, but if searching invoice usually they want all
+    };
+
+    const resetSearch = () => {
+        setNoInvInput("");
+        setSearchedInv(null);
+        setSearch("");
+    };
 
     const toggle = (id: number) =>
         setSelectedIds((prev) => prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]);
@@ -86,7 +116,15 @@ function TabCustomer() {
         setFlash(true);
         setSelectedIds([]);
         setEkspedisi("");
+        setSearchedInv(null);
+        setNoInvInput("");
         setTimeout(() => setFlash(false), 3000);
+    };
+
+    const inputSt: React.CSSProperties = {
+        width: "100%", border: "1.5px solid #D1BFA3", borderRadius: 7,
+        padding: "6px 10px", fontSize: 12, color: "#3C2F2F",
+        background: "#FFFBF7", outline: "none", boxSizing: "border-box",
     };
 
     return (
@@ -94,14 +132,40 @@ function TabCustomer() {
             {/* LEFT — item list */}
             <div style={{ width: 380, minWidth: 300, background: "white", borderRight: "1px solid #E6D5BE", display: "flex", flexDirection: "column", overflow: "hidden" }}>
                 <div style={{ padding: "14px 16px", borderBottom: "1px solid #F0E6D8" }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "#5C4033", marginBottom: 10 }}>📦 Item Siap Kirim ke Customer</div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#5C4033" }}>📦 Item Siap Kirim ke Customer</div>
+                        {searchedInv && (
+                            <button onClick={resetSearch} style={{ fontSize: 10, color: "#991B1B", background: "#FEE2E2", border: "none", borderRadius: 4, padding: "2px 6px", cursor: "pointer", fontWeight: 700 }}>✖ Reset Cari</button>
+                        )}
+                    </div>
 
-                    <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-                        placeholder="🔍 Cari customer, deskripsi..."
-                        style={{ width: "100%", border: "1.5px solid #D1BFA3", borderRadius: 7, padding: "6px 10px", fontSize: 12, color: "#3C2F2F", background: "#FFFBF7", outline: "none", boxSizing: "border-box", marginBottom: 8 }} />
+                    {/* Invoice Search Row */}
+                    <div style={{ marginBottom: 10 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "#B89678", letterSpacing: 1, textTransform: "uppercase", marginBottom: 4 }}>Cari Nomor Invoice</div>
+                        <div style={{ display: "flex", gap: 5 }}>
+                            <input type="text" value={noInvInput} 
+                                onChange={(e) => setNoInvInput(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === "Enter") handleSearchInv(); }}
+                                placeholder="Masukkan No. Inv (cth: 11210)"
+                                style={{ ...inputSt, flex: 1 }} />
+                            <button onClick={handleSearchInv}
+                                style={{ background: "#A67B5B", color: "white", border: "none", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", padding: "0 12px" }}>
+                                Cari
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style={{ position: "relative" }}>
+                        <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+                            placeholder="🔍 Filter nama customer atau deskripsi..."
+                            style={{ ...inputSt, marginBottom: 8 }} />
+                    </div>
 
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span style={{ fontSize: 11, color: "#B89678" }}>{candidates.length} item tersedia · <strong style={{ color: "#A67B5B" }}>{selectedIds.length} dipilih</strong></span>
+                        <span style={{ fontSize: 11, color: "#B89678" }}>
+                            {searchedInv ? <span>Hasil Invoice <strong>{searchedInv}</strong>:</span> : ""} 
+                            {candidates.length} item {searchedInv ? "" : "siap kirim"} · <strong style={{ color: "#A67B5B" }}>{selectedIds.length} dipilih</strong>
+                        </span>
                         <button onClick={toggleAll} style={{ fontSize: 11, color: "#A67B5B", background: "none", border: "none", cursor: "pointer", fontWeight: 600 }}>
                             {selectedIds.length === candidates.length && candidates.length > 0 ? "Batal Semua" : "Pilih Semua"}
                         </button>
@@ -111,8 +175,12 @@ function TabCustomer() {
                 <div style={{ flex: 1, overflowY: "auto" }}>
                     {candidates.length === 0 ? (
                         <div style={{ textAlign: "center", padding: "3rem 1rem", color: "#C5A882", fontSize: 12 }}>
-                            <div style={{ fontSize: 40, marginBottom: 8 }}>📭</div>
-                            Belum ada item siap kirim.<br />Update status ke <strong>Siap Kirim</strong> di Antrian Produksi.
+                            <div style={{ fontSize: 40, marginBottom: 8 }}>{searchedInv ? "❌" : "📭"}</div>
+                            {searchedInv ? (
+                                <>No. Invoice <strong>{searchedInv}</strong> tidak ditemukan<br/>atau sudah pernah dikirim.</>
+                            ) : (
+                                <>Belum ada item siap kirim.<br />Update status ke <strong>Siap Kirim</strong> di Antrian Produksi.</>
+                            )}
                         </div>
                     ) : (
                         candidates.map((row) => {
