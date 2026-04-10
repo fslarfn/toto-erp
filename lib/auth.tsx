@@ -11,6 +11,12 @@ interface AuthContextType {
     hasAccess: (module: string) => boolean;
 }
 
+/**
+ * RBAC Configuration
+ * - owner: Full access to all modules
+ * - finance: Full access (updated for Vira)
+ * - sales/produksi/barang: Restricted access
+ */
 const roleAccess: Record<UserRole, string[]> = {
     owner: ["dashboard", "pesanan", "status-barang", "keuangan", "stok-bahan", "produksi", "admin"],
     finance: ["dashboard", "pesanan", "status-barang", "keuangan", "stok-bahan", "produksi", "admin"],
