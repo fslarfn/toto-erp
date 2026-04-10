@@ -19,6 +19,7 @@ interface AppStore {
     updateMaterial: (id: string, updates: Partial<Material>) => void;
     deleteMaterial: (id: string) => void;
     addCashFlow: (c: Omit<CashFlow, "id">) => void;
+    deleteCashFlow: (id: string) => void;
     addPayment: (p: Omit<Payment, "id">) => void;
     updateBankBalance: (id: string, delta: number) => void;
 }
@@ -214,35 +215,35 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, (payload) => {
                 const { eventType, new: n, old: o } = payload;
                 if (eventType === "INSERT") setOrders(prev => [dbToOrder(n as Record<string, any>), ...prev]);
-                else if (eventType === "UPDATE") setOrders(prev => prev.map(x => x.id === (n as any).id ? dbToOrder(n as Record<string, any>) : x));
+                else if (eventType === "UPDATE") setOrders(prev => prev.map(x => x.id === (n as any).id ? { ...x, ...dbToOrder(n as Record<string, any>) } : x));
                 else if (eventType === "DELETE") setOrders(prev => prev.filter(x => x.id === (o as any).id));
             })
             // 2. Materials
             .on("postgres_changes", { event: "*", schema: "public", table: "materials" }, (payload) => {
                 const { eventType, new: n, old: o } = payload;
                 if (eventType === "INSERT") setMaterials(prev => [...prev, dbToMaterial(n as Record<string, any>)]);
-                else if (eventType === "UPDATE") setMaterials(prev => prev.map(x => x.id === (n as any).id ? dbToMaterial(n as Record<string, any>) : x));
+                else if (eventType === "UPDATE") setMaterials(prev => prev.map(x => x.id === (n as any).id ? { ...x, ...dbToMaterial(n as Record<string, any>) } : x));
                 else if (eventType === "DELETE") setMaterials(prev => prev.filter(x => x.id === (o as any).id));
             })
             // 3. Cash Flow
             .on("postgres_changes", { event: "*", schema: "public", table: "cash_flow" }, (payload) => {
                 const { eventType, new: n, old: o } = payload;
                 if (eventType === "INSERT") setCashFlow(prev => [dbToCashFlow(n as Record<string, any>), ...prev]);
-                else if (eventType === "UPDATE") setCashFlow(prev => prev.map(x => x.id === (n as any).id ? dbToCashFlow(n as Record<string, any>) : x));
+                else if (eventType === "UPDATE") setCashFlow(prev => prev.map(x => x.id === (n as any).id ? { ...x, ...dbToCashFlow(n as Record<string, any>) } : x));
                 else if (eventType === "DELETE") setCashFlow(prev => prev.filter(x => x.id === (o as any).id));
             })
             // 4. Payments
             .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, (payload) => {
                 const { eventType, new: n, old: o } = payload;
                 if (eventType === "INSERT") setPayments(prev => [dbToPayment(n as Record<string, any>), ...prev]);
-                else if (eventType === "UPDATE") setPayments(prev => prev.map(x => x.id === (n as any).id ? dbToPayment(n as Record<string, any>) : x));
+                else if (eventType === "UPDATE") setPayments(prev => prev.map(x => x.id === (n as any).id ? { ...x, ...dbToPayment(n as Record<string, any>) } : x));
                 else if (eventType === "DELETE") setPayments(prev => prev.filter(x => x.id === (o as any).id));
             })
             // 5. Bank Accounts
             .on("postgres_changes", { event: "*", schema: "public", table: "bank_accounts" }, (payload) => {
                 const { eventType, new: n, old: o } = payload;
                 if (eventType === "INSERT") setBankAccounts(prev => [...prev, dbToBankAccount(n as Record<string, any>)]);
-                else if (eventType === "UPDATE") setBankAccounts(prev => prev.map(x => x.id === (n as any).id ? dbToBankAccount(n as Record<string, any>) : x));
+                else if (eventType === "UPDATE") setBankAccounts(prev => prev.map(x => x.id === (n as any).id ? { ...x, ...dbToBankAccount(n as Record<string, any>) } : x));
                 else if (eventType === "DELETE") setBankAccounts(prev => prev.filter(x => x.id === (o as any).id));
             })
             .subscribe();
@@ -297,11 +298,47 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         supabase.from("materials").delete().eq("id", id).then();
     }, []);
 
+    const updateBankBalance = useCallback((id: string, delta: number) => {
+        setBankAccounts((prev) =>
+            prev.map((b) => {
+                if (b.id === id) {
+                    const newBal = b.balance + delta;
+                    supabase.from("bank_accounts").update({ balance: newBal }).eq("id", id).then();
+                    return { ...b, balance: newBal };
+                }
+                return b;
+            })
+        );
+    }, []);
+
     const addCashFlow = useCallback((entry: Omit<CashFlow, "id">) => {
-        const newCf = { ...entry, id: String(Date.now()) };
+        const id = String(Date.now());
+        const newCf = { ...entry, id };
         setCashFlow((prev) => [newCf, ...prev]);
         supabase.from("cash_flow").insert(cashFlowToDb(newCf)).then();
-    }, []);
+
+        // Update Bank Balance
+        const bank = bankAccounts.find(b => b.name === entry.bankAccount);
+        if (bank) {
+            const delta = entry.type === "income" ? entry.amount : -entry.amount;
+            updateBankBalance(bank.id, delta);
+        }
+    }, [bankAccounts, updateBankBalance]);
+
+    const deleteCashFlow = useCallback((id: string) => {
+        const target = cashFlow.find(c => c.id === id);
+        if (!target) return;
+
+        setCashFlow((prev) => prev.filter((c) => c.id !== id));
+        supabase.from("cash_flow").delete().eq("id", id).then();
+
+        // Reverse Bank Balance
+        const bank = bankAccounts.find(b => b.name === target.bankAccount);
+        if (bank) {
+            const delta = target.type === "income" ? -target.amount : target.amount;
+            updateBankBalance(bank.id, delta);
+        }
+    }, [cashFlow, bankAccounts, updateBankBalance]);
 
     const addPayment = useCallback((payment: Omit<Payment, "id">) => {
         const newPayment = { ...payment, id: String(Date.now()) };
@@ -321,25 +358,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         supabase.from("payments").insert(paymentToDb(newPayment)).then();
     }, []);
 
-    const updateBankBalance = useCallback((id: string, delta: number) => {
-        setBankAccounts((prev) =>
-            prev.map((b) => {
-                if (b.id === id) {
-                    const newBal = b.balance + delta;
-                    supabase.from("bank_accounts").update({ balance: newBal }).eq("id", id).then();
-                    return { ...b, balance: newBal };
-                }
-                return b;
-            })
-        );
-    }, []);
 
     return (
         <StoreContext.Provider value={{
             orders, materials, cashFlow, payments, bankAccounts, loading,
             addOrder, updateOrder, deleteOrder,
             addMaterial, updateMaterial, deleteMaterial,
-            addCashFlow, addPayment, updateBankBalance,
+            addCashFlow, deleteCashFlow, addPayment, updateBankBalance,
         }}>
             {children}
         </StoreContext.Provider>

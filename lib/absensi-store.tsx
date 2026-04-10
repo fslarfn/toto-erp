@@ -130,9 +130,28 @@ export function AbsensiProvider({ children }: { children: ReactNode }) {
             .channel("realtime_absensi")
             .on("postgres_changes", { event: "*", schema: "public", table: "absensi" }, (payload) => {
                 const { eventType, new: n, old: o } = payload;
-                if (eventType === "INSERT") setAbsensi(prev => [dbToAbsensi(n as Record<string, any>), ...prev]);
-                else if (eventType === "UPDATE") setAbsensi(prev => prev.map(x => x.id === (n as any).id ? dbToAbsensi(n as Record<string, any>) : x));
-                else if (eventType === "DELETE") setAbsensi(prev => prev.filter(x => x.id === (o as any).id));
+                if (eventType === "INSERT") {
+                    setAbsensi(prev => [dbToAbsensi(n as Record<string, any>), ...prev]);
+                } else if (eventType === "UPDATE") {
+                    const row = n as Record<string, any>;
+                    const mapped: Partial<AbsensiRecord> = {};
+                    if ("id" in row) mapped.id = row.id;
+                    if ("karyawan_id" in row) mapped.karyawan_id = row.karyawan_id;
+                    if ("nama_karyawan" in row) mapped.nama_karyawan = row.nama_karyawan;
+                    if ("tanggal" in row) mapped.tanggal = row.tanggal;
+                    if ("jam_masuk" in row) mapped.jam_masuk = row.jam_masuk;
+                    if ("jam_keluar" in row) mapped.jam_keluar = row.jam_keluar;
+                    if ("foto_masuk_url" in row) mapped.foto_masuk_base64 = row.foto_masuk_url;
+                    if ("foto_keluar_url" in row) mapped.foto_keluar_base64 = row.foto_keluar_url;
+                    if ("is_telat" in row) mapped.is_telat = !!row.is_telat;
+                    if ("selisih_menit" in row) mapped.selisih_menit = row.selisih_menit;
+                    if ("total_jam_kerja" in row) mapped.total_jam_kerja = row.total_jam_kerja;
+                    if ("catatan" in row) mapped.catatan = row.catatan;
+
+                    setAbsensi(prev => prev.map(x => x.id === (n as any).id ? { ...x, ...mapped } : x));
+                } else if (eventType === "DELETE") {
+                    setAbsensi(prev => prev.filter(x => x.id === (o as any).id));
+                }
             })
             .subscribe();
 

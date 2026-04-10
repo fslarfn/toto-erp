@@ -102,21 +102,21 @@ export function KaryawanProvider({ children }: { children: ReactNode }) {
             .on("postgres_changes", { event: "*", schema: "public", table: "karyawan" }, (payload) => {
                 const { eventType, new: n, old: o } = payload;
                 if (eventType === "INSERT") setKaryawan(prev => [...prev, n as DataKaryawan]);
-                else if (eventType === "UPDATE") setKaryawan(prev => prev.map(x => x.id === (n as any).id ? (n as DataKaryawan) : x));
+                else if (eventType === "UPDATE") setKaryawan(prev => prev.map(x => x.id === (n as any).id ? { ...x, ...(n as any) } : x));
                 else if (eventType === "DELETE") setKaryawan(prev => prev.filter(x => x.id === (o as any).id));
             })
             // 2. Gaji
             .on("postgres_changes", { event: "*", schema: "public", table: "gaji" }, (payload) => {
                 const { eventType, new: n, old: o } = payload;
                 if (eventType === "INSERT") setGaji(prev => [...prev, n as GajiRecord]);
-                else if (eventType === "UPDATE") setGaji(prev => prev.map(x => x.id === (n as any).id ? (n as GajiRecord) : x));
+                else if (eventType === "UPDATE") setGaji(prev => prev.map(x => x.id === (n as any).id ? { ...x, ...(n as any) } : x));
                 else if (eventType === "DELETE") setGaji(prev => prev.filter(x => x.id === (o as any).id));
             })
             // 3. Kasbon
             .on("postgres_changes", { event: "*", schema: "public", table: "kasbon" }, (payload) => {
                 const { eventType, new: n, old: o } = payload;
                 if (eventType === "INSERT") setKasbon(prev => [...prev, n as KasbonRecord]);
-                else if (eventType === "UPDATE") setKasbon(prev => prev.map(x => x.id === (n as any).id ? (n as KasbonRecord) : x));
+                else if (eventType === "UPDATE") setKasbon(prev => prev.map(x => x.id === (n as any).id ? { ...x, ...(n as any) } : x));
                 else if (eventType === "DELETE") setKasbon(prev => prev.filter(x => x.id === (o as any).id));
             })
             .subscribe();

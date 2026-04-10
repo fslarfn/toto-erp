@@ -105,9 +105,20 @@ export function SJBahanProvider({ children }: { children: ReactNode }) {
                 if (eventType === "INSERT") {
                     setSjBahan(prev => [dbToSJBahan(n, []), ...prev]);
                 } else if (eventType === "UPDATE") {
-                    setSjBahan(prev => prev.map(x => x.id === n.id ? { ...x, ...dbToSJBahan(n, x.items) } : x));
+                    const row = n as Record<string, any>;
+                    const mapped: Partial<SJBahanRow> = {};
+                    if ("no_sj" in row) mapped.noSJ = row.no_sj;
+                    if ("tanggal" in row) mapped.tanggal = row.tanggal;
+                    if ("vendor_warna" in row) mapped.vendorWarna = row.vendor_warna;
+                    if ("warna" in row) mapped.warna = row.warna;
+                    if ("dibuat_oleh" in row) mapped.dibuatOleh = row.dibuat_oleh;
+                    if ("total_batang" in row) mapped.totalBatang = row.total_batang;
+                    if ("total_meter" in row) mapped.totalMeter = row.total_meter;
+                    if ("status" in row) mapped.status = row.status;
+
+                    setSjBahan(prev => prev.map(x => x.id === (n as any).id ? { ...x, ...mapped } : x));
                 } else if (eventType === "DELETE") {
-                    setSjBahan(prev => prev.filter(x => x.id === o.id));
+                    setSjBahan(prev => prev.filter(x => x.id !== (o as any).id));
                 }
             })
             // 2. Items (sj_bahan_items) - Simple approach: re-fetch items for affected SJ if changed

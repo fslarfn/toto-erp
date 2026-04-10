@@ -148,37 +148,38 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                     setRows((prev) => {
                         if (eventType === "UPDATE" || eventType === "INSERT") {
                             const row = newRow as Record<string, any>;
-                            const mapped: PesananRow = {
-                                id: row.id,
-                                tanggal: row.tanggal || "",
-                                customer: row.customer || "",
-                                deskripsi: row.deskripsi || "",
-                                ukuran: row.ukuran || "",
-                                qty: row.qty || "",
-                                harga: row.harga || "",
-                                no_inv: row.no_inv || "",
-                                no_sj: row.no_sj || "",
-                                di_produksi: !!row.di_produksi,
-                                di_warna: !!row.di_warna,
-                                siap_kirim: !!row.siap_kirim,
-                                di_kirim: !!row.di_kirim,
-                                ekspedisi: row.ekspedisi || "",
-                                color_marker: row.color_marker || "",
-                                printed_at: row.printed_at || "",
-                                po_label: row.po_label || "",
-                                is_packing: !!row.is_packing,
-                                is_paid: !!row.is_paid,
-                                production_note: row.production_note || "",
-                                metode_kirim: row.metode_kirim || "",
-                            };
+                            // Construction of mapped should only include fields that are present in row
+                            // to avoid wiping out data with defaults in cases of partial updates
+                            const mapped: Partial<PesananRow> = {};
+                            if ("id" in row) mapped.id = row.id;
+                            if ("tanggal" in row) mapped.tanggal = row.tanggal;
+                            if ("customer" in row) mapped.customer = row.customer;
+                            if ("deskripsi" in row) mapped.deskripsi = row.deskripsi;
+                            if ("ukuran" in row) mapped.ukuran = row.ukuran;
+                            if ("qty" in row) mapped.qty = row.qty;
+                            if ("harga" in row) mapped.harga = row.harga;
+                            if ("no_inv" in row) mapped.no_inv = row.no_inv;
+                            if ("no_sj" in row) mapped.no_sj = row.no_sj;
+                            if ("di_produksi" in row) mapped.di_produksi = !!row.di_produksi;
+                            if ("di_warna" in row) mapped.di_warna = !!row.di_warna;
+                            if ("siap_kirim" in row) mapped.siap_kirim = !!row.siap_kirim;
+                            if ("di_kirim" in row) mapped.di_kirim = !!row.di_kirim;
+                            if ("ekspedisi" in row) mapped.ekspedisi = row.ekspedisi;
+                            if ("color_marker" in row) mapped.color_marker = row.color_marker;
+                            if ("printed_at" in row) mapped.printed_at = row.printed_at;
+                            if ("po_label" in row) mapped.po_label = row.po_label;
+                            if ("is_packing" in row) mapped.is_packing = !!row.is_packing;
+                            if ("is_paid" in row) mapped.is_paid = !!row.is_paid;
+                            if ("production_note" in row) mapped.production_note = row.production_note;
+                            if ("metode_kirim" in row) mapped.metode_kirim = row.metode_kirim;
 
                             const exists = prev.find((r) => r.id === mapped.id);
                             if (exists) {
                                 return prev.map((r) => (r.id === mapped.id ? { ...r, ...mapped } : r));
-                            } else {
+                            } else if (eventType === "INSERT") {
                                 const dataRows = prev.filter(r => isRowFilled(r));
                                 const emptyRows = prev.filter(r => !isRowFilled(r));
-                                return [...dataRows, mapped, ...emptyRows];
+                                return [...dataRows, mapped as PesananRow, ...emptyRows];
                             }
                         } else if (eventType === "DELETE") {
                             const id = (oldRow as any).id;
