@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from "react";
 import { supabase } from "@/lib/supabase-client";
 
 /* ================================================================
@@ -66,6 +66,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
         Array.from({ length: EMPTY_BUFFER }, (_, i) => makeEmptyRow(i + 1))
     );
     const [loading, setLoading] = useState(true);
+    const timers = useRef<Record<number, NodeJS.Timeout>>({});
 
     // Load from Supabase on mount
     useEffect(() => {
@@ -203,27 +204,35 @@ export function PesananProvider({ children }: { children: ReactNode }) {
         setRows((prev) =>
             prev.map((r) => (r.id === id ? { ...r, ...patch } : r))
         );
-        // Debounced upsert to Supabase
-        const timer = setTimeout(async () => {
-            const existing = await supabase
-                .from("pesanan_rows")
-                .select("id")
-                .eq("id", id)
-                .single();
 
-            if (existing.data) {
-                if (Object.keys(patch).length > 0) {
-                    await supabase.from("pesanan_rows").update(patch).eq("id", id);
+        if (timers.current[id]) clearTimeout(timers.current[id]);
+
+        timers.current[id] = setTimeout(async () => {
+            try {
+                const existing = await supabase
+                    .from("pesanan_rows")
+                    .select("id")
+                    .eq("id", id)
+                    .single();
+
+                if (existing.data) {
+                    if (Object.keys(patch).length > 0) {
+                        const { error } = await supabase.from("pesanan_rows").update(patch).eq("id", id);
+                        if (error) throw error;
+                    }
+                } else {
+                    const row = { ...makeEmptyRow(id), ...patch };
+                    const hasData = row.tanggal || row.customer || row.deskripsi || row.ukuran || row.qty;
+                    if (hasData) {
+                        const { error } = await supabase.from("pesanan_rows").insert(row);
+                        if (error) throw error;
+                    }
                 }
-            } else {
-                const row = { ...makeEmptyRow(id), ...patch };
-                const hasData = row.tanggal || row.customer || row.deskripsi || row.ukuran || row.qty;
-                if (hasData) {
-                    await supabase.from("pesanan_rows").insert(row);
-                }
+                delete timers.current[id];
+            } catch (err) {
+                console.error("Update Row Error (Supabase):", err);
             }
-        }, 300);
-        return () => clearTimeout(timer);
+        }, 500); // Meningkatkan debounce ke 500ms untuk stabilitas
     }, []);
 
     const resetRows = useCallback(() => {
