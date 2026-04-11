@@ -162,6 +162,11 @@ export default function BillingPage() {
         } catch (err) { alert("Gagal."); } finally { setLoading(false); }
     };
 
+    const openInvoice = (item: any) => {
+        setSelectedInvoice(item);
+        setShowInvoice(true);
+    };
+
     if (!hasAccess) return <div className="page-content text-center py-20 opacity-50">AKSES DITOLAK</div>;
 
     return (
