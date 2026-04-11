@@ -253,6 +253,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             supabase.removeChannel(channel);
         };
     }, []);
+    
+    // Auto-sync balances on first load if they are all 0 but history exists
+    useEffect(() => {
+        if (!loading && bankAccounts.length > 0 && cashFlow.length > 0) {
+            const totalStored = bankAccounts.reduce((s, b) => s + b.balance, 0);
+            const totalPayments = payments.reduce((s, p) => s + p.amountPaid, 0);
+            const hasHistory = cashFlow.length > 0 || totalPayments > 0;
+            
+            if (totalStored === 0 && hasHistory) {
+                console.log("Detecting unsynced balances... performing auto-sync.");
+                recalculateBalances();
+            }
+        }
+    }, [loading, bankAccounts.length, cashFlow.length, payments.length, recalculateBalances]);
 
     const addOrder = useCallback((orderData: Parameters<AppStore["addOrder"]>[0]) => {
         const nums = generateNumbers(orders.length);
