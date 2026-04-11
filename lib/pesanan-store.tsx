@@ -28,6 +28,7 @@ export type PesananRow = {
     is_paid: boolean;
     production_note: string;
     metode_kirim: string;
+    shipped_at: string;
 };
 
 export const PAGE_SIZE = 100;
@@ -41,7 +42,7 @@ export function makeEmptyRow(id: number): PesananRow {
         di_produksi: false, di_warna: false, siap_kirim: false, di_kirim: false,
         ekspedisi: "", color_marker: "",
         printed_at: "", po_label: "", is_packing: false, is_paid: false,
-        production_note: "", metode_kirim: "",
+        production_note: "", metode_kirim: "", shipped_at: "",
     };
 }
 
@@ -120,6 +121,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                         is_paid: !!r.is_paid,
                         production_note: (r.production_note as string) || "",
                         metode_kirim: (r.metode_kirim as string) || "",
+                        shipped_at: (r.shipped_at as string) || "",
                     }));
                     // Append empty rows buffer after data
                     const lastId = mapped[mapped.length - 1].id;
@@ -172,6 +174,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                             if ("is_paid" in row) mapped.is_paid = !!row.is_paid;
                             if ("production_note" in row) mapped.production_note = row.production_note;
                             if ("metode_kirim" in row) mapped.metode_kirim = row.metode_kirim;
+                            if ("shipped_at" in row) mapped.shipped_at = row.shipped_at;
 
                             const exists = prev.find((r) => r.id === mapped.id);
                             if (exists) {
@@ -209,16 +212,14 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                 .single();
 
             if (existing.data) {
-                const { metode_kirim: _, ...patchDB } = patch;
-                if (Object.keys(patchDB).length > 0) {
-                    await supabase.from("pesanan_rows").update(patchDB).eq("id", id);
+                if (Object.keys(patch).length > 0) {
+                    await supabase.from("pesanan_rows").update(patch).eq("id", id);
                 }
             } else {
                 const row = { ...makeEmptyRow(id), ...patch };
-                const { metode_kirim: _, ...dbRow } = row;
                 const hasData = row.tanggal || row.customer || row.deskripsi || row.ukuran || row.qty;
                 if (hasData) {
-                    await supabase.from("pesanan_rows").insert(dbRow);
+                    await supabase.from("pesanan_rows").insert(row);
                 }
             }
         }, 300);
@@ -260,7 +261,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
             
             const rowsWithData = base.filter(r => isRowFilled(r));
             for (let i = 0; i < rowsWithData.length; i += 100) {
-                const chunk = rowsWithData.slice(i, i + 100).map(({ metode_kirim: _, ...r }) => r);
+                const chunk = rowsWithData.slice(i, i + 100);
                 const { error: insErr } = await supabase.from("pesanan_rows").insert(chunk);
                 if (insErr) {
                     console.error("Insert Error:", insErr);

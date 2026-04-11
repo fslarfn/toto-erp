@@ -332,7 +332,7 @@ function TabFollowUp() {
                                 <div key={row.id} style={{ padding: "11px 14px", borderBottom: idx < opRows.length - 1 ? "1px solid #F5F0EC" : "none", background: flash === row.id ? "#F0FFF4" : "white", transition: "background 0.4s" }}>
                                     <div style={{ fontWeight: 600, fontSize: 13, color: "#3C2F2F" }}>{row.customer || "—"}</div>
                                     <div style={{ fontSize: 11.5, color: "#8A7B6E", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>{row.deskripsi || "—"}</div>
-                                    <div style={{ fontSize: 10.5, color: "#B89678", marginTop: 2 }}>UK: {row.ukuran || "—"} · Qty: {row.qty || "—"} · PO: {row.po_label || "—"}</div>
+                                    <div style={{ fontSize: 10.5, color: "#B89678", marginTop: 2 }}>UK: {row.ukuran || "—"} · Qty: {row.qty || "—"} · PO: {row.po_label || "—"} · 🗓️ {fmtShort(row.tanggal)}</div>
                                     {row.production_note && (
                                         <div style={{ marginTop: 5, padding: "4px 8px", background: "#FAFAF5", borderRadius: 6, fontSize: 11, color: "#8A6D55", border: "1px dashed #E8DDD0" }}>📝 {row.production_note}</div>
                                     )}
@@ -391,7 +391,7 @@ function TabPengiriman() {
             alert("Harap isi nama ekspedisi terlebih dahulu!");
             return;
         }
-        const patch: Partial<PesananRow> = { di_kirim: true };
+        const patch: Partial<PesananRow> = { di_kirim: true, shipped_at: new Date().toISOString() };
         if (eks) patch.ekspedisi = eks;
         updateRow(row.id, patch);
         addLog(row.id, "status_change", "siap_kirim", "di_kirim", eks ? `via ${eks}` : "", user?.name || "");
@@ -407,7 +407,7 @@ function TabPengiriman() {
         }
         rowList.forEach(r => {
             const eks = getEkspedisiValue(r);
-            const patch: Partial<PesananRow> = { di_kirim: true };
+            const patch: Partial<PesananRow> = { di_kirim: true, shipped_at: new Date().toISOString() };
             if (eks) patch.ekspedisi = eks;
             updateRow(r.id, patch);
             addLog(r.id, "status_change", "siap_kirim", "di_kirim", eks ? `via ${eks}` : "", user?.name || "");
@@ -640,6 +640,7 @@ function TabRiwayatPO() {
                                                         <div><span style={{ color: "#B89678" }}>Qty:</span> <strong style={{ color: "#3C2F2F" }}>{r.qty || "—"}</strong></div>
                                                         <div><span style={{ color: "#B89678" }}>PO:</span> <strong style={{ color: "#3C2F2F" }}>{r.po_label || "—"}</strong></div>
                                                         <div><span style={{ color: "#B89678" }}>Tanggal:</span> <strong style={{ color: "#3C2F2F" }}>{fmtFull(r.tanggal)}</strong></div>
+                                                        {r.shipped_at && <div><span style={{ color: "#B89678" }}>Dikirim:</span> <strong style={{ color: "#15803D" }}>{fmtFull(r.shipped_at.slice(0, 10))}</strong></div>}
                                                         {r.metode_kirim && <div><span style={{ color: "#B89678" }}>Metode:</span> <strong style={{ color: "#3C2F2F" }}>{METODE_BADGE[r.metode_kirim]?.label || r.metode_kirim}</strong></div>}
                                                         {r.ekspedisi && <div><span style={{ color: "#B89678" }}>Ekspedisi:</span> <strong style={{ color: "#3C2F2F" }}>{r.ekspedisi}</strong></div>}
                                                     </div>
