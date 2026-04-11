@@ -150,10 +150,15 @@ export function AbsensiProvider({ children }: { children: ReactNode }) {
 
                     setAbsensi(prev => prev.map(x => x.id === (n as any).id ? { ...x, ...mapped } : x));
                 } else if (eventType === "DELETE") {
-                    setAbsensi(prev => prev.filter(x => x.id === (o as any).id));
+                    setAbsensi(prev => prev.filter(x => x.id !== (o as any).id));
                 }
             })
-            .subscribe();
+            .on("system", { event: "*" }, (payload) => {
+                console.log("Absensi Realtime System:", payload);
+            })
+            .subscribe((status) => {
+                console.log("Absensi Realtime Status:", status);
+            });
 
         return () => {
             supabase.removeChannel(channel);

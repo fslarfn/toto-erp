@@ -103,23 +103,25 @@ export function KaryawanProvider({ children }: { children: ReactNode }) {
                 const { eventType, new: n, old: o } = payload;
                 if (eventType === "INSERT") setKaryawan(prev => [...prev, n as DataKaryawan]);
                 else if (eventType === "UPDATE") setKaryawan(prev => prev.map(x => x.id === (n as any).id ? { ...x, ...(n as any) } : x));
-                else if (eventType === "DELETE") setKaryawan(prev => prev.filter(x => x.id === (o as any).id));
+                else if (eventType === "DELETE") setKaryawan(prev => prev.filter(x => x.id !== (o as any).id));
             })
             // 2. Gaji
             .on("postgres_changes", { event: "*", schema: "public", table: "gaji" }, (payload) => {
                 const { eventType, new: n, old: o } = payload;
                 if (eventType === "INSERT") setGaji(prev => [...prev, n as GajiRecord]);
                 else if (eventType === "UPDATE") setGaji(prev => prev.map(x => x.id === (n as any).id ? { ...x, ...(n as any) } : x));
-                else if (eventType === "DELETE") setGaji(prev => prev.filter(x => x.id === (o as any).id));
+                else if (eventType === "DELETE") setGaji(prev => prev.filter(x => x.id !== (o as any).id));
             })
             // 3. Kasbon
             .on("postgres_changes", { event: "*", schema: "public", table: "kasbon" }, (payload) => {
                 const { eventType, new: n, old: o } = payload;
                 if (eventType === "INSERT") setKasbon(prev => [...prev, n as KasbonRecord]);
                 else if (eventType === "UPDATE") setKasbon(prev => prev.map(x => x.id === (n as any).id ? { ...x, ...(n as any) } : x));
-                else if (eventType === "DELETE") setKasbon(prev => prev.filter(x => x.id === (o as any).id));
+                else if (eventType === "DELETE") setKasbon(prev => prev.filter(x => x.id !== (o as any).id));
             })
-            .subscribe();
+            .subscribe((status) => {
+                console.log("Karyawan Store Realtime Status:", status);
+            });
 
         return () => {
             supabase.removeChannel(channel);
@@ -127,17 +129,9 @@ export function KaryawanProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const addKaryawan = useCallback((k: Omit<DataKaryawan, "id">) => {
-        // Optimistic — we'll get the real ID back from Supabase
-        const tempId: number = Date.now();
-        const newK: DataKaryawan = { ...k, id: tempId };
-        setKaryawan(p => [...p, newK]);
-        (async () => {
-            const { data } = await supabase.from("karyawan").insert(k as any).select().single();
-            if (data) {
-                // Replace temp ID with real one
-                setKaryawan(p => p.map(x => x.id === tempId ? (data as DataKaryawan) : x));
-            }
-        })();
+        // We rely solely on Real-time to add the item to the list
+        // This prevents the "duplicate" bug where optimistic + real-time both add the item.
+        supabase.from("karyawan").insert(k as any).then();
     }, []);
 
     const updateKaryawan = useCallback((id: number, patch: Partial<DataKaryawan>) => {
@@ -150,37 +144,24 @@ export function KaryawanProvider({ children }: { children: ReactNode }) {
         supabase.from("karyawan").delete().eq("id", id).then();
     }, []);
 
-    const upsertGaji = useCallback((g: Omit<GajiRecord, "id">) => {
-        setGaji(p => {
-            const idx = p.findIndex(r => r.karyawan_id === g.karyawan_id && r.periode === g.periode);
-            if (idx >= 0) {
-                const updated = [...p];
-                updated[idx] = { ...updated[idx], ...g };
-                // Update in DB
-                supabase.from("gaji").update(g as any).eq("karyawan_id", g.karyawan_id).eq("periode", g.periode).then();
-                return updated;
-            }
-            const tempId: number = Date.now();
-            // Insert in DB
-            (async () => {
-                const { data } = await supabase.from("gaji").insert(g as any).select().single();
-                if (data) {
-                    setGaji(prev => prev.map(x => x.id === tempId ? (data as GajiRecord) : x));
-                }
-            })();
-            return [...p, { ...g, id: tempId }];
-        });
+    const upsertGaji = useCallback(async (g: Omit<GajiRecord, "id">) => {
+        // We rely on real-time to update the UI
+        const { data: existing } = await supabase
+            .from("gaji")
+            .select("id")
+            .eq("karyawan_id", g.karyawan_id)
+            .eq("periode", g.periode)
+            .single();
+
+        if (existing) {
+            await supabase.from("gaji").update(g as any).eq("id", existing.id);
+        } else {
+            await supabase.from("gaji").insert(g as any);
+        }
     }, []);
 
     const addKasbon = useCallback((k: Omit<KasbonRecord, "id">) => {
-        const tempId: number = Date.now();
-        setKasbon(p => [...p, { ...k, id: tempId }]);
-        (async () => {
-            const { data } = await supabase.from("kasbon").insert(k as any).select().single();
-            if (data) {
-                setKasbon(p => p.map(x => x.id === tempId ? (data as KasbonRecord) : x));
-            }
-        })();
+        supabase.from("kasbon").insert(k as any).then();
     }, []);
 
     const updateKasbon = useCallback((id: number, patch: Partial<KasbonRecord>) => {

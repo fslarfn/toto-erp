@@ -108,7 +108,7 @@ export function TagihanBahanProvider({ children }: { children: ReactNode }) {
                 } else if (eventType === "UPDATE") {
                     setTagihanList(prev => prev.map(x => x.id === n.id ? { ...x, ...dbToTagihan(n, x.items) } : x));
                 } else if (eventType === "DELETE") {
-                    setTagihanList(prev => prev.filter(x => x.id === o.id));
+                    setTagihanList(prev => prev.filter(x => x.id !== o.id));
                 }
             })
             // 2. Items (tagihan_bahan_items)
@@ -132,7 +132,9 @@ export function TagihanBahanProvider({ children }: { children: ReactNode }) {
                     } : h));
                 }
             })
-            .subscribe();
+            .subscribe((status) => {
+                console.log("Tagihan Bahan Store Realtime Status:", status);
+            });
 
         return () => {
             supabase.removeChannel(channel);

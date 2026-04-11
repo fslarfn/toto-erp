@@ -15,6 +15,7 @@ export default function StokBahanPage() {
     const [selId, setSelId] = useState<string | null>(null);
     const [form, setForm] = useState({ code: "", name: "", category: "Bahan Baku", unit: "", currentStock: "", minimumStock: "", location: "" });
     const [adjForm, setAdjForm] = useState({ jumlah: "", keterangan: "" });
+    const [saving, setSaving] = useState(false);
 
     const filtered = materials.filter((m) => {
         const q = search.toLowerCase();
@@ -27,26 +28,41 @@ export default function StokBahanPage() {
     const openKeluar = (id: string) => { setSelId(id); setAdjForm({ jumlah: "", keterangan: "" }); setModal("keluar"); };
     const openBaru = () => { setForm({ code: "", name: "", category: "Bahan Baku", unit: "", currentStock: "", minimumStock: "", location: "" }); setModal("baru"); };
 
-    const handleAdj = (e: React.FormEvent) => {
+    const handleAdj = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selId) return;
+        if (!selId || saving) return;
         const m = materials.find((m) => m.id === selId);
         if (!m) return;
-        const delta = parseFloat(adjForm.jumlah) || 0;
-        const newStock = modal === "masuk" ? m.currentStock + delta : Math.max(0, m.currentStock - delta);
-        updateMaterial(selId, { currentStock: newStock, lastUpdated: new Date().toISOString().slice(0, 10) });
-        setModal(null);
+        setSaving(true);
+        try {
+            const delta = parseFloat(adjForm.jumlah) || 0;
+            const newStock = modal === "masuk" ? m.currentStock + delta : Math.max(0, m.currentStock - delta);
+            await updateMaterial(selId, { currentStock: newStock, lastUpdated: new Date().toISOString().slice(0, 10) });
+            setModal(null);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setSaving(false);
+        }
     };
 
-    const handleBaru = (e: React.FormEvent) => {
+    const handleBaru = async (e: React.FormEvent) => {
         e.preventDefault();
-        addMaterial({
-            code: form.code, name: form.name, category: form.category,
-            unit: form.unit, currentStock: parseFloat(form.currentStock) || 0,
-            minimumStock: parseFloat(form.minimumStock) || 0,
-            location: form.location, lastUpdated: new Date().toISOString().slice(0, 10),
-        });
-        setModal(null);
+        if (saving) return;
+        setSaving(true);
+        try {
+            await addMaterial({
+                code: form.code, name: form.name, category: form.category,
+                unit: form.unit, currentStock: parseFloat(form.currentStock) || 0,
+                minimumStock: parseFloat(form.minimumStock) || 0,
+                location: form.location, lastUpdated: new Date().toISOString().slice(0, 10),
+            });
+            setModal(null);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setSaving(false);
+        }
     };
 
     const selMaterial = materials.find((m) => m.id === selId);
@@ -155,8 +171,10 @@ export default function StokBahanPage() {
                                     className="form-input" placeholder="Catatan transaksi stok" />
                             </div>
                             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                                <button type="button" onClick={() => setModal(null)} className="btn btn-secondary">Batal</button>
-                                <button type="submit" className={`btn ${modal === "masuk" ? "btn-success" : "btn-primary"}`}>Simpan</button>
+                                <button type="button" onClick={() => setModal(null)} disabled={saving} className="btn btn-secondary">Batal</button>
+                                <button type="submit" disabled={saving} className={`btn ${modal === "masuk" ? "btn-success" : "btn-primary"}`}>
+                                    {saving ? "Simpan..." : "Simpan"}
+                                </button>
                             </div>
                         </form>
                     </div>
@@ -202,8 +220,10 @@ export default function StokBahanPage() {
                                 </div>
                             </div>
                             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                                <button type="button" onClick={() => setModal(null)} className="btn btn-secondary">Batal</button>
-                                <button type="submit" className="btn btn-primary">Simpan Bahan</button>
+                                <button type="button" onClick={() => setModal(null)} disabled={saving} className="btn btn-secondary">Batal</button>
+                                <button type="submit" disabled={saving} className="btn btn-primary">
+                                    {saving ? "⏳ Menyimpan..." : "Simpan Bahan"}
+                                </button>
                             </div>
                         </form>
                     </div>

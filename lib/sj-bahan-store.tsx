@@ -145,7 +145,9 @@ export function SJBahanProvider({ children }: { children: ReactNode }) {
                     } : sj));
                 }
             })
-            .subscribe();
+            .subscribe((status) => {
+                console.log("Surat Jalan Bahan Store Realtime Status:", status);
+            });
 
         return () => {
             supabase.removeChannel(channel);

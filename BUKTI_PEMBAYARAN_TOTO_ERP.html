@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Official License Certificate - Toto ERP</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700;900&family=Playfair+Display:ital,wght@0,700;1,700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --primary: #5C4033;
+            --secondary: #B89678;
+            --accent: #D4AF37;
+            --bg: #FDF3E7;
+            --white: #FFFFFF;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            color: var(--primary);
+            padding: 20px;
+        }
+
+        .container {
+            background: var(--white);
+            width: 100%;
+            max-width: 800px;
+            padding: 60px;
+            position: relative;
+            border-radius: 4px;
+            box-shadow: 0 40px 100px rgba(92, 64, 51, 0.15);
+            border: 20px solid var(--white);
+            outline: 1px solid var(--secondary);
+            overflow: hidden;
+        }
+
+        .container::before {
+            content: "";
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            bottom: 20px;
+            border: 2px solid var(--secondary);
+            pointer-events: none;
+            opacity: 0.3;
+        }
+
+        .watermark {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-30deg);
+            font-size: 120px;
+            font-weight: 900;
+            color: var(--secondary);
+            opacity: 0.03;
+            white-space: nowrap;
+            pointer-events: none;
+            text-transform: uppercase;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+
+        .header h1 {
+            font-family: 'Playfair Display', serif;
+            font-size: 36px;
+            margin: 0;
+            letter-spacing: -0.02em;
+            color: var(--primary);
+        }
+
+        .header p {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.4em;
+            text-transform: uppercase;
+            color: var(--secondary);
+            margin-top: 10px;
+        }
+
+        .badge {
+            width: 100px;
+            height: 100px;
+            background: var(--accent);
+            margin: 30px auto;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            box-shadow: 0 10px 30px rgba(212, 175, 55, 0.3);
+            border: 4px double white;
+            position: relative;
+        }
+
+        .badge svg {
+            width: 40px;
+            height: 40px;
+            fill: white;
+        }
+
+        .main-title {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .main-title h2 {
+            font-family: 'Playfair Display', serif;
+            font-size: 24px;
+            font-style: italic;
+            margin-bottom: 10px;
+        }
+
+        .main-title div {
+            width: 60px;
+            height: 2px;
+            background: var(--accent);
+            margin: 20px auto;
+        }
+
+        .details {
+            background: #FAFAFA;
+            padding: 30px;
+            border-radius: 12px;
+            border: 1px solid #EEE;
+            margin-bottom: 40px;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #F0F0F0;
+            padding-bottom: 10px;
+        }
+
+        .detail-label {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .detail-value {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .instructions {
+            background: var(--bg);
+            padding: 25px;
+            border-radius: 12px;
+            border-left: 4px solid var(--accent);
+        }
+
+        .instructions h3 {
+            margin-top: 0;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--primary);
+            margin-bottom: 15px;
+        }
+
+        .instructions ol {
+            padding-left: 20px;
+            margin: 0;
+            font-size: 12px;
+            line-height: 1.8;
+            color: #777;
+        }
+
+        .instructions b {
+            color: var(--primary);
+        }
+
+        .footer {
+            margin-top: 60px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            font-size: 10px;
+            border-top: 1px solid #EEE;
+            padding-top: 30px;
+        }
+
+        .signature {
+            text-align: left;
+        }
+
+        .signature-line {
+            width: 180px;
+            height: 1px;
+            background: var(--primary);
+            margin-bottom: 10px;
+            margin-top: 60px;
+        }
+
+        .btn-print {
+            display: inline-block;
+            margin-top: 40px;
+            padding: 15px 40px;
+            background: var(--primary);
+            color: white;
+            text-decoration: none;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            font-size: 10px;
+            border-radius: 4px;
+            transition: 0.3s;
+        }
+
+        .btn-print:hover {
+            background: var(--secondary);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+
+            .container {
+                box-shadow: none;
+                border: none;
+                padding: 40px;
+            }
+
+            .btn-print {
+                display: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="watermark">T T O</div>
+
+        <div class="header">
+            <h1>RFW Conecting</h1>
+            <p>Digital Architecture & Solution</p>
+        </div>
+
+        <div class="badge">
+            <svg viewBox="0 0 24 24">
+                <path d="M12,2L4.5,20.29L5.21,21L12,18L18.79,21L19.5,20.29L12,2Z" />
+            </svg>
+        </div>
+
+        <div class="main-title">
+            <h2>Payment Successful Notice</h2>
+            <p style="font-size: 12px; color: #999; margin: 0;">Dokumen ini merupakan pengakuan resmi atas transaksi
+                lisensi aktif.</p>
+            <div></div>
+        </div>
+
+        <div class="details">
+            <div class="detail-row">
+                <span class="detail-label">Status Pembayaran</span>
+                <span class="detail-value" style="color: #059669;">DITERIMA & TERVALIDASI</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">ID Transaksi (Provider)</span>
+                <span class="detail-value">CHECK LYNK.ID DASHBOARD</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Jenis Lisensi</span>
+                <span class="detail-value">TOTO ERP PREMIUM - MULTI USER</span>
+            </div>
+        </div>
+
+        <div class="instructions">
+            <h3>Langkah Aktivasi Lisensi:</h3>
+            <ol>
+                <li>Salin <b>Nomor Referensi</b> yang Anda dapatkan dari notifikasi lynk.id.</li>
+                <li>Buka aplikasi <b>Toto ERP</b> dan login menggunakan akun Anda.</li>
+                <li>Masuk ke menu <b>Admin Billing</b> dan pilih tab <b>Konfirmasi Manual</b>.</li>
+                <li>Tempel (Paste) nomor tersebut dan klik <b>Kirim Laporan</b>.</li>
+                <li>Lisensi akan segera aktif setelah diverifikasi oleh Tim RFW Conecting.</li>
+            </ol>
+        </div>
+
+        <div class="footer">
+            <div class="signature">
+                <div class="signature-line"></div>
+                <b>SIGIT PUJO HARIYANTO</b><br>
+                <span>Managing Director - RFW Conecting</span>
+            </div>
+            <div style="text-align: right; color: #BBB;">
+                &copy; 2026 RFW Conecting<br>
+                Official Licensing Department
+            </div>
+        </div>
+
+        <div style="text-align: center;">
+            <a href="javascript:window.print()" class="btn-print">Cetak Sertifikat</a>
+        </div>
+    </div>
+</body>
+
+</html>

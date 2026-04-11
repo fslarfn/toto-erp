@@ -5,6 +5,8 @@ import { StoreProvider } from "@/lib/store";
 import { AuthProvider } from "@/lib/auth";
 import { KaryawanProvider } from "@/lib/karyawan-store";
 import { AbsensiProvider } from "@/lib/absensi-store";
+import { LicenseProvider } from "@/lib/license-store";
+import { LicenseGuard } from "@/components/license-guard";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -30,7 +32,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     <StoreProvider>
                         <KaryawanProvider>
                             <AbsensiProvider>
-                                {children}
+                                <LicenseProvider>
+                                    <LicenseGuard>
+                                        {children}
+                                    </LicenseGuard>
+                                </LicenseProvider>
                             </AbsensiProvider>
                         </KaryawanProvider>
                     </StoreProvider>

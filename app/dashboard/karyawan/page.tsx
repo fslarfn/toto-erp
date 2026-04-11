@@ -299,8 +299,22 @@ function KaryawanModal({ initial, onSave, onClose }: {
     initial?: DataKaryawan; onSave: (d: Omit<DataKaryawan, "id">) => void; onClose: () => void;
 }) {
     const [f, setF] = useState<Omit<DataKaryawan, "id">>(initial ? { ...initial } : EMPTY_K);
+    const [saving, setSaving] = useState(false);
+    
     const set = (k: keyof typeof EMPTY_K, v: string | number) =>
         setF(p => ({ ...p, [k]: v }));
+    
+    const handleSave = async () => {
+        if (!f.nama) return;
+        setSaving(true);
+        try {
+            await onSave(f);
+            onClose();
+        } catch (err) {
+            console.error(err);
+            setSaving(false);
+        }
+    };
 
     return (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -353,10 +367,10 @@ function KaryawanModal({ initial, onSave, onClose }: {
                     ))}
                 </div>
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
-                    <button onClick={onClose} style={{ padding: "8px 18px", borderRadius: 7, border: "1px solid #D1BFA3", background: "white", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#5C4033" }}>Batal</button>
-                    <button onClick={() => { if (!f.nama) return; onSave(f); onClose(); }}
-                        style={{ padding: "8px 20px", borderRadius: 7, border: "none", background: "#A67B5B", color: "white", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
-                        Simpan
+                    <button onClick={onClose} disabled={saving} style={{ padding: "8px 18px", borderRadius: 7, border: "1px solid #D1BFA3", background: "white", cursor: saving ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 600, color: "#5C4033" }}>Batal</button>
+                    <button onClick={handleSave} disabled={saving}
+                        style={{ padding: "8px 20px", borderRadius: 7, border: "none", background: "#A67B5B", color: "white", cursor: saving ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 700, opacity: saving ? 0.7 : 1 }}>
+                        {saving ? "⏳ Menyimpan..." : "Simpan"}
                     </button>
                 </div>
             </div>

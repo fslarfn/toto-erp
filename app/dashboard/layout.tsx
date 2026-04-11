@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useAuth, roleLabels, getRoleDisplay } from "@/lib/auth";
+import { useLicense } from "@/lib/license-store";
 import { PesananProvider } from "@/lib/pesanan-store";
 import { SuratJalanProvider } from "@/lib/surat-jalan-store";
 import { SJBahanProvider } from "@/lib/sj-bahan-store";
@@ -43,10 +44,17 @@ const NAV_ITEMS = [
             { href: "/dashboard/karyawan", label: "Karyawan", module: "keuangan", icon: KaryawanIcon },
         ],
     },
+    {
+        section: "Administrasi",
+        items: [
+            { href: "/dashboard/admin/billing", label: "Admin Billing", module: "admin-only", icon: BillingIcon },
+        ],
+    },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
     const { user, logout, hasAccess } = useAuth();
+    const { license } = useLicense();
     const router = useRouter();
     const pathname = usePathname();
     const [collapsed, setCollapsed] = useState(false);
@@ -98,9 +106,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         {/* Nav */}
                         <div className="sidebar-content">
                             {NAV_ITEMS.map((group) => {
-                                const visibleItems = group.items.filter((item) =>
-                                    hasAccess(item.module)
-                                );
+                                const allowedUsers = ["faisal", "vira", "toto", "fauzi", "yuni"];
+                                const visibleItems = group.items.filter((item) => {
+                                    if (item.module === "admin-only") return allowedUsers.includes(user?.username || "");
+                                    return hasAccess(item.module);
+                                });
                                 if (visibleItems.length === 0) return null;
                                 return (
                                     <div key={group.section}>
@@ -194,6 +204,36 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
                         {/* Page content */}
                         <main style={{ flex: 1, display: "flex", flexDirection: "column", overflowX: "hidden", background: "var(--bg)" }}>
+                            {/* Trial Banner */}
+                            {license && !license.is_setup_completed && (
+                                <div style={{ 
+                                    background: "linear-gradient(90deg, #FFFBEB 0%, #FEF3C7 100%)", 
+                                    borderBottom: "1px solid #FDE68A",
+                                    padding: "10px 20px",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    gap: "10px",
+                                    fontSize: "13px",
+                                    color: "#92400E",
+                                    fontWeight: 500
+                                }}>
+                                    <span style={{ fontSize: "16px" }}>✨</span>
+                                    <span>Aplikasi dalam masa <strong>Free Trial</strong> sampai <strong>25 April 2026</strong>. Silakan lakukan aktivasi untuk akses penuh.</span>
+                                    <Link href="/dashboard/admin/billing" style={{ 
+                                        marginLeft: "10px", 
+                                        padding: "4px 12px", 
+                                        background: "#B45309", 
+                                        color: "white", 
+                                        borderRadius: "6px", 
+                                        textDecoration: "none",
+                                        fontSize: "11px",
+                                        fontWeight: 700
+                                    }}>
+                                        AKTIVASI
+                                    </Link>
+                                </div>
+                            )}
                             {children}
                         </main>
                     </div>
@@ -319,6 +359,17 @@ function ColorPaletteIcon({ size = 18 }: { size?: number }) {
             <circle cx="8.5" cy="7.5" r=".5" fill="currentColor" />
             <circle cx="6.5" cy="12.5" r=".5" fill="currentColor" />
             <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 011.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" />
+        </svg>
+    );
+}
+
+function BillingIcon({ size = 18 }: { size?: number }) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="4" width="20" height="16" rx="2" />
+            <line x1="2" y1="10" x2="22" y2="10" />
+            <line x1="7" y1="15" x2="7.01" y2="15" />
+            <line x1="11" y1="15" x2="11.01" y2="15" />
         </svg>
     );
 }

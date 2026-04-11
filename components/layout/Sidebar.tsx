@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth";
 import {
     LayoutDashboard, ShoppingCart, Database, DollarSign,
     Package, Factory, Users, LogOut, Menu, X, ChevronRight,
-    Shirt, FileText
+    Shirt, FileText, CreditCard
 } from "lucide-react";
 
 const navItems = [
@@ -18,6 +18,7 @@ const navItems = [
     { href: "/dashboard/tagihan", icon: DollarSign, label: "Tagihan", module: "keuangan" },
     { href: "/dashboard/inventaris", icon: Package, label: "Inventaris", module: "inventaris" },
     { href: "/dashboard/produksi", icon: Factory, label: "Produksi", module: "produksi" },
+    { href: "/dashboard/admin/billing", icon: CreditCard, label: "Admin Billing", module: "admin-only" },
 ];
 
 export default function Sidebar() {
@@ -75,7 +76,11 @@ export default function Sidebar() {
             {/* Nav */}
             <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
                 {navItems.map((item) => {
-                    if (!hasAccess(item.module) && user?.role !== "owner") return null;
+                    // Proteksi Khusus Billing: Hanya Faisal
+                    if (item.module === "admin-only" && user?.username !== "faisal") return null;
+                    
+                    // Proteksi Modul standar
+                    if (item.module !== "admin-only" && !hasAccess(item.module) && user?.role !== "owner") return null;
                     const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
                     return (
                         <Link

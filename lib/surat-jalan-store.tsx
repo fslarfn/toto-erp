@@ -102,7 +102,7 @@ export function SuratJalanProvider({ children }: { children: ReactNode }) {
                 } else if (eventType === "UPDATE") {
                     setSuratJalans(prev => prev.map(x => x.id === n.id ? { ...x, ...dbToSuratJalan(n, x.items) } : x));
                 } else if (eventType === "DELETE") {
-                    setSuratJalans(prev => prev.filter(x => x.id === o.id));
+                    setSuratJalans(prev => prev.filter(x => x.id !== o.id));
                 }
             })
             // 2. Items (surat_jalan_items)
@@ -126,7 +126,9 @@ export function SuratJalanProvider({ children }: { children: ReactNode }) {
                     } : sj));
                 }
             })
-            .subscribe();
+            .subscribe((status) => {
+                console.log("Surat Jalan Store Realtime Status:", status);
+            });
 
         return () => {
             supabase.removeChannel(channel);
