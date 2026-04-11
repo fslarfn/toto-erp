@@ -11,7 +11,7 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
     title: "CV TOTO ALUMINIUM MANUFACTURE - Sistem Informasi Manufaktur",
     description: "Platform manajemen produksi, pesanan, dan keuangan terpadu untuk Totobaru",
-    manifest: "/manifest.json",
+    manifest: "/manifest.json?v=2",
     appleWebApp: {
         capable: true,
         statusBarStyle: "default",
