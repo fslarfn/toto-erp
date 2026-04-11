@@ -96,7 +96,7 @@ export default function TagihanBahanPage() {
     };
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 56px)", overflow: "hidden", background: "#F5EBDD" }}>
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", background: "#F5EBDD" }}>
             {/* ── Header ──────────────────────────────────────── */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 18px", background: "white", borderBottom: "1px solid #E6D5BE", flexShrink: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

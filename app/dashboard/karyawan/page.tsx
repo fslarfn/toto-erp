@@ -980,7 +980,7 @@ export default function KaryawanPage() {
     });
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 56px)", overflow: "hidden", background: "#F5EBDD" }}>
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", background: "#F5EBDD" }}>
             {/* Tab nav */}
             <div style={{ display: "flex", background: "white", borderBottom: "1px solid #E6D5BE", flexShrink: 0 }}>
 

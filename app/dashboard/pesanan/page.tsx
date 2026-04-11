@@ -368,7 +368,7 @@ export default function PesananPage() {
 
     if (loading) {
         return (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "calc(100vh - 56px)", background: "#F5EBDD" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1, background: "#F5EBDD" }}>
                 <div style={{ textAlign: "center", color: "#A67B5B" }}>
                     <div style={{ fontSize: 36, marginBottom: 12, animation: "spin 1s linear infinite" }}>⏳</div>
                     <div style={{ fontWeight: 700, fontSize: 14 }}>Memuat data pesanan...</div>
@@ -378,7 +378,7 @@ export default function PesananPage() {
     }
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 56px)", overflow: "hidden", background: "#F5EBDD" }}
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", background: "#F5EBDD" }}
             onMouseUp={onMouseUp}>
 
             {/* Toolbar */}

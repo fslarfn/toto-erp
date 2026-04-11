@@ -11,6 +11,15 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
     title: "CV TOTO ALUMINIUM MANUFACTURE - Sistem Informasi Manufaktur",
     description: "Platform manajemen produksi, pesanan, dan keuangan terpadu untuk Totobaru",
+    manifest: "/manifest.json",
+    appleWebApp: {
+        capable: true,
+        statusBarStyle: "default",
+        title: "Toto ERP",
+    },
+    icons: {
+        apple: "/apple-touch-icon.png",
+    },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

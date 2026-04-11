@@ -461,7 +461,7 @@ export default function StatusBarangPage() {
     };
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 56px)", overflow: "hidden", background: "#F5EBDD" }}>
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", background: "#F5EBDD" }}>
 
             {/* ── Toolbar ──────────────────────────────────────────── */}
             <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, padding: "8px 12px", background: "white", borderBottom: "1px solid #E6D5BE", flexShrink: 0 }}>

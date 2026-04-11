@@ -733,7 +733,7 @@ export default function AlurPesananPage() {
     ];
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 56px)", overflow: "hidden", background: "#F8F4EF" }}>
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", background: "#F8F4EF" }}>
             {/* ── Compact Tab Bar ── */}
             <div style={{ display: "flex", background: "white", borderBottom: "1px solid #E8DDD0", flexShrink: 0, position: "relative" }}>
                 {tabs.map((tab, idx) => {
