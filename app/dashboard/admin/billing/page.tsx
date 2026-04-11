@@ -91,7 +91,7 @@ export default function BillingPage() {
         try {
             const res = await fetch("/api/billing/manual-approve", {
                 method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ confirmationId: reportId, adminUsername: user.username })
+                body: JSON.stringify({ confirmationId: reportId, adminUsername: user?.username || "system" })
             });
             if (res.ok) { 
                 alert("Suksess! Lisensi Berhasil Diperpanjang."); 
@@ -111,8 +111,11 @@ export default function BillingPage() {
         setLoading(true);
         try {
             let baseDate = new Date();
-            const currentExpired = new Date(license.license_expired_at);
-            if (currentExpired > baseDate) baseDate = currentExpired;
+            const currentExpiredStr = license?.license_expired_at;
+            if (currentExpiredStr) {
+                const currentExpired = new Date(currentExpiredStr);
+                if (currentExpired > baseDate) baseDate = currentExpired;
+            }
 
             const newExpiredAt = new Date(baseDate);
             newExpiredAt.setDate(newExpiredAt.getDate() + daysToAdd);
