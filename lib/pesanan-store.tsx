@@ -140,6 +140,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
 
     // Realtime Subscription
     useEffect(() => {
+        console.log("Supabase Realtime: Connecting...");
         const channel = supabase
             .channel("realtime_pesanan")
             .on(
@@ -193,7 +194,10 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                     });
                 }
             )
-            .subscribe();
+            .on("system", { event: "*" }, (payload) => console.log("Realtime System Event:", payload))
+            .subscribe((status) => {
+                console.log("Supabase Realtime Status:", status);
+            });
 
         return () => {
             supabase.removeChannel(channel);
