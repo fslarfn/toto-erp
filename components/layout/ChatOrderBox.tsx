@@ -72,7 +72,10 @@ export default function ChatOrderBox({ isOpen, onClose }: { isOpen: boolean, onC
                         .single();
 
                     if (newMessage) {
-                        setMessages((prev) => [...prev, newMessage]);
+                        setMessages((prev) => {
+                            if (prev.find(m => m.id === newMessage.id)) return prev;
+                            return [...prev, newMessage];
+                        });
                         
                         // Audio & Unread if not open
                         if (!isOpen || isMinimized) {
@@ -120,8 +123,7 @@ export default function ChatOrderBox({ isOpen, onClose }: { isOpen: boolean, onC
                 alert("Gagal mengirim pesan: " + error.message);
             } else {
                 setInput("");
-                // Opsional: fetch ulang jika realtime belum/lambat aktif
-                fetchMessages(); 
+                // Reliance on Realtime for UI update
             }
         } catch (err) {
             console.error("Error dlm pengiriman:", err);
@@ -153,8 +155,6 @@ export default function ChatOrderBox({ isOpen, onClose }: { isOpen: boolean, onC
 
     return (
         <>
-            <audio ref={audioRef} src="/notify.mp3" preload="auto" />
-            
             {/* The Masterpiece Toto Chat Window */}
             <div 
                 className={`fixed right-6 z-[9999] flex flex-col bg-white shadow-[0_20px_60px_rgba(0,0,0,0.12)] border border-slate-100 transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] overflow-hidden ${
@@ -304,7 +304,7 @@ export default function ChatOrderBox({ isOpen, onClose }: { isOpen: boolean, onC
                                         value={input}
                                         onChange={handleInputChange}
                                         placeholder="Tulis pesan koordinasi..."
-                                        className="w-full bg-slate-50 rounded-xl px-4 py-3 text-[14px] font-medium text-slate-700 placeholder:text-slate-300 transition-all outline-none border-none focus:ring-1 focus:ring-slate-100 text-center"
+                                        className="w-full bg-slate-50 rounded-xl px-4 py-3 text-[14px] font-medium text-slate-700 placeholder:text-slate-300 transition-all outline-none border-none focus:ring-1 focus:ring-slate-100"
                                     />
                                 </div>
                                 <div className="flex items-center gap-3">
