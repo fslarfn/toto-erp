@@ -8,6 +8,7 @@ import { PesananProvider } from "@/lib/pesanan-store";
 import { SuratJalanProvider } from "@/lib/surat-jalan-store";
 import { SJBahanProvider } from "@/lib/sj-bahan-store";
 import { TagihanBahanProvider } from "@/lib/tagihan-bahan-store";
+import ChatOrderBox from "@/components/layout/ChatOrderBox";
 
 
 const NAV_ITEMS = [
@@ -48,6 +49,7 @@ const NAV_ITEMS = [
         section: "Administrasi",
         items: [
             { href: "/dashboard/admin/billing", label: "Admin Billing", module: "admin-only", icon: BillingIcon },
+            { href: "/dashboard/akun", label: "Akun Saya", module: "any", icon: UserCircleIcon },
         ],
     },
 ];
@@ -59,6 +61,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const pathname = usePathname();
     const [collapsed, setCollapsed] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
+    const [chatOpen, setChatOpen] = useState(false);
 
     // Redirect to login if not authenticated
     useEffect(() => {
@@ -109,6 +112,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                 const allowedUsers = ["faisal", "vira", "toto", "fauzi", "yuni"];
                                 const visibleItems = group.items.filter((item) => {
                                     if (item.module === "admin-only") return allowedUsers.includes(user?.username || "");
+                                    if (item.module === "any") return true;
                                     return hasAccess(item.module);
                                 });
                                 if (visibleItems.length === 0) return null;
@@ -138,10 +142,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         {/* Footer */}
                         <div className="sidebar-footer">
                             {!collapsed && (
-                                <div className="text-xs mb-2 px-1 truncate" style={{ color: "#B89678" }}>
-                                    <span className="font-semibold" style={{ color: "var(--text-dark)" }}>{user.name}</span>
-                                    <br />
-                                    <span>{getRoleDisplay(user)}</span>
+                                <div className="text-xs mb-2 px-1 truncate flex items-center gap-2" style={{ color: "#B89678" }}>
+                                    <div className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 bg-slate-200">
+                                        {user?.avatar ? (
+                                            <img src={user.avatar} alt="P" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center bg-primary text-white text-[10px]">
+                                                {user?.name?.[0].toUpperCase()}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="min-w-0">
+                                        <div className="font-semibold truncate" style={{ color: "var(--text-dark)" }}>{user.name}</div>
+                                        <div className="opacity-80 truncate">{getRoleDisplay(user)}</div>
+                                    </div>
                                 </div>
                             )}
                             <button onClick={handleLogout} title="Logout">
@@ -186,17 +200,31 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                     </span>
                                 </div>
 
-                                {/* Header right */}
                                 <div className="flex items-center gap-3">
+                                    <button 
+                                        onClick={() => setChatOpen(!chatOpen)}
+                                        className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-slate-100 transition-colors text-primary relative"
+                                        title="Koordinasi Tim"
+                                    >
+                                        <MessageSquareIcon size={20} />
+                                        {/* Badge notifikasi sederhana di header */}
+                                        <div className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-white" />
+                                    </button>
+
                                     <div className="text-right hidden sm:block">
                                         <div className="text-sm font-semibold">{user.name}</div>
                                         <div className="text-xs opacity-80">{getRoleDisplay(user)}</div>
                                     </div>
                                     <div
-                                        className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm"
-                                        style={{ background: "rgba(255,255,255,0.2)", color: "white" }}
+                                        className="w-9 h-9 rounded-full overflow-hidden flex items-center justify-center font-bold text-sm bg-slate-200 border-2 border-white/20"
                                     >
-                                        {user.name[0].toUpperCase()}
+                                        {user?.avatar ? (
+                                            <img src={user.avatar} alt="P" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center bg-primary text-white">
+                                                {user.name[0].toUpperCase()}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -237,6 +265,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             {children}
                         </main>
                     </div>
+                     <ChatOrderBox isOpen={chatOpen} onClose={() => setChatOpen(false)} />
                 </div>
                     </TagihanBahanProvider>
                 </SJBahanProvider>
@@ -370,6 +399,22 @@ function BillingIcon({ size = 18 }: { size?: number }) {
             <line x1="2" y1="10" x2="22" y2="10" />
             <line x1="7" y1="15" x2="7.01" y2="15" />
             <line x1="11" y1="15" x2="11.01" y2="15" />
+        </svg>
+    );
+}
+function UserCircleIcon({ size = 18 }: { size?: number }) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 21v-2a4 4 0 00-4-4H9a4 4 0 00-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+        </svg>
+    );
+}
+
+function MessageSquareIcon({ size = 18 }: { size?: number }) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
         </svg>
     );
 }

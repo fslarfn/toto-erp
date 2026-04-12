@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth";
 import {
     LayoutDashboard, ShoppingCart, Database, DollarSign,
     Package, Factory, Users, LogOut, Menu, X, ChevronRight,
-    Shirt, FileText, CreditCard
+    Shirt, FileText, CreditCard, UserCircle
 } from "lucide-react";
 
 const navItems = [
@@ -18,6 +18,7 @@ const navItems = [
     { href: "/dashboard/tagihan", icon: DollarSign, label: "Tagihan", module: "keuangan" },
     { href: "/dashboard/inventaris", icon: Package, label: "Inventaris", module: "inventaris" },
     { href: "/dashboard/produksi", icon: Factory, label: "Produksi", module: "produksi" },
+    { href: "/dashboard/akun", icon: UserCircle, label: "Akun Saya", module: "any" },
     { href: "/dashboard/admin/billing", icon: CreditCard, label: "Admin Billing", module: "admin-only" },
 ];
 
@@ -80,7 +81,7 @@ export default function Sidebar() {
                     if (item.module === "admin-only" && user?.username !== "faisal") return null;
                     
                     // Proteksi Modul standar
-                    if (item.module !== "admin-only" && !hasAccess(item.module) && user?.role !== "owner") return null;
+                    if (item.module !== "admin-only" && item.module !== "any" && !hasAccess(item.module) && user?.role !== "owner") return null;
                     const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
                     return (
                         <Link
@@ -100,8 +101,12 @@ export default function Sidebar() {
             <div className="p-3 border-t border-slate-700">
                 {!collapsed ? (
                     <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold ${roleColors[user?.role || "owner"]}`}>
-                            {user?.name.charAt(0)}
+                        <div className={`w-8 h-8 rounded-full overflow-hidden flex items-center justify-center text-white text-xs font-bold ${roleColors[user?.role || "owner"]}`}>
+                            {user?.avatar ? (
+                                <img src={user.avatar} alt="P" className="w-full h-full object-cover" />
+                            ) : (
+                                user?.name.charAt(0)
+                            )}
                         </div>
                         <div className="flex-1 min-w-0">
                             <div className="text-white text-xs font-medium truncate">{user?.name.split(" (")[0]}</div>

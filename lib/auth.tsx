@@ -9,6 +9,7 @@ interface AuthContextType {
     login: (username: string, password: string) => Promise<boolean>;
     logout: () => void;
     hasAccess: (module: string) => boolean;
+    updateUserData: (updatedUser: User) => void;
 }
 
 /**
@@ -97,8 +98,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return roleAccess[user.role]?.includes(module) ?? false;
     };
 
+    const updateUserData = (updatedUser: User) => {
+        setUser(updatedUser);
+        localStorage.setItem(LS_USER_KEY, JSON.stringify(updatedUser));
+    };
+
     return (
-        <AuthContext.Provider value={{ user, loading, login, logout, hasAccess }}>
+        <AuthContext.Provider value={{ user, loading, login, logout, hasAccess, updateUserData }}>
             {children}
         </AuthContext.Provider>
     );
