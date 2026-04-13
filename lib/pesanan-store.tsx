@@ -67,6 +67,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
     );
     const [loading, setLoading] = useState(true);
     const timers = useRef<Record<number, NodeJS.Timeout>>({});
+    const pendingPatches = useRef<Record<number, Partial<PesananRow>>>({});
 
     // Load from Supabase on mount
     useEffect(() => {
@@ -212,34 +213,44 @@ export function PesananProvider({ children }: { children: ReactNode }) {
             prev.map((r) => (r.id === id ? { ...r, ...patch } : r))
         );
 
+        // Akumulasi perubahan ke dalam buffer agar tidak hilang saat mengetik cepat
+        pendingPatches.current[id] = {
+            ...(pendingPatches.current[id] || {}),
+            ...patch,
+        };
+
         if (timers.current[id]) clearTimeout(timers.current[id]);
 
         timers.current[id] = setTimeout(async () => {
+            const finalPatch = { ...pendingPatches.current[id] };
+            if (Object.keys(finalPatch).length === 0) return;
+
             try {
-                const existing = await supabase
+                const { data: existing } = await supabase
                     .from("pesanan_rows")
                     .select("id")
                     .eq("id", id)
                     .single();
 
-                if (existing.data) {
-                    if (Object.keys(patch).length > 0) {
-                        const { error } = await supabase.from("pesanan_rows").update(patch).eq("id", id);
-                        if (error) throw error;
-                    }
+                if (existing) {
+                    const { error } = await supabase.from("pesanan_rows").update(finalPatch).eq("id", id);
+                    if (error) throw error;
                 } else {
-                    const row = { ...makeEmptyRow(id), ...patch };
+                    const row = { ...makeEmptyRow(id), ...finalPatch };
                     const hasData = row.tanggal || row.customer || row.deskripsi || row.ukuran || row.qty;
                     if (hasData) {
                         const { error } = await supabase.from("pesanan_rows").insert(row);
                         if (error) throw error;
                     }
                 }
+                
+                // Bersihkan buffer setelah berhasil disimpan
+                delete pendingPatches.current[id];
                 delete timers.current[id];
             } catch (err) {
                 console.error("Update Row Error (Supabase):", err);
             }
-        }, 500); // Meningkatkan debounce ke 500ms untuk stabilitas
+        }, 800); // Sedikit ditambah jedanya agar lebih stabil untuk pengetikan sangat cepat
     }, []);
 
     const resetRows = useCallback(() => {
