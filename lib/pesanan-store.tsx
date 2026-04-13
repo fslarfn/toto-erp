@@ -56,6 +56,7 @@ type Ctx = {
     rows: PesananRow[];
     loading: boolean;
     updateRow: (id: number, patch: Partial<PesananRow>) => void;
+    flushRow: (id: number) => Promise<void>;
     resetRows: () => void;
     addRows: (count?: number) => void;
     importRows: (data: Partial<PesananRow>[]) => void;
@@ -226,6 +227,77 @@ export function PesananProvider({ children }: { children: ReactNode }) {
     }, []);
 
 
+    const flushRow = useCallback(async (id: number) => {
+        if (savingRef.current[id]) return;
+        
+        const finalPatch = { ...pendingPatches.current[id] };
+        if (Object.keys(finalPatch).length === 0) {
+            if (timers.current[id]) {
+                clearTimeout(timers.current[id]);
+                delete timers.current[id];
+            }
+            return;
+        }
+
+        // Cancel pending timer
+        if (timers.current[id]) {
+            clearTimeout(timers.current[id]);
+            delete timers.current[id];
+        }
+
+        savingRef.current[id] = true;
+        try {
+            const cleanPatch: any = { ...finalPatch };
+            const fieldsToClean = ["qty", "ukuran", "harga", "tanggal", "printed_at", "shipped_at"];
+            fieldsToClean.forEach(f => {
+                if (cleanPatch[f] === "" || cleanPatch[f] === undefined) {
+                    cleanPatch[f] = null;
+                }
+            });
+
+            const isTempId = typeof id === 'number' && id >= 1000000000;
+
+            if (!isTempId) {
+                const { error } = await supabase.from("pesanan_rows").update(cleanPatch).eq("id", id);
+                if (error) throw error;
+                // Atomic clearing: Only remove what was actually sent
+                Object.keys(finalPatch).forEach(key => {
+                    if (pendingPatches.current[id]?.[key as keyof PesananRow] === finalPatch[key as keyof PesananRow]) {
+                        delete (pendingPatches.current[id] as any)[key];
+                    }
+                });
+            } else {
+                const rowToInsert = { ...makeEmptyRow(0), ...cleanPatch };
+                delete (rowToInsert as any).id;
+                
+                const hasData = rowToInsert.tanggal || rowToInsert.customer || rowToInsert.deskripsi || rowToInsert.ukuran || rowToInsert.qty;
+                if (hasData) {
+                    const { data, error } = await supabase.from("pesanan_rows").insert(rowToInsert).select("id").single();
+                    if (error) throw error;
+                    
+                    if (data?.id) {
+                        const newRealId = data?.id;
+                        setRows(prev => prev.map(r => r.id === id ? { ...r, id: newRealId } : r));
+                        
+                        // Transfer remaining patches to the new Real ID
+                        Object.keys(finalPatch).forEach(key => {
+                            if (pendingPatches.current[id]?.[key as keyof PesananRow] === finalPatch[key as keyof PesananRow]) {
+                                delete (pendingPatches.current[id] as any)[key];
+                            }
+                        });
+                    }
+                }
+            }
+        } catch (err: any) {
+            console.error("Flush Row Error:", err);
+            if (err.message !== "Failed to fetch") {
+                alert("Simpan Gagal: " + (err.message || "Masalah Database"));
+            }
+        } finally {
+            savingRef.current[id] = false;
+        }
+    }, []);
+
     const updateRow = useCallback((id: number, patch: Partial<PesananRow>) => {
         setRows((prev) =>
             prev.map((r) => (r.id === id ? { ...r, ...patch } : r))
@@ -238,60 +310,10 @@ export function PesananProvider({ children }: { children: ReactNode }) {
 
         if (timers.current[id]) clearTimeout(timers.current[id]);
 
-        timers.current[id] = setTimeout(async function save() {
-            // Jika baris ini sedang dalam proses simpan, tunggu 500ms lalu coba lagi
-            if (savingRef.current[id]) {
-                timers.current[id] = setTimeout(save, 500);
-                return;
-            }
-
-            const finalPatch = { ...pendingPatches.current[id] };
-            if (Object.keys(finalPatch).length === 0) return;
-
-            savingRef.current[id] = true;
-            try {
-                const cleanPatch: any = { ...finalPatch };
-                const fieldsToClean = ["qty", "ukuran", "harga", "tanggal", "printed_at", "shipped_at"];
-                fieldsToClean.forEach(f => {
-                    if (cleanPatch[f] === "" || cleanPatch[f] === undefined) {
-                        cleanPatch[f] = null;
-                    }
-                });
-
-                const isTempId = typeof id === 'number' && id >= 1000000000;
-
-                if (!isTempId) {
-                    const { error } = await supabase.from("pesanan_rows").update(cleanPatch).eq("id", id);
-                    if (error) throw error;
-                    delete pendingPatches.current[id];
-                } else {
-                    const rowToInsert = { ...makeEmptyRow(0), ...cleanPatch };
-                    delete (rowToInsert as any).id;
-                    
-                    const hasData = rowToInsert.tanggal || rowToInsert.customer || rowToInsert.deskripsi || rowToInsert.ukuran || rowToInsert.qty;
-                    if (hasData) {
-                        const { data, error } = await supabase.from("pesanan_rows").insert(rowToInsert).select("id").single();
-                        if (error) throw error;
-                        
-                        if (data?.id) {
-                            const newRealId = data.id;
-                            setRows(prev => prev.map(r => r.id === id ? { ...r, id: newRealId } : r));
-                            delete pendingPatches.current[id];
-                        }
-                    }
-                }
-            } catch (err: any) {
-                console.error("Update Row Error:", err);
-                // Jika error adalah masalah jaringan (Failed to fetch), jangan alert dulu, biarkan stay di pending
-                if (err.message !== "Failed to fetch") {
-                    alert("Simpan Gagal: " + (err.message || "Masalah Database"));
-                }
-            } finally {
-                savingRef.current[id] = false;
-                delete timers.current[id];
-            }
-        }, 1200); // Sedikit ditambah jedanya agar lebih tenang bagi koneksi internet
-    }, []);
+        timers.current[id] = setTimeout(() => {
+            flushRow(id);
+        }, 1500); // 1.5s idle threshold
+    }, [flushRow]);
 
     const resetRows = useCallback(() => {
         const fresh = Array.from({ length: EMPTY_BUFFER }, (_, i) => makeEmptyRow(i));
@@ -339,7 +361,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
     }, []);
 
     return (
-        <PesananCtx.Provider value={{ rows, loading, updateRow, resetRows, addRows, importRows }}>
+        <PesananCtx.Provider value={{ rows, loading, updateRow, flushRow, resetRows, addRows, importRows }}>
             {children}
         </PesananCtx.Provider>
     );
