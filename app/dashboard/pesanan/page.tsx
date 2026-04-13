@@ -155,13 +155,21 @@ export default function PesananPage() {
         setInputStartIdx(null);
     }, [month, year]);
 
-    // Initialize input start index after loading
+    // Update input start index after loading or when data grows at the tail
     useEffect(() => {
-        if (!loading && inputStartIdx === null) {
-            const start = Math.max(0, lastFilledIdx + 1 - PAGE_SIZE);
-            setInputStartIdx(start);
+        if (!loading && viewMode === "input") {
+            const targetStart = Math.max(0, lastFilledIdx + 1 - PAGE_SIZE);
+            
+            // Initial load
+            if (inputStartIdx === null) {
+                setInputStartIdx(targetStart);
+            } 
+            // Follow data if lastFilledIdx moves past current window
+            else if (lastFilledIdx >= (inputStartIdx + PAGE_SIZE)) {
+                setInputStartIdx(targetStart);
+            }
         }
-    }, [loading, lastFilledIdx, inputStartIdx]);
+    }, [loading, lastFilledIdx, viewMode, inputStartIdx]);
 
     // Ensure enough empty rows exist
     useEffect(() => {

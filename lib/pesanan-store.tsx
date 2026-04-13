@@ -152,8 +152,6 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                     setRows((prev) => {
                         if (eventType === "UPDATE" || eventType === "INSERT") {
                             const row = newRow as Record<string, any>;
-                            // Construction of mapped should only include fields that are present in row
-                            // to avoid wiping out data with defaults in cases of partial updates
                             const mapped: Partial<PesananRow> = {};
                             if ("id" in row) mapped.id = row.id;
                             if ("tanggal" in row) mapped.tanggal = row.tanggal;
@@ -179,13 +177,18 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                             if ("shipped_at" in row) mapped.shipped_at = row.shipped_at;
 
                             const exists = prev.find((r) => r.id === mapped.id);
+                            let newList: PesananRow[];
+                            
                             if (exists) {
-                                return prev.map((r) => (r.id === mapped.id ? { ...r, ...mapped } : r));
-                            } else if (eventType === "INSERT") {
-                                const dataRows = prev.filter(r => isRowFilled(r));
-                                const emptyRows = prev.filter(r => !isRowFilled(r));
-                                return [...dataRows, mapped as PesananRow, ...emptyRows];
+                                newList = prev.map((r) => (r.id === mapped.id ? { ...r, ...mapped } : r));
+                            } else {
+                                // Jika tidak ada (INSERT baru), gabungkan dengan default agar tidak ada undefined
+                                const newFullRow = { ...makeEmptyRow(mapped.id!), ...mapped } as PesananRow;
+                                newList = [...prev, newFullRow].sort((a, b) => a.id - b.id);
                             }
+
+                            // Hilangkan duplikat ID (jika ada balapan)
+                            return newList.filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
                         } else if (eventType === "DELETE") {
                             const id = (oldRow as any).id;
                             return prev.filter((r) => r.id !== id);
