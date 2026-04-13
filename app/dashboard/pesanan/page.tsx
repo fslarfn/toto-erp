@@ -349,19 +349,20 @@ export default function PesananPage() {
         updateRow(id, { [key]: val } as Partial<PesananRow>);
     }, [updateRow]);
 
-    /* ── Focus handler (Excel-style Flush) ─────────────────── */
+    /* ── Focus handler (Excel-style Cell Flush) ───────────── */
     const { flushRow } = usePesanan();
-    const prevRowId = useRef<number | null>(null);
+    const prevPos = useRef<{ r: number, c: number } | null>(null);
 
     const handleFocus = useCallback((r: number, c: number) => {
-        const rowId = displayRows[r]?.id;
-        
-        // Jika pindah baris, langsung simpan baris sebelumnya (Excel-style)
-        if (prevRowId.current !== null && prevRowId.current !== rowId) {
-            flushRow(prevRowId.current);
+        // Jika pindah kotak (baik baris atau kolom), simpan kotak sebelumnya
+        if (prevPos.current !== null && (prevPos.current.r !== r || prevPos.current.c !== c)) {
+            const rowToFlush = displayRows[prevPos.current.r];
+            if (rowToFlush) {
+                flushRow(rowToFlush.id);
+            }
         }
         
-        prevRowId.current = rowId;
+        prevPos.current = { r, c };
         setActive({ r, c });
         if (!isDragging) setSel({ start: { r, c }, end: { r, c } });
     }, [displayRows, isDragging, flushRow]);
