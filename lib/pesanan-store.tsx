@@ -230,9 +230,12 @@ export function PesananProvider({ children }: { children: ReactNode }) {
             try {
                 // Bersihkan data sebelum dikirim ke database
                 const cleanPatch: any = { ...finalPatch };
-                // Konversi string kosong ke null untuk kolom numerik agar tidak error di DB
-                ["qty", "ukuran", "harga"].forEach(f => {
-                    if (cleanPatch[f] === "") cleanPatch[f] = null;
+                // Konversi string kosong ke null untuk kolom numerik & tanggal agar tidak error di DB
+                const fieldsToClean = ["qty", "ukuran", "harga", "tanggal", "printed_at", "shipped_at"];
+                fieldsToClean.forEach(f => {
+                    if (cleanPatch[f] === "" || cleanPatch[f] === undefined) {
+                        cleanPatch[f] = null;
+                    }
                 });
 
                 const isTempId = id >= 1000000000;
