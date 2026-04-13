@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabase-client";
 ================================================================ */
 
 export type PesananRow = {
-    id: number;
+    id: number; // Bisa berupa ID asli (DB) atau ID sementara (sangat besar)
     tanggal: string;
     customer: string;
     deskripsi: string;
@@ -34,9 +34,11 @@ export type PesananRow = {
 export const PAGE_SIZE = 100;
 export const EMPTY_BUFFER = 100;
 
-export function makeEmptyRow(id: number): PesananRow {
+export function makeEmptyRow(index: number = 0): PesananRow {
+    // Gunakan ID sementara yang sangat besar agar tidak bentrok antar user
+    const tempId = 1000000000 + Date.now() + index;
     return {
-        id,
+        id: tempId,
         tanggal: "", customer: "", deskripsi: "", ukuran: "", qty: "",
         harga: "", no_inv: "", no_sj: "",
         di_produksi: false, di_warna: false, siap_kirim: false, di_kirim: false,
@@ -126,8 +128,8 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                         shipped_at: (r.shipped_at as string) || "",
                     }));
                     // Append empty rows buffer after data
-                    const lastId = mapped[mapped.length - 1].id;
-                    const emptyBuf = Array.from({ length: EMPTY_BUFFER }, (_, i) => makeEmptyRow(lastId + i + 1));
+                    const lastResortId = mapped.length > 0 ? mapped[mapped.length - 1].id : 0;
+                    const emptyBuf = Array.from({ length: EMPTY_BUFFER }, (_, i) => makeEmptyRow(i));
                     setRows([...mapped, ...emptyBuf]);
                 }
             } catch (err) {
@@ -226,35 +228,52 @@ export function PesananProvider({ children }: { children: ReactNode }) {
             if (Object.keys(finalPatch).length === 0) return;
 
             try {
-                const { data: existing } = await supabase
-                    .from("pesanan_rows")
-                    .select("id")
-                    .eq("id", id)
-                    .single();
+                // Bersihkan data sebelum dikirim ke database
+                const cleanPatch: any = { ...finalPatch };
+                // Konversi string kosong ke null untuk kolom numerik agar tidak error di DB
+                ["qty", "ukuran", "harga"].forEach(f => {
+                    if (cleanPatch[f] === "") cleanPatch[f] = null;
+                });
 
-                if (existing) {
-                    const { error } = await supabase.from("pesanan_rows").update(finalPatch).eq("id", id);
+                const isTempId = id >= 1000000000;
+
+                if (!isTempId) {
+                    // Jika ID asli, langsung update
+                    const { error } = await supabase.from("pesanan_rows").update(cleanPatch).eq("id", id);
                     if (error) throw error;
+                    delete pendingPatches.current[id];
                 } else {
-                    const row = { ...makeEmptyRow(id), ...finalPatch };
-                    const hasData = row.tanggal || row.customer || row.deskripsi || row.ukuran || row.qty;
+                    // Jika ID sementara, lakukan insert (biarkan DB kasih ID asli)
+                    const rowToInsert = { ...makeEmptyRow(0), ...cleanPatch };
+                    delete (rowToInsert as any).id; // Biarkan Supabase generate ID
+                    
+                    const hasData = rowToInsert.tanggal || rowToInsert.customer || rowToInsert.deskripsi || rowToInsert.ukuran || rowToInsert.qty;
                     if (hasData) {
-                        const { error } = await supabase.from("pesanan_rows").insert(row);
+                        const { data, error } = await supabase.from("pesanan_rows").insert(rowToInsert).select("id").single();
                         if (error) throw error;
+                        
+                        // Penting: Ganti ID sementara di state dengan ID asli dari DB
+                        if (data?.id) {
+                            const newRealId = data.id;
+                            setRows(prev => prev.map(r => r.id === id ? { ...r, id: newRealId } : r));
+                            delete pendingPatches.current[id];
+                        }
                     }
                 }
                 
-                // Bersihkan buffer setelah berhasil disimpan
-                delete pendingPatches.current[id];
                 delete timers.current[id];
-            } catch (err) {
+            } catch (err: any) {
                 console.error("Update Row Error (Supabase):", err);
+                // Beri tahu user jika simpan gagal (penting untuk transparansi)
+                if (err.message) {
+                    console.warn("Gagal menyimpan data ke database. Cek koneksi Anda.");
+                }
             }
-        }, 800); // Sedikit ditambah jedanya agar lebih stabil untuk pengetikan sangat cepat
+        }, 1000); 
     }, []);
 
     const resetRows = useCallback(() => {
-        const fresh = Array.from({ length: EMPTY_BUFFER }, (_, i) => makeEmptyRow(i + 1));
+        const fresh = Array.from({ length: EMPTY_BUFFER }, (_, i) => makeEmptyRow(i));
         setRows(fresh);
         (async () => {
             await supabase.from("pesanan_rows").delete().gte("id", 0);
@@ -263,8 +282,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
 
     const addRows = useCallback((count = 100) => {
         setRows((prev) => {
-            const nextId = prev.length > 0 ? prev[prev.length - 1].id + 1 : 1;
-            const newRows = Array.from({ length: count }, (_, i) => makeEmptyRow(nextId + i));
+            const newRows = Array.from({ length: count }, (_, i) => makeEmptyRow(prev.length + i));
             return [...prev, ...newRows];
         });
     }, []);

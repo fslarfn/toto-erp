@@ -47,7 +47,7 @@ const TableRow = memo(function TableRow({
                 background: "#F8F4EE", borderRight: "2px solid #C5A882", borderBottom: "1px solid #E6D5BE",
                 userSelect: "none", padding: "2px 4px",
             }}>
-                {row.id}
+                {viewMode === "input" ? (inputStartIdx ?? 0) + ri + 1 : (browsePage - 1) * PAGE_SIZE + ri + 1}
             </td>
             {COL_KEYS.map((key, ci) => {
                 const isActive = active?.r === ri && active?.c === ci;
