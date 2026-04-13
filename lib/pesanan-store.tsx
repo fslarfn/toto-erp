@@ -375,8 +375,6 @@ export function PesananProvider({ children }: { children: ReactNode }) {
             ...(pendingPatches.current[id] || {}),
             ...patch,
         };
-        
-        // Auto-save dimatikan agar user punya kontrol penuh kapan data dikirim ke DB
     }, []);
 
     // Menghapus total fungsi reset untuk keamanan data (instruksi Faisal 13/04/26)
@@ -392,14 +390,12 @@ export function PesananProvider({ children }: { children: ReactNode }) {
         const total = Math.max(data.length, PAGE_SIZE);
         const base: PesananRow[] = Array.from({ length: total }, (_, i) => makeEmptyRow(i + 1));
         data.forEach((d, i) => { base[i] = { ...base[i], ...d }; });
-        // Add empty buffer
+        
         const lastId = base[base.length - 1].id;
         const emptyBuf = Array.from({ length: EMPTY_BUFFER }, (_, i) => makeEmptyRow(lastId + i + 1));
         setRows([...base, ...emptyBuf]);
 
         (async () => {
-            // REMOVE: delete command to prevent data loss. Now only appends.
-            
             const rowsWithData = base.filter(r => isRowFilled(r));
             for (let i = 0; i < rowsWithData.length; i += 100) {
                 const chunk = rowsWithData.slice(i, i + 100);
