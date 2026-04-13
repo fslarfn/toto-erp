@@ -106,7 +106,7 @@ const TableRow = memo(function TableRow({
    MAIN PAGE
 ================================================================ */
 export default function PesananPage() {
-    const { rows, loading, updateRow, resetRows, addRows, flushAllRows } = usePesanan();
+    const { rows, loading, updateRow, addRows, flushAllRows } = usePesanan();
     const [active, setActive] = useState<Pos | null>(null);
     const [sel, setSel] = useState<Sel | null>(null);
     const [isDragging, setIsDragging] = useState(false);
