@@ -57,6 +57,7 @@ type Ctx = {
     loading: boolean;
     updateRow: (id: number, patch: Partial<PesananRow>) => void;
     flushRow: (id: number) => Promise<void>;
+    flushAllRows: () => Promise<void>;
     resetRows: () => void;
     addRows: (count?: number) => void;
     importRows: (data: Partial<PesananRow>[]) => void;
@@ -239,7 +240,6 @@ export function PesananProvider({ children }: { children: ReactNode }) {
             return;
         }
 
-        // Cancel pending timer
         if (timers.current[id]) {
             clearTimeout(timers.current[id]);
             delete timers.current[id];
@@ -260,7 +260,6 @@ export function PesananProvider({ children }: { children: ReactNode }) {
             if (!isTempId) {
                 const { error } = await supabase.from("pesanan_rows").update(cleanPatch).eq("id", id);
                 if (error) throw error;
-                // Atomic clearing: Only remove what was actually sent
                 Object.keys(finalPatch).forEach(key => {
                     if (pendingPatches.current[id]?.[key as keyof PesananRow] === finalPatch[key as keyof PesananRow]) {
                         delete (pendingPatches.current[id] as any)[key];
@@ -279,12 +278,21 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                         const newRealId = data?.id;
                         setRows(prev => prev.map(r => r.id === id ? { ...r, id: newRealId } : r));
                         
-                        // Transfer remaining patches to the new Real ID
+                        // MIGRATION: Pindahkan sisa ketikan baru (jika ada) ke ID asli yang baru
+                        const currentInTemp = { ...pendingPatches.current[id] };
                         Object.keys(finalPatch).forEach(key => {
-                            if (pendingPatches.current[id]?.[key as keyof PesananRow] === finalPatch[key as keyof PesananRow]) {
-                                delete (pendingPatches.current[id] as any)[key];
+                            if (currentInTemp[key as keyof PesananRow] === finalPatch[key as keyof PesananRow]) {
+                                delete (currentInTemp as any)[key];
                             }
                         });
+
+                        if (Object.keys(currentInTemp).length > 0) {
+                             pendingPatches.current[newRealId] = {
+                                 ...(pendingPatches.current[newRealId] || {}),
+                                 ...currentInTemp
+                             };
+                        }
+                        delete pendingPatches.current[id];
                     }
                 }
             }
@@ -297,6 +305,17 @@ export function PesananProvider({ children }: { children: ReactNode }) {
             savingRef.current[id] = false;
         }
     }, []);
+
+    const flushAllRows = useCallback(async () => {
+        const idsToFlush = Object.keys(pendingPatches.current).map(Number).filter(id => !isNaN(id));
+        if (idsToFlush.length === 0) return;
+        
+        console.log(`Flushing all rows: ${idsToFlush.length} items`);
+        // Jalankan secara berurutan agar tidak tabrakan ID pkey
+        for (const id of idsToFlush) {
+            await flushRow(id);
+        }
+    }, [flushRow]);
 
     const updateRow = useCallback((id: number, patch: Partial<PesananRow>) => {
         setRows((prev) =>
@@ -361,7 +380,8 @@ export function PesananProvider({ children }: { children: ReactNode }) {
     }, []);
 
     return (
-        <PesananCtx.Provider value={{ rows, loading, updateRow, flushRow, resetRows, addRows, importRows }}>
+    return (
+        <PesananCtx.Provider value={{ rows, loading, updateRow, flushRow, flushAllRows, resetRows, addRows, importRows }}>
             {children}
         </PesananCtx.Provider>
     );

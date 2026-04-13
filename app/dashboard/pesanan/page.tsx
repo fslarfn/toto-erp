@@ -106,7 +106,7 @@ const TableRow = memo(function TableRow({
    MAIN PAGE
 ================================================================ */
 export default function PesananPage() {
-    const { rows, loading, updateRow, resetRows, addRows } = usePesanan();
+    const { rows, loading, updateRow, resetRows, addRows, flushAllRows } = usePesanan();
     const [active, setActive] = useState<Pos | null>(null);
     const [sel, setSel] = useState<Sel | null>(null);
     const [isDragging, setIsDragging] = useState(false);
@@ -432,6 +432,16 @@ export default function PesananPage() {
 
                 <span style={{ fontSize: 10, color: "#C5A882", marginLeft: 4 }}>↑↓←→ navigasi · Shift+drag seleksi · Ctrl+C salin · Ctrl+V tempel · drag 🟦 fill bawah</span>
                 <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                    <button onClick={async () => {
+                        const btn = document.getElementById('save-all-btn');
+                        if (btn) { btn.innerText = "⏳ Menyimpan..."; (btn as any).disabled = true; }
+                        await flushAllRows();
+                        if (btn) { btn.innerText = "💾 SIMPAN SEMUA"; (btn as any).disabled = false; }
+                    }}
+                        id="save-all-btn"
+                        style={{ border: "1px solid #15803D", borderRadius: 5, padding: "4px 14px", fontSize: 12, background: "#DCFCE7", color: "#15803D", cursor: "pointer", fontWeight: 700 }}>
+                        💾 SIMPAN SEMUA
+                    </button>
                     <button onClick={() => { if (confirm("Reset semua data?")) resetRows(); }}
                         style={{ border: "1px solid #D1BFA3", borderRadius: 5, padding: "4px 14px", fontSize: 12, background: "#FEF2F2", color: "#991B1B", cursor: "pointer", fontWeight: 600 }}>
                         🗑 Reset
