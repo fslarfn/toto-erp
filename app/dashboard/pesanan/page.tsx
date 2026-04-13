@@ -39,8 +39,11 @@ const TableRow = memo(function TableRow({
     viewMode: string; inputStartIdx: number | null; browsePage: number;
 }) {
     const isFilled = row.customer || row.deskripsi;
+    const isTemp = row.id >= 1000000000;
     const isFillRow = isFilling && selBounds && ri > selBounds.r2 && fillEndRow !== null && ri <= fillEndRow;
-    const bg = isFillRow ? "#dbeafe" : isFilled ? "white" : "#FAFAF8";
+    
+    // Background: Fill row (blue), Temp/Modified (light yellow), Filled (white), Empty (cream)
+    const bg = isFillRow ? "#dbeafe" : isTemp ? "#FFFBEB" : isFilled ? "white" : "#FAFAF8";
 
     return (
         <tr style={{ background: bg }}>
@@ -350,7 +353,6 @@ export default function PesananPage() {
     }, [updateRow]);
 
     /* ── Focus handler ─────────────────────────────────────── */
-    const { flushAllRows } = usePesanan();
 
     const handleFocus = useCallback((r: number, c: number) => {
         setActive({ r, c });
@@ -421,13 +423,31 @@ export default function PesananPage() {
                 <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
                     <button onClick={async () => {
                         const btn = document.getElementById('save-all-btn');
-                        if (btn) { btn.innerText = "⏳ Menyimpan..."; (btn as any).disabled = true; }
-                        await flushAllRows();
-                        if (btn) { btn.innerText = "💾 SIMPAN SEMUA"; (btn as any).disabled = false; }
+                        if (btn) { 
+                            btn.innerText = "⏳ Menyimpan..."; 
+                            (btn as any).disabled = true; 
+                        }
+                        
+                        try {
+                            await flushAllRows();
+                            alert("✅ Data Berhasil Disimpan ke Database!");
+                        } catch (err) {
+                            alert("❌ Gagal menyimpan beberapa data. Silakan coba lagi.");
+                        } finally {
+                            if (btn) { 
+                                btn.innerText = "💾 SIMPAN DATA"; 
+                                (btn as any).disabled = false; 
+                            }
+                        }
                     }}
                         id="save-all-btn"
-                        style={{ border: "1px solid #15803D", borderRadius: 5, padding: "4px 14px", fontSize: 12, background: "#DCFCE7", color: "#15803D", cursor: "pointer", fontWeight: 700 }}>
-                        💾 SIMPAN SEMUA
+                        style={{ 
+                            border: "none", borderRadius: 6, padding: "6px 20px", fontSize: 13, 
+                            background: "#15803D", color: "white", cursor: "pointer", 
+                            fontWeight: 700, boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                            transition: "all 0.2s"
+                        }}>
+                        💾 SIMPAN DATA
                     </button>
                     <button onClick={() => { if (confirm("Reset semua data?")) resetRows(); }}
                         style={{ border: "1px solid #D1BFA3", borderRadius: 5, padding: "4px 14px", fontSize: 12, background: "#FEF2F2", color: "#991B1B", cursor: "pointer", fontWeight: 600 }}>

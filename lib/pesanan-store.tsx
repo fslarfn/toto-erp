@@ -204,16 +204,10 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                                     }
                                 }
 
-                                // Rahasia Pengurutan Tetap Sama
+                                // Pengurutan: Data database (ID kecil) di atas, Data baru (ID > 1M) tetap di bawah
                                 return newList
                                     .filter((v, i, a) => a.findIndex(t => t.id === v.id) === i)
-                                    .sort((a, b) => {
-                                        const isATemp = a.id >= 1000000000;
-                                        const isBTemp = b.id >= 1000000000;
-                                        if (isATemp && !isBTemp) return 1;
-                                        if (!isATemp && isBTemp) return -1;
-                                        return a.id - b.id;
-                                    });
+                                    .sort((a, b) => a.id - b.id);
                             });
                 }
             )
@@ -326,13 +320,9 @@ export function PesananProvider({ children }: { children: ReactNode }) {
             ...(pendingPatches.current[id] || {}),
             ...patch,
         };
-
-        if (timers.current[id]) clearTimeout(timers.current[id]);
-
-        timers.current[id] = setTimeout(() => {
-            flushRow(id);
-        }, 1000); 
-    }, [flushRow]);
+        
+        // Auto-save dimatikan agar user punya kontrol penuh kapan data dikirim ke DB
+    }, []);
 
     const resetRows = useCallback(() => {
         const fresh = Array.from({ length: EMPTY_BUFFER }, (_, i) => makeEmptyRow(i));
