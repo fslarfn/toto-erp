@@ -70,6 +70,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
     const [loading, setLoading] = useState(true);
     const timers = useRef<Record<number, NodeJS.Timeout>>({});
     const pendingPatches = useRef<Record<number, Partial<PesananRow>>>({});
+    const savingRef = useRef<Record<number, boolean>>({});
 
     // Load from Supabase on mount
     useEffect(() => {
@@ -184,13 +185,24 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                                 if (exists) {
                                     newList = prev.map((r) => (r.id === mapped.id ? { ...r, ...mapped } : r));
                                 } else {
-                                    const newFullRow = { ...makeEmptyRow(0), ...mapped } as PesananRow;
-                                    newList = [...prev, newFullRow];
+                                    // Cek apakah ini data yang barusan kita input (mencocokkan konten di placeholder)
+                                    const placeholderIdx = prev.findIndex(r => 
+                                        r.id >= 1000000000 && 
+                                        (r.customer === mapped.customer && r.deskripsi === mapped.deskripsi)
+                                    );
+
+                                    if (placeholderIdx !== -1) {
+                                        // Ganti placeholder tersebut dengan data asli dari DB
+                                        newList = [...prev];
+                                        newList[placeholderIdx] = { ...makeEmptyRow(0), ...mapped } as PesananRow;
+                                    } else {
+                                        // Memang data baru dari orang lain
+                                        const newFullRow = { ...makeEmptyRow(0), ...mapped } as PesananRow;
+                                        newList = [...prev, newFullRow];
+                                    }
                                 }
 
-                                // Rahasia Pengurutan:
-                                // 1. Data Asli (ID < 1M) diurutkan berdasarkan ID ASC
-                                // 2. Data Placeholder (ID >= 1M) diletakkan setelahnya
+                                // Rahasia Pengurutan Tetap Sama
                                 return newList
                                     .filter((v, i, a) => a.findIndex(t => t.id === v.id) === i)
                                     .sort((a, b) => {
@@ -213,9 +225,6 @@ export function PesananProvider({ children }: { children: ReactNode }) {
         };
     }, []);
 
-    const timers = useRef<Record<number, NodeJS.Timeout>>({});
-    const pendingPatches = useRef<Record<number, Partial<PesananRow>>>({});
-    const savingRef = useRef<Record<number, boolean>>({});
 
     const updateRow = useCallback((id: number, patch: Partial<PesananRow>) => {
         setRows((prev) =>
