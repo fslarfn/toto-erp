@@ -449,10 +449,6 @@ export default function PesananPage() {
                         }}>
                         💾 SIMPAN DATA
                     </button>
-                    <button onClick={() => { if (confirm("Reset semua data?")) resetRows(); }}
-                        style={{ border: "1px solid #D1BFA3", borderRadius: 5, padding: "4px 14px", fontSize: 12, background: "#FEF2F2", color: "#991B1B", cursor: "pointer", fontWeight: 600 }}>
-                        🗑 Reset
-                    </button>
                     <button onClick={exportExcel}
                         style={{ border: "1px solid #D1BFA3", borderRadius: 5, padding: "4px 14px", fontSize: 12, background: "#F5EBDD", color: "#5C4033", cursor: "pointer", fontWeight: 600 }}>
                         ⬇ Excel

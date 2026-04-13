@@ -193,7 +193,7 @@ export default function LoginPage() {
                         </button>
                     </form>
 
-                    <p style={{ textAlign: "center", fontSize: 11, color: "#CBD5E1", marginTop: 40 }}>
+                    <p style={{ textAlign: "center", fontSize: 11, color: "#CBD5E1", marginTop: 24 }}>
                         © {new Date().getFullYear()} CV Toto Aluminium Manufacture
                     </p>
                 </div>
@@ -288,7 +288,7 @@ const styles: Record<string, React.CSSProperties> = {
         display: "flex",
         width: "100%",
         maxWidth: 960,
-        minHeight: 580,
+        minHeight: 520,
         borderRadius: 24,
         overflow: "hidden",
         boxShadow: "0 40px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05)",
@@ -300,7 +300,7 @@ const styles: Record<string, React.CSSProperties> = {
     leftPanel: {
         width: "45%",
         background: "linear-gradient(160deg, #7C5A3C 0%, #A67B5B 40%, #C9A882 100%)",
-        padding: "48px 40px",
+        padding: "32px 40px",
         display: "flex",
         flexDirection: "column",
         justifyContent: "center",
@@ -328,7 +328,7 @@ const styles: Record<string, React.CSSProperties> = {
         border: "1px solid rgba(255,255,255,0.2)",
     },
     brandTitle: {
-        fontSize: 42,
+        fontSize: 32,
         fontWeight: 800,
         color: "white",
         margin: "0 0 6px",
@@ -402,7 +402,7 @@ const styles: Record<string, React.CSSProperties> = {
     rightPanel: {
         flex: 1,
         background: "white",
-        padding: "44px 40px",
+        padding: "32px 40px",
         display: "flex",
         flexDirection: "column",
         justifyContent: "center",
@@ -435,7 +435,7 @@ const styles: Record<string, React.CSSProperties> = {
     formSubtitle: {
         fontSize: 14,
         color: "#94A3B8",
-        margin: "0 0 32px",
+        margin: "0 0 24px",
         width: "100%",
     },
     fieldGroup: {
@@ -447,7 +447,7 @@ const styles: Record<string, React.CSSProperties> = {
         fontSize: 13,
         fontWeight: 600,
         color: "#475569",
-        marginBottom: 8,
+        marginBottom: 6,
     },
     inputWrapper: {
         position: "relative",
@@ -494,7 +494,7 @@ const styles: Record<string, React.CSSProperties> = {
         color: "#DC2626",
         fontSize: 14,
         fontWeight: 500,
-        marginBottom: 20,
+        marginBottom: 16,
         width: "100%",
         boxSizing: "border-box",
     },
@@ -509,7 +509,7 @@ const styles: Record<string, React.CSSProperties> = {
         fontWeight: 700,
         cursor: "pointer",
         transition: "all 0.2s",
-        marginTop: 8,
+        marginTop: 4,
         boxShadow: "0 4px 12px rgba(124, 90, 60, 0.3)",
     },
     spinner: {

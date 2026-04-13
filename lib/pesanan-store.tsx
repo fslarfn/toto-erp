@@ -58,7 +58,6 @@ type Ctx = {
     updateRow: (id: number, patch: Partial<PesananRow>) => void;
     flushRow: (id: number) => Promise<void>;
     flushAllRows: () => Promise<void>;
-    resetRows: () => void;
     addRows: (count?: number) => void;
     importRows: (data: Partial<PesananRow>[]) => void;
 };
@@ -305,11 +304,67 @@ export function PesananProvider({ children }: { children: ReactNode }) {
         if (idsToFlush.length === 0) return;
         
         console.log(`Flushing all rows: ${idsToFlush.length} items`);
-        // Jalankan secara berurutan agar tidak tabrakan ID pkey
+        
+        const updates: any[] = [];
+        const inserts: any[] = [];
+        const originalTempIds: number[] = [];
+
         for (const id of idsToFlush) {
-            await flushRow(id);
+            const patch = { ...pendingPatches.current[id] };
+            if (Object.keys(patch).length === 0) continue;
+
+            const cleanPatch: any = { ...patch };
+            const fieldsToClean = ["qty", "ukuran", "harga", "tanggal", "printed_at", "shipped_at"];
+            fieldsToClean.forEach(f => {
+                if (cleanPatch[f] === "" || cleanPatch[f] === undefined) {
+                    cleanPatch[f] = null;
+                }
+            });
+
+            if (id < 1000000000) {
+                updates.push({ id, ...cleanPatch });
+            } else {
+                const rowToInsert = { ...makeEmptyRow(0), ...cleanPatch };
+                delete (rowToInsert as any).id;
+                const hasData = rowToInsert.tanggal || rowToInsert.customer || rowToInsert.deskripsi || rowToInsert.ukuran || rowToInsert.qty;
+                if (hasData) {
+                    inserts.push(rowToInsert);
+                    originalTempIds.push(id);
+                }
+            }
         }
-    }, [flushRow]);
+
+        try {
+            // 1. Bulk Update
+            if (updates.length > 0) {
+                const { error } = await supabase.from("pesanan_rows").upsert(updates);
+                if (error) throw error;
+            }
+
+            // 2. Bulk Insert (Sequential for ID recovery, or just let realtime handle it)
+            // But to recover IDs we need to know which one is which.
+            // For simplicity and safety, we'll do inserts one by one or trust realtime
+            if (inserts.length > 0) {
+                for (let i = 0; i < inserts.length; i++) {
+                    const tempId = originalTempIds[i];
+                    const { data, error } = await supabase.from("pesanan_rows").insert(inserts[i]).select("id").single();
+                    if (error) throw error;
+                    if (data?.id) {
+                        const newRealId = data.id;
+                        setRows(prev => prev.map(r => r.id === tempId ? { ...r, id: newRealId } : r));
+                        delete pendingPatches.current[tempId];
+                    }
+                }
+            }
+
+            // Clear pending patches for updates that succeeded
+            updates.forEach(u => delete pendingPatches.current[u.id]);
+
+        } catch (err: any) {
+            console.error("Flush All Error:", err);
+            alert("Terjadi masalah saat menyimpan data. Beberapa baris mungkin belum tersimpan.");
+        }
+    }, [setRows]);
 
     const updateRow = useCallback((id: number, patch: Partial<PesananRow>) => {
         setRows((prev) =>
@@ -324,13 +379,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
         // Auto-save dimatikan agar user punya kontrol penuh kapan data dikirim ke DB
     }, []);
 
-    const resetRows = useCallback(() => {
-        const fresh = Array.from({ length: EMPTY_BUFFER }, (_, i) => makeEmptyRow(i));
-        setRows(fresh);
-        (async () => {
-            await supabase.from("pesanan_rows").delete().gte("id", 0);
-        })();
-    }, []);
+    // Menghapus total fungsi reset untuk keamanan data (instruksi Faisal 13/04/26)
 
     const addRows = useCallback((count = 100) => {
         setRows((prev) => {
@@ -349,12 +398,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
         setRows([...base, ...emptyBuf]);
 
         (async () => {
-            const { error: delErr } = await supabase.from("pesanan_rows").delete().gte("id", 0);
-            if (delErr) {
-                console.error("Delete Error:", delErr);
-                alert("Gagal menghapus data lama: " + delErr.message);
-                return;
-            }
+            // REMOVE: delete command to prevent data loss. Now only appends.
             
             const rowsWithData = base.filter(r => isRowFilled(r));
             for (let i = 0; i < rowsWithData.length; i += 100) {
@@ -370,7 +414,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
     }, []);
 
     return (
-        <PesananCtx.Provider value={{ rows, loading, updateRow, flushRow, flushAllRows, resetRows, addRows, importRows }}>
+        <PesananCtx.Provider value={{ rows, loading, updateRow, flushRow, flushAllRows, addRows, importRows }}>
             {children}
         </PesananCtx.Provider>
     );

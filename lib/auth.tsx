@@ -68,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 .select("*")
                 .eq("username", username.toLowerCase().trim())
                 .eq("password_hash", password)
-                .single();
+                .maybeSingle();
 
             if (data && !error) {
                 const u: User = {

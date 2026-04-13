@@ -430,32 +430,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }, [bankAccounts, updateBankBalance]);
 
     const recalculateBalances = useCallback(() => {
-        bankAccounts.forEach(bank => {
-            const cfIncome = cashFlow.filter(c => c.bankAccount === bank.name && c.type === "income").reduce((s, c) => s + c.amount, 0);
-            const cfExpense = cashFlow.filter(c => c.bankAccount === bank.name && c.type === "expense").reduce((s, c) => s + c.amount, 0);
-            const paymentsTotal = payments.filter(p => p.bankAccount === bank.name).reduce((s, p) => s + p.amountPaid, 0);
-            
-            const newBalance = cfIncome - cfExpense + paymentsTotal;
-            if (bank.balance !== newBalance) {
-                setBankAccounts(prev => prev.map(b => b.id === bank.id ? { ...b, balance: newBalance } : b));
-                supabase.from("bank_accounts").update({ balance: newBalance }).eq("id", bank.id).then();
-            }
+        setBankAccounts(prev => {
+            const next = [...prev];
+            next.forEach(bank => {
+                const cfIncome = cashFlow.filter(c => c.bankAccount === bank.name && c.type === "income").reduce((s, c) => s + c.amount, 0);
+                const cfExpense = cashFlow.filter(c => c.bankAccount === bank.name && c.type === "expense").reduce((s, c) => s + c.amount, 0);
+                const paymentsTotal = payments.filter(p => p.bankAccount === bank.name).reduce((s, p) => s + p.amountPaid, 0);
+                
+                const newBalance = cfIncome - cfExpense + paymentsTotal;
+                if (Math.abs(bank.balance - newBalance) > 0.01) {
+                    bank.balance = newBalance;
+                    supabase.from("bank_accounts").update({ balance: newBalance }).eq("id", bank.id).then();
+                }
+            });
+            return next;
         });
-    }, [bankAccounts, cashFlow, payments]);
+    }, [cashFlow, payments]); // Removed bankAccounts from deps to avoid loop
 
-    // Auto-sync balances on first load if they are all 0 but history exists
+    // Auto-sync balances on changes
     useEffect(() => {
-        if (!loading && bankAccounts.length > 0 && cashFlow.length > 0) {
-            const totalStored = bankAccounts.reduce((s, b) => s + b.balance, 0);
-            const totalPayments = payments.reduce((s, p) => s + p.amountPaid, 0);
-            const hasHistory = cashFlow.length > 0 || totalPayments > 0;
-            
-            if (totalStored === 0 && hasHistory) {
-                console.log("Detecting unsynced balances... performing auto-sync.");
-                recalculateBalances();
-            }
+        if (!loading && (cashFlow.length > 0 || payments.length > 0)) {
+            recalculateBalances();
         }
-    }, [loading, bankAccounts.length, cashFlow.length, payments.length, recalculateBalances]);
+    }, [loading, cashFlow.length, payments.length, recalculateBalances]);
 
     return (
         <StoreContext.Provider value={{
