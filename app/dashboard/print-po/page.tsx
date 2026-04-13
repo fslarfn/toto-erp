@@ -32,20 +32,31 @@ function fmtDateShort(d: string): string {
 function TabPrintPO() {
     const { rows, updateRow } = usePesanan();
     const [operator, setOperator] = useState("");
+    const [search, setSearch] = useState("");
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
     const [marked, setMarked] = useState(false);
     const printRef = useRef<HTMLDivElement>(null);
 
-    // Hanya tampilkan item yang BELUM di-produksi dan BELUM pernah dicetak
-    const allItems = rows.filter((r) => (r.customer || r.deskripsi) && !r.printed_at && !r.di_produksi);
-    const pendingCount = allItems.length;
+    // Filter & Search
+    const allItems = rows.filter((r) => {
+        const isPending = (r.customer || r.deskripsi) && !r.printed_at && !r.di_produksi;
+        if (!isPending) return false;
+        if (!search) return true;
+        const q = search.toLowerCase();
+        return [r.customer, r.deskripsi, r.ukuran].join(" ").toLowerCase().includes(q);
+    });
+    
+    const pendingCount = allItems.filter(r => (r.customer || r.deskripsi) && !r.printed_at && !r.di_produksi).length;
 
     const toggle = (id: number) =>
         setSelectedIds((prev) => prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]);
     const toggleAll = () =>
         setSelectedIds(selectedIds.length === allItems.length ? [] : allItems.map((r) => r.id));
 
-    const selectedItems = allItems.filter((r) => selectedIds.includes(r.id));
+    // PENTING: Menggunakan mapping dari selectedIds agar urutannya SESUAI urutan centang (instruksi Faisal)
+    const selectedItems = selectedIds
+        .map(id => rows.find(r => r.id === id))
+        .filter((r): r is PesananRow => !!r);
 
     const tandaiDiproduksi = () => {
         if (selectedIds.length === 0) return;
@@ -57,9 +68,10 @@ function TabPrintPO() {
     const cetak = () => {
         const el = printRef.current;
         if (!el || selectedItems.length === 0) return;
-        const todayISO = new Date().toISOString().slice(0, 10);
+        // Gunakan ISO String Lengkap agar setiap sesi cetak punya ID unik di riwayat
+        const fullISO = new Date().toISOString(); 
         selectedIds.forEach((id) =>
-            updateRow(id, { printed_at: todayISO, po_label: operator || "PO" })
+            updateRow(id, { printed_at: fullISO, po_label: operator || "PO" })
         );
         const now = new Date();
         const fmtDate = now.toLocaleDateString("id-ID", { day: "2-digit", month: "2-digit", year: "numeric" });
@@ -144,6 +156,14 @@ ${el.innerHTML}
                             onChange={(e) => setOperator(e.target.value)}
                             placeholder='cth: "ATE" → PO ATE'
                             style={{ width: "100%", border: "1.5px solid #D1BFA3", borderRadius: 7, padding: "9px 12px", fontSize: 13, color: "#3C2F2F", background: "#FFFBF7", outline: "none", boxSizing: "border-box" }}
+                        />
+                    </div>
+                    <div style={{ padding: "0 18px 12px", borderBottom: "1px solid #F0E6D8" }}>
+                        <input
+                            type="text" value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder='🔍 Cari item/customer...'
+                            style={{ width: "100%", border: "1px solid #E6D5BE", borderRadius: 6, padding: "6px 10px", fontSize: 12, color: "#5C4033", background: "#FAF7F3", outline: "none" }}
                         />
                     </div>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 18px", borderBottom: "1px solid #F0E6D8" }}>
@@ -315,13 +335,16 @@ function TabRiwayatPO() {
         return matchDate && matchSearch;
     });
 
-    // Group by tanggal + operator
+    // Group by printed_at (ISO String) + operator
     const groupMap: Record<string, { label: string; poLabel: string; tanggal: string; rows: PesananRow[] }> = {};
     filtered.forEach((r) => {
         const opKey = r.po_label || "(Tanpa Operator)";
+        // Key menggunakan jam menit agar sesi cetak yang sama di tanggal yang sama tidak menyatu
         const key = `${r.printed_at}|||${opKey}`;
         if (!groupMap[key]) {
-            groupMap[key] = { label: fmtDateFull(r.printed_at), poLabel: opKey, tanggal: r.printed_at, rows: [] };
+            // Label tetap menampilkan tanggal saja agar rapi, atau bisa ditambah jam (opsional)
+            const dateOnly = r.printed_at.slice(0, 10);
+            groupMap[key] = { label: fmtDateFull(dateOnly), poLabel: opKey, tanggal: r.printed_at, rows: [] };
         }
         groupMap[key].rows.push(r);
     });

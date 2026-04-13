@@ -214,7 +214,7 @@ function StatusTable({ filtered, viewMode, colorRowId, setColorRowId, update, st
    MAIN PAGE
 ================================================================ */
 export default function StatusBarangPage() {
-    const { rows, loading, updateRow, importRows } = usePesanan();
+    const { rows, loading, updateRow, importRows, flushRow } = usePesanan();
 
     const now = new Date();
     const [month, setMonth] = useState(now.getMonth() + 1);
@@ -409,11 +409,16 @@ export default function StatusBarangPage() {
         };
     }, [rows, year, month]);
 
-    const flashSaved = () => { setSavedFlash(true); setTimeout(() => setSavedFlash(false), 1800); };
+    const flashSaved = () => { setSavedFlash(true); setTimeout(() => setSavedFlash(false), 2000); };
 
-    const update = (id: number, patch: Partial<PesananRow>) => {
+    const update = async (id: number, patch: Partial<PesananRow>) => {
         updateRow(id, patch);
-        flashSaved();
+        try {
+            await flushRow(id);
+            flashSaved();
+        } catch (err) {
+            console.error("Auto-sync failed:", err);
+        }
     };
 
     const years: number[] = [];

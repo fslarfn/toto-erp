@@ -23,6 +23,7 @@ const NAV_ITEMS = [
     {
         section: "Keuangan",
         items: [
+            { href: "/dashboard/penawaran", label: "Penawaran", module: "keuangan", icon: PenawaranIcon },
             { href: "/dashboard/keuangan", label: "Keuangan", module: "keuangan", icon: WalletIcon },
             { href: "/dashboard/invoice", label: "Invoice", module: "keuangan", icon: InvoiceIcon },
             { href: "/dashboard/tagihan", label: "Tagihan", module: "keuangan", icon: TagihanIcon },
@@ -415,6 +416,19 @@ function MessageSquareIcon({ size = 18 }: { size?: number }) {
     return (
         <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+        </svg>
+    );
+}
+
+function PenawaranIcon({ size = 18 }: { size?: number }) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <path d="M16 13H8" />
+            <path d="M16 17H8" />
+            <path d="M10 9H9H8" />
+            <path d="M12 2v6" />
         </svg>
     );
 }

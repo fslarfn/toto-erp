@@ -29,6 +29,7 @@ export type PesananRow = {
     production_note: string;
     metode_kirim: string;
     shipped_at: string;
+    sync_id: string; // Pelacak unik untuk sinkronisasi antrian
 };
 
 export const PAGE_SIZE = 100;
@@ -45,6 +46,7 @@ export function makeEmptyRow(index: number = 0): PesananRow {
         ekspedisi: "", color_marker: "",
         printed_at: "", po_label: "", is_packing: false, is_paid: false,
         production_note: "", metode_kirim: "", shipped_at: "",
+        sync_id: String(tempId),
     };
 }
 
@@ -59,6 +61,7 @@ type Ctx = {
     flushRow: (id: number) => Promise<void>;
     flushAllRows: () => Promise<void>;
     addRows: (count?: number) => void;
+    addRow: (data: Partial<PesananRow>) => Promise<void>;
     importRows: (data: Partial<PesananRow>[]) => void;
 };
 
@@ -128,6 +131,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                         production_note: (r.production_note as string) || "",
                         metode_kirim: (r.metode_kirim as string) || "",
                         shipped_at: (r.shipped_at as string) || "",
+                        sync_id: (r.sync_id as string) || "",
                     }));
                     // Append empty rows buffer after data
                     const lastResortId = mapped.length > 0 ? mapped[mapped.length - 1].id : 0;
@@ -179,6 +183,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                                 if ("production_note" in row) mapped.production_note = row.production_note;
                                 if ("metode_kirim" in row) mapped.metode_kirim = row.metode_kirim;
                                 if ("shipped_at" in row) mapped.shipped_at = row.shipped_at;
+                                if ("sync_id" in row) mapped.sync_id = row.sync_id;
 
                                 const exists = prev.find((r) => r.id === mapped.id);
                                 let newList: PesananRow[];
@@ -187,10 +192,16 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                                     newList = prev.map((r) => (r.id === mapped.id ? { ...r, ...mapped } : r));
                                 } else {
                                     // Cek apakah ini data yang barusan kita input (mencocokkan konten di placeholder)
-                                    const placeholderIdx = prev.findIndex(r => 
-                                        r.id >= 1000000000 && 
-                                        (r.customer === mapped.customer && r.deskripsi === mapped.deskripsi)
-                                    );
+                                    // 1. Cek berdasarkan sync_id (paling akurat)
+                                    let placeholderIdx = prev.findIndex(r => r.id >= 1000000000 && r.sync_id === mapped.sync_id);
+                                    
+                                    // 2. Fallback ke heuristic nama jika sync_id kosong (untuk data lama)
+                                    if (placeholderIdx === -1 && !mapped.sync_id) {
+                                        placeholderIdx = prev.findIndex(r => 
+                                            r.id >= 1000000000 && 
+                                            (r.customer === mapped.customer && r.deskripsi === mapped.deskripsi)
+                                        );
+                                    }
 
                                     if (placeholderIdx !== -1) {
                                         // Ganti placeholder tersebut dengan data asli dari DB
@@ -218,6 +229,19 @@ export function PesananProvider({ children }: { children: ReactNode }) {
         return () => {
             supabase.removeChannel(channel);
         };
+    }, []);
+
+    // Safety Lock: Mencegah penutupan tab jika ada data belum tersimpan
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            const hasPending = Object.values(pendingPatches.current).some(p => Object.keys(p).length > 0);
+            if (hasPending) {
+                e.preventDefault();
+                e.returnValue = "Ada data yang belum disimpan. Yakin ingin keluar?";
+            }
+        };
+        window.addEventListener("beforeunload", handleBeforeUnload);
+        return () => window.removeEventListener("beforeunload", handleBeforeUnload);
     }, []);
 
 
@@ -264,7 +288,8 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                 
                 const hasData = rowToInsert.tanggal || rowToInsert.customer || rowToInsert.deskripsi || rowToInsert.ukuran || rowToInsert.qty;
                 if (hasData) {
-                    const { data, error } = await supabase.from("pesanan_rows").insert(rowToInsert).select("id").single();
+                    const rowWithSync = { ...rowToInsert, sync_id: String(id) };
+                    const { data, error } = await supabase.from("pesanan_rows").insert(rowWithSync).select("id").single();
                     if (error) throw error;
                     
                     if (data?.id) {
@@ -347,7 +372,8 @@ export function PesananProvider({ children }: { children: ReactNode }) {
             if (inserts.length > 0) {
                 for (let i = 0; i < inserts.length; i++) {
                     const tempId = originalTempIds[i];
-                    const { data, error } = await supabase.from("pesanan_rows").insert(inserts[i]).select("id").single();
+                    const rowPayload = { ...inserts[i], sync_id: String(tempId) };
+                    const { data, error } = await supabase.from("pesanan_rows").insert(rowPayload).select("id").single();
                     if (error) throw error;
                     if (data?.id) {
                         const newRealId = data.id;
@@ -386,6 +412,11 @@ export function PesananProvider({ children }: { children: ReactNode }) {
         });
     }, []);
 
+    const addRow = useCallback(async (data: Partial<PesananRow>) => {
+        const { error } = await supabase.from("pesanan_rows").insert(data);
+        if (error) throw error;
+    }, []);
+
     const importRows = useCallback((data: Partial<PesananRow>[]) => {
         const total = Math.max(data.length, PAGE_SIZE);
         const base: PesananRow[] = Array.from({ length: total }, (_, i) => makeEmptyRow(i + 1));
@@ -410,7 +441,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
     }, []);
 
     return (
-        <PesananCtx.Provider value={{ rows, loading, updateRow, flushRow, flushAllRows, addRows, importRows }}>
+        <PesananCtx.Provider value={{ rows, loading, updateRow, flushRow, flushAllRows, addRows, addRow, importRows }}>
             {children}
         </PesananCtx.Provider>
     );

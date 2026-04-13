@@ -278,6 +278,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                     setCashFlow(prev => prev.map(x => x.id === (n as any).id ? { ...x, ...mapped } : x));
                 }
                 else if (eventType === "DELETE") setCashFlow(prev => prev.filter(x => x.id !== (o as any).id));
+                recalculateBalances();
             })
             // 4. Payments
             .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, (payload) => {
@@ -297,6 +298,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                     setPayments(prev => prev.map(x => x.id === (n as any).id ? { ...x, ...mapped } : x));
                 }
                 else if (eventType === "DELETE") setPayments(prev => prev.filter(x => x.id !== (o as any).id));
+                recalculateBalances();
             })
             // 5. Bank Accounts
             .on("postgres_changes", { event: "*", schema: "public", table: "bank_accounts" }, (payload) => {

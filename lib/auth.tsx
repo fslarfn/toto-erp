@@ -49,15 +49,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
 
-    // Restore session from localStorage
+    // Restore session from localStorage & Sync with DB
     useEffect(() => {
-        try {
-            const stored = localStorage.getItem(LS_USER_KEY);
-            if (stored) {
-                setUser(JSON.parse(stored));
-            }
-        } catch { /* ignore */ }
-        setLoading(false);
+        const restoreAndSync = async () => {
+            try {
+                const stored = localStorage.getItem(LS_USER_KEY);
+                if (stored) {
+                    const localUser = JSON.parse(stored) as User;
+                    setUser(localUser); // Set local immediately for UI responsiveness
+                    
+                    // Background refetch to ensure avatar and other data are fresh
+                    const { data, error } = await supabase
+                        .from("app_users")
+                        .select("*")
+                        .eq("id", localUser.id)
+                        .maybeSingle();
+                    
+                    if (data && !error) {
+                        const freshUser: User = {
+                            id: data.id,
+                            name: data.name,
+                            username: data.username,
+                            role: data.role as UserRole,
+                            avatar: data.avatar || undefined,
+                        };
+                        setUser(freshUser);
+                        localStorage.setItem(LS_USER_KEY, JSON.stringify(freshUser));
+                    }
+                }
+            } catch { /* ignore */ }
+            setLoading(false);
+        };
+        restoreAndSync();
     }, []);
 
     const login = async (username: string, password: string): Promise<boolean> => {
@@ -76,6 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     name: data.name,
                     username: data.username,
                     role: data.role as UserRole,
+                    avatar: data.avatar || undefined,
                 };
                 setUser(u);
                 localStorage.setItem(LS_USER_KEY, JSON.stringify(u));
