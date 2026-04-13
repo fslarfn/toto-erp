@@ -25,7 +25,6 @@ const TableRow = memo(function TableRow({
     onMouseDown, onMouseEnter, onFocus, onChange, onPaste,
     onFillHandleMouseDown, inputRefSetter,
     viewMode, inputStartIdx, browsePage,
-    onBlur,
 }: {
     row: PesananRow; ri: number;
     active: Pos | null; selBounds: ReturnType<typeof normSel> | null;
@@ -38,7 +37,6 @@ const TableRow = memo(function TableRow({
     onFillHandleMouseDown: (e: React.MouseEvent) => void;
     inputRefSetter: (ri: number, ci: number, el: HTMLInputElement | null) => void;
     viewMode: string; inputStartIdx: number | null; browsePage: number;
-    onBlur: (id: number) => void;
 }) {
     const isFilled = row.customer || row.deskripsi;
     const isFillRow = isFilling && selBounds && ri > selBounds.r2 && fillEndRow !== null && ri <= fillEndRow;
@@ -77,7 +75,6 @@ const TableRow = memo(function TableRow({
                             onChange={(e) => onChange(row.id, key, e.target.value)}
                             onPaste={(e) => onPaste(e, ri, ci)}
                             onFocus={() => onFocus(ri, ci)}
-                            onBlur={() => onBlur(row.id)}
                             placeholder={key === "customer" ? "Nama customer..." : key === "deskripsi" ? "Deskripsi pesanan..." : key === "ukuran" ? "cth: 1,9" : key === "qty" ? "0" : ""}
                             style={{
                                 width: "100%", height: "100%", border: "none", outline: "none",
@@ -352,23 +349,13 @@ export default function PesananPage() {
         updateRow(id, { [key]: val } as Partial<PesananRow>);
     }, [updateRow]);
 
-    /* ── Focus handler (Excel-style Cell Flush) ───────────── */
-    const { flushRow } = usePesanan();
-    const prevPos = useRef<{ r: number, c: number } | null>(null);
+    /* ── Focus handler ─────────────────────────────────────── */
+    const { flushAllRows } = usePesanan();
 
     const handleFocus = useCallback((r: number, c: number) => {
-        // Jika pindah kotak (baik baris atau kolom), simpan kotak sebelumnya
-        if (prevPos.current !== null && (prevPos.current.r !== r || prevPos.current.c !== c)) {
-            const rowToFlush = displayRows[prevPos.current.r];
-            if (rowToFlush) {
-                flushRow(rowToFlush.id);
-            }
-        }
-        
-        prevPos.current = { r, c };
         setActive({ r, c });
         if (!isDragging) setSel({ start: { r, c }, end: { r, c } });
-    }, [displayRows, isDragging, flushRow]);
+    }, [isDragging]);
 
     /* ── Export ─────────────────────────────────────────────── */
     const exportExcel = () => {
@@ -492,7 +479,6 @@ export default function PesananPage() {
                                 viewMode={viewMode}
                                 inputStartIdx={inputStartIdx}
                                 browsePage={browsePage}
-                                onBlur={(id) => flushRow(id)}
                             />
                         ))}
                     </tbody>

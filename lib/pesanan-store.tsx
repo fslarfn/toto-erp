@@ -331,7 +331,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
 
         timers.current[id] = setTimeout(() => {
             flushRow(id);
-        }, 800); // 0.8s idle threshold untuk respon lebih cepat
+        }, 1000); 
     }, [flushRow]);
 
     const resetRows = useCallback(() => {
