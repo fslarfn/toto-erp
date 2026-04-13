@@ -152,52 +152,55 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                 (payload) => {
                     const { eventType, new: newRow, old: oldRow } = payload;
 
-                    setRows((prev) => {
-                        if (eventType === "UPDATE" || eventType === "INSERT") {
-                            const row = newRow as Record<string, any>;
-                            const mapped: Partial<PesananRow> = {};
-                            if ("id" in row) mapped.id = row.id;
-                            if ("tanggal" in row) mapped.tanggal = row.tanggal;
-                            if ("customer" in row) mapped.customer = row.customer;
-                            if ("deskripsi" in row) mapped.deskripsi = row.deskripsi;
-                            if ("ukuran" in row) mapped.ukuran = row.ukuran;
-                            if ("qty" in row) mapped.qty = row.qty;
-                            if ("harga" in row) mapped.harga = row.harga;
-                            if ("no_inv" in row) mapped.no_inv = row.no_inv;
-                            if ("no_sj" in row) mapped.no_sj = row.no_sj;
-                            if ("di_produksi" in row) mapped.di_produksi = !!row.di_produksi;
-                            if ("di_warna" in row) mapped.di_warna = !!row.di_warna;
-                            if ("siap_kirim" in row) mapped.siap_kirim = !!row.siap_kirim;
-                            if ("di_kirim" in row) mapped.di_kirim = !!row.di_kirim;
-                            if ("ekspedisi" in row) mapped.ekspedisi = row.ekspedisi;
-                            if ("color_marker" in row) mapped.color_marker = row.color_marker;
-                            if ("printed_at" in row) mapped.printed_at = row.printed_at;
-                            if ("po_label" in row) mapped.po_label = row.po_label;
-                            if ("is_packing" in row) mapped.is_packing = !!row.is_packing;
-                            if ("is_paid" in row) mapped.is_paid = !!row.is_paid;
-                            if ("production_note" in row) mapped.production_note = row.production_note;
-                            if ("metode_kirim" in row) mapped.metode_kirim = row.metode_kirim;
-                            if ("shipped_at" in row) mapped.shipped_at = row.shipped_at;
+                            setRows((prev) => {
+                                const row = newRow as Record<string, any>;
+                                const mapped: Partial<PesananRow> = {};
+                                if ("id" in row) mapped.id = row.id;
+                                if ("tanggal" in row) mapped.tanggal = row.tanggal;
+                                if ("customer" in row) mapped.customer = row.customer;
+                                if ("deskripsi" in row) mapped.deskripsi = row.deskripsi;
+                                if ("ukuran" in row) mapped.ukuran = row.ukuran;
+                                if ("qty" in row) mapped.qty = row.qty;
+                                if ("harga" in row) mapped.harga = row.harga;
+                                if ("no_inv" in row) mapped.no_inv = row.no_inv;
+                                if ("no_sj" in row) mapped.no_sj = row.no_sj;
+                                if ("di_produksi" in row) mapped.di_produksi = !!row.di_produksi;
+                                if ("di_warna" in row) mapped.di_warna = !!row.di_warna;
+                                if ("siap_kirim" in row) mapped.siap_kirim = !!row.siap_kirim;
+                                if ("di_kirim" in row) mapped.di_kirim = !!row.di_kirim;
+                                if ("ekspedisi" in row) mapped.ekspedisi = row.ekspedisi;
+                                if ("color_marker" in row) mapped.color_marker = row.color_marker;
+                                if ("printed_at" in row) mapped.printed_at = row.printed_at;
+                                if ("po_label" in row) mapped.po_label = row.po_label;
+                                if ("is_packing" in row) mapped.is_packing = !!row.is_packing;
+                                if ("is_paid" in row) mapped.is_paid = !!row.is_paid;
+                                if ("production_note" in row) mapped.production_note = row.production_note;
+                                if ("metode_kirim" in row) mapped.metode_kirim = row.metode_kirim;
+                                if ("shipped_at" in row) mapped.shipped_at = row.shipped_at;
 
-                            const exists = prev.find((r) => r.id === mapped.id);
-                            let newList: PesananRow[];
-                            
-                            if (exists) {
-                                newList = prev.map((r) => (r.id === mapped.id ? { ...r, ...mapped } : r));
-                            } else {
-                                // Jika tidak ada (INSERT baru), gabungkan dengan default agar tidak ada undefined
-                                const newFullRow = { ...makeEmptyRow(mapped.id!), ...mapped } as PesananRow;
-                                newList = [...prev, newFullRow].sort((a, b) => a.id - b.id);
-                            }
+                                const exists = prev.find((r) => r.id === mapped.id);
+                                let newList: PesananRow[];
+                                
+                                if (exists) {
+                                    newList = prev.map((r) => (r.id === mapped.id ? { ...r, ...mapped } : r));
+                                } else {
+                                    const newFullRow = { ...makeEmptyRow(0), ...mapped } as PesananRow;
+                                    newList = [...prev, newFullRow];
+                                }
 
-                            // Hilangkan duplikat ID (jika ada balapan)
-                            return newList.filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
-                        } else if (eventType === "DELETE") {
-                            const id = (oldRow as any).id;
-                            return prev.filter((r) => r.id !== id);
-                        }
-                        return prev;
-                    });
+                                // Rahasia Pengurutan:
+                                // 1. Data Asli (ID < 1M) diurutkan berdasarkan ID ASC
+                                // 2. Data Placeholder (ID >= 1M) diletakkan setelahnya
+                                return newList
+                                    .filter((v, i, a) => a.findIndex(t => t.id === v.id) === i)
+                                    .sort((a, b) => {
+                                        const isATemp = a.id >= 1000000000;
+                                        const isBTemp = b.id >= 1000000000;
+                                        if (isATemp && !isBTemp) return 1;
+                                        if (!isATemp && isBTemp) return -1;
+                                        return a.id - b.id;
+                                    });
+                            });
                 }
             )
             .on("system", { event: "*" }, (payload) => console.log("Realtime System Event:", payload))
