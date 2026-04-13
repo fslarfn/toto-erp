@@ -380,7 +380,6 @@ export function PesananProvider({ children }: { children: ReactNode }) {
     }, []);
 
     return (
-    return (
         <PesananCtx.Provider value={{ rows, loading, updateRow, flushRow, flushAllRows, resetRows, addRows, importRows }}>
             {children}
         </PesananCtx.Provider>
