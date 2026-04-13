@@ -24,6 +24,7 @@ const TableRow = memo(function TableRow({
     row, ri, active, selBounds, isFilling, fillEndRow,
     onMouseDown, onMouseEnter, onFocus, onChange, onPaste,
     onFillHandleMouseDown, inputRefSetter,
+    viewMode, inputStartIdx, browsePage,
 }: {
     row: PesananRow; ri: number;
     active: Pos | null; selBounds: ReturnType<typeof normSel> | null;
@@ -35,6 +36,7 @@ const TableRow = memo(function TableRow({
     onPaste: (e: React.ClipboardEvent, r: number, c: number) => void;
     onFillHandleMouseDown: (e: React.MouseEvent) => void;
     inputRefSetter: (ri: number, ci: number, el: HTMLInputElement | null) => void;
+    viewMode: string; inputStartIdx: number | null; browsePage: number;
 }) {
     const isFilled = row.customer || row.deskripsi;
     const isFillRow = isFilling && selBounds && ri > selBounds.r2 && fillEndRow !== null && ri <= fillEndRow;
@@ -462,6 +464,9 @@ export default function PesananPage() {
                                 onPaste={handlePaste}
                                 onFillHandleMouseDown={onFillHandleMouseDown}
                                 inputRefSetter={inputRefSetter}
+                                viewMode={viewMode}
+                                inputStartIdx={inputStartIdx}
+                                browsePage={browsePage}
                             />
                         ))}
                     </tbody>

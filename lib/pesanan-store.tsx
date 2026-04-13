@@ -264,10 +264,8 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                 delete timers.current[id];
             } catch (err: any) {
                 console.error("Update Row Error (Supabase):", err);
-                // Beri tahu user jika simpan gagal (penting untuk transparansi)
-                if (err.message) {
-                    console.warn("Gagal menyimpan data ke database. Cek koneksi Anda.");
-                }
+                const msg = err.message || "Unknown error";
+                alert("Simpan Gagal: " + msg);
             }
         }, 1000); 
     }, []);
