@@ -210,12 +210,15 @@ export function PesananProvider({ children }: { children: ReactNode }) {
         };
     }, []);
 
+    const timers = useRef<Record<number, NodeJS.Timeout>>({});
+    const pendingPatches = useRef<Record<number, Partial<PesananRow>>>({});
+    const savingRef = useRef<Record<number, boolean>>({});
+
     const updateRow = useCallback((id: number, patch: Partial<PesananRow>) => {
         setRows((prev) =>
             prev.map((r) => (r.id === id ? { ...r, ...patch } : r))
         );
 
-        // Akumulasi perubahan ke dalam buffer agar tidak hilang saat mengetik cepat
         pendingPatches.current[id] = {
             ...(pendingPatches.current[id] || {}),
             ...patch,
@@ -223,14 +226,19 @@ export function PesananProvider({ children }: { children: ReactNode }) {
 
         if (timers.current[id]) clearTimeout(timers.current[id]);
 
-        timers.current[id] = setTimeout(async () => {
+        timers.current[id] = setTimeout(async function save() {
+            // Jika baris ini sedang dalam proses simpan, tunggu 500ms lalu coba lagi
+            if (savingRef.current[id]) {
+                timers.current[id] = setTimeout(save, 500);
+                return;
+            }
+
             const finalPatch = { ...pendingPatches.current[id] };
             if (Object.keys(finalPatch).length === 0) return;
 
+            savingRef.current[id] = true;
             try {
-                // Bersihkan data sebelum dikirim ke database
                 const cleanPatch: any = { ...finalPatch };
-                // Konversi string kosong ke null untuk kolom numerik & tanggal agar tidak error di DB
                 const fieldsToClean = ["qty", "ukuran", "harga", "tanggal", "printed_at", "shipped_at"];
                 fieldsToClean.forEach(f => {
                     if (cleanPatch[f] === "" || cleanPatch[f] === undefined) {
@@ -238,24 +246,21 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                     }
                 });
 
-                const isTempId = id >= 1000000000;
+                const isTempId = typeof id === 'number' && id >= 1000000000;
 
                 if (!isTempId) {
-                    // Jika ID asli, langsung update
                     const { error } = await supabase.from("pesanan_rows").update(cleanPatch).eq("id", id);
                     if (error) throw error;
                     delete pendingPatches.current[id];
                 } else {
-                    // Jika ID sementara, lakukan insert (biarkan DB kasih ID asli)
                     const rowToInsert = { ...makeEmptyRow(0), ...cleanPatch };
-                    delete (rowToInsert as any).id; // Biarkan Supabase generate ID
+                    delete (rowToInsert as any).id;
                     
                     const hasData = rowToInsert.tanggal || rowToInsert.customer || rowToInsert.deskripsi || rowToInsert.ukuran || rowToInsert.qty;
                     if (hasData) {
                         const { data, error } = await supabase.from("pesanan_rows").insert(rowToInsert).select("id").single();
                         if (error) throw error;
                         
-                        // Penting: Ganti ID sementara di state dengan ID asli dari DB
                         if (data?.id) {
                             const newRealId = data.id;
                             setRows(prev => prev.map(r => r.id === id ? { ...r, id: newRealId } : r));
@@ -263,14 +268,17 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                         }
                     }
                 }
-                
-                delete timers.current[id];
             } catch (err: any) {
-                console.error("Update Row Error (Supabase):", err);
-                const msg = err.message || "Unknown error";
-                alert("Simpan Gagal: " + msg);
+                console.error("Update Row Error:", err);
+                // Jika error adalah masalah jaringan (Failed to fetch), jangan alert dulu, biarkan stay di pending
+                if (err.message !== "Failed to fetch") {
+                    alert("Simpan Gagal: " + (err.message || "Masalah Database"));
+                }
+            } finally {
+                savingRef.current[id] = false;
+                delete timers.current[id];
             }
-        }, 1000); 
+        }, 1200); // Sedikit ditambah jedanya agar lebih tenang bagi koneksi internet
     }, []);
 
     const resetRows = useCallback(() => {
