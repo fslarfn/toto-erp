@@ -115,7 +115,7 @@ export default function TagihanPage() {
     const togglePaid = (noInv: string, newVal: boolean) => {
         const inv = invoiceMap.get(noInv);
         if (!inv) return;
-        inv.ids.forEach((id) => updateRow(id, { is_paid: newVal }));
+        inv.ids.forEach((id) => updateRow(id, { is_paid: newVal }, true));
     };
 
     const cardSt = (accent: string): React.CSSProperties => ({

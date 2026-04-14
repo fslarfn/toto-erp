@@ -100,7 +100,7 @@ function TabCustomer() {
         const todayISO = new Date().toISOString().slice(0, 10);
 
         // Tandai di_kirim = true
-        selectedIds.forEach((id) => updateRow(id, { di_kirim: true, ekspedisi }));
+        selectedIds.forEach((id) => updateRow(id, { di_kirim: true, ekspedisi }, true));
 
         // Simpan ke log
         const items: SJItem[] = selectedItems.map((r) => ({
@@ -269,7 +269,7 @@ function TabPewarnaan() {
         const todayISO = new Date().toISOString().slice(0, 10);
 
         // Tandai di_warna = true
-        selectedIds.forEach((id) => updateRow(id, { di_warna: true }));
+        selectedIds.forEach((id) => updateRow(id, { di_warna: true }, true));
 
         const items: SJItem[] = selectedItems.map((r) => ({
             pesananId: r.id, customer: r.customer, deskripsi: r.deskripsi,

@@ -411,14 +411,9 @@ export default function StatusBarangPage() {
 
     const flashSaved = () => { setSavedFlash(true); setTimeout(() => setSavedFlash(false), 2000); };
 
-    const update = async (id: number, patch: Partial<PesananRow>) => {
-        updateRow(id, patch);
-        try {
-            await flushRow(id);
-            flashSaved();
-        } catch (err) {
-            console.error("Auto-sync failed:", err);
-        }
+    const update = (id: number, patch: Partial<PesananRow>) => {
+        updateRow(id, patch, true);
+        flashSaved();
     };
 
     const years: number[] = [];

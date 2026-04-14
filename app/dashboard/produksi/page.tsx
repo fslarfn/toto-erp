@@ -124,14 +124,14 @@ function TabProduksi() {
     filtered.forEach(r => { const k = r.po_label || "(Tanpa PO)"; if (!groups[k]) groups[k] = []; groups[k].push(r); });
 
     const markDone = (row: PesananRow) => {
-        updateRow(row.id, { di_produksi: true, di_warna: false, siap_kirim: false, di_kirim: false, metode_kirim: "" });
+        updateRow(row.id, { di_produksi: true, di_warna: false, siap_kirim: false, di_kirim: false, metode_kirim: "" }, true);
         addLog(row.id, "status_change", "pending", "di_produksi", "", user?.name || "");
         setFlash(row.id); setTimeout(() => setFlash(null), 1200);
     };
 
     const markAll = (opRows: PesananRow[]) => {
         opRows.forEach(r => {
-            updateRow(r.id, { di_produksi: true, di_warna: false, siap_kirim: false, di_kirim: false, metode_kirim: "" });
+            updateRow(r.id, { di_produksi: true, di_warna: false, siap_kirim: false, di_kirim: false, metode_kirim: "" }, true);
             addLog(r.id, "status_change", "pending", "di_produksi", "", user?.name || "");
         });
     };
@@ -205,20 +205,20 @@ function TabCekGudang() {
     filtered.forEach(r => { const k = r.po_label || "(Tanpa PO)"; if (!groups[k]) groups[k] = []; groups[k].push(r); });
 
     const markReady = (row: PesananRow) => {
-        updateRow(row.id, { siap_kirim: true, di_warna: true, di_kirim: false });
+        updateRow(row.id, { siap_kirim: true, di_warna: true, di_kirim: false }, true);
         addLog(row.id, "status_change", "di_produksi", "siap_kirim", "", user?.name || "");
         setFlash(row.id); setTimeout(() => setFlash(null), 1200);
     };
 
     const markAllReady = (opRows: PesananRow[]) => {
         opRows.forEach(r => {
-            updateRow(r.id, { siap_kirim: true, di_warna: true, di_kirim: false });
+            updateRow(r.id, { siap_kirim: true, di_warna: true, di_kirim: false }, true);
             addLog(r.id, "status_change", "di_produksi", "siap_kirim", "", user?.name || "");
         });
     };
 
     const saveNote = (row: PesananRow) => {
-        updateRow(row.id, { production_note: noteText });
+        updateRow(row.id, { production_note: noteText }, true);
         if (noteText) addLog(row.id, "note", "", "", noteText, user?.name || "");
         setEditingNote(null);
     };
@@ -306,7 +306,7 @@ function TabFollowUp() {
     const setMetode = (row: PesananRow, metode: string) => {
         if (!metode) return;
         const isPacking = metode.startsWith("packing_");
-        updateRow(row.id, { metode_kirim: metode, is_packing: isPacking });
+        updateRow(row.id, { metode_kirim: metode, is_packing: isPacking }, true);
         addLog(row.id, "metode_kirim", "", metode, "", user?.name || "");
         setFlash(row.id); setTimeout(() => setFlash(null), 1200);
     };
@@ -393,7 +393,7 @@ function TabPengiriman() {
         }
         const patch: Partial<PesananRow> = { di_kirim: true, shipped_at: new Date().toISOString() };
         if (eks) patch.ekspedisi = eks;
-        updateRow(row.id, patch);
+        updateRow(row.id, patch, true);
         addLog(row.id, "status_change", "siap_kirim", "di_kirim", eks ? `via ${eks}` : "", user?.name || "");
         setFlash(row.id); setTimeout(() => setFlash(null), 1200);
     };
@@ -409,7 +409,7 @@ function TabPengiriman() {
             const eks = getEkspedisiValue(r);
             const patch: Partial<PesananRow> = { di_kirim: true, shipped_at: new Date().toISOString() };
             if (eks) patch.ekspedisi = eks;
-            updateRow(r.id, patch);
+            updateRow(r.id, patch, true);
             addLog(r.id, "status_change", "siap_kirim", "di_kirim", eks ? `via ${eks}` : "", user?.name || "");
         });
     };
@@ -470,7 +470,7 @@ function TabPengiriman() {
                                                 <input
                                                     type="text"
                                                     value={getEkspedisiValue(row)}
-                                                    onChange={e => { setEkspedisiInput(row.id, e.target.value); updateRow(row.id, { ekspedisi: e.target.value }); }}
+                                                    onChange={e => { setEkspedisiInput(row.id, e.target.value); updateRow(row.id, { ekspedisi: e.target.value }, true); }}
                                                     placeholder="Tulis nama ekspedisi (JNE, SiCepat, Indah Cargo, dll)..."
                                                     style={{
                                                         width: "100%", padding: "8px 12px", borderRadius: 8,

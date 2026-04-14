@@ -57,7 +57,7 @@ export function isRowFilled(r: PesananRow): boolean {
 type Ctx = {
     rows: PesananRow[];
     loading: boolean;
-    updateRow: (id: number, patch: Partial<PesananRow>) => void;
+    updateRow: (id: number, patch: Partial<PesananRow>, autoFlush?: boolean) => void;
     flushRow: (id: number) => Promise<void>;
     flushAllRows: () => Promise<void>;
     addRows: (count?: number) => void;
@@ -260,9 +260,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
         if (timers.current[id]) {
             clearTimeout(timers.current[id]);
             delete timers.current[id];
-        }
-
-        savingRef.current[id] = true;
+        }        savingRef.current[id] = true;
         try {
             const cleanPatch: any = { ...finalPatch };
             const fieldsToClean = ["qty", "ukuran", "harga", "tanggal", "printed_at", "shipped_at"];
@@ -306,11 +304,13 @@ export function PesananProvider({ children }: { children: ReactNode }) {
 
                         if (Object.keys(currentInTemp).length > 0) {
                              pendingPatches.current[newRealId] = {
-                                 ...(pendingPatches.current[newRealId] || {}),
-                                 ...currentInTemp
+                                  ...(pendingPatches.current[newRealId] || {}),
+                                  ...currentInTemp
                              };
                         }
                         delete pendingPatches.current[id];
+                        // Update id to the new real ID for any subsequent flushes
+                        id = newRealId;
                     }
                 }
             }
@@ -321,8 +321,12 @@ export function PesananProvider({ children }: { children: ReactNode }) {
             }
         } finally {
             savingRef.current[id] = false;
+            // CHECK if more patches arrived during save
+            if (pendingPatches.current[id] && Object.keys(pendingPatches.current[id]).length > 0) {
+                 flushRow(id);
+            }
         }
-    }, []);
+    }, [setRows]););
 
     const flushAllRows = useCallback(async () => {
         const idsToFlush = Object.keys(pendingPatches.current).map(Number).filter(id => !isNaN(id));
@@ -392,7 +396,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
         }
     }, [setRows]);
 
-    const updateRow = useCallback((id: number, patch: Partial<PesananRow>) => {
+    const updateRow = useCallback((id: number, patch: Partial<PesananRow>, autoFlush = false) => {
         setRows((prev) =>
             prev.map((r) => (r.id === id ? { ...r, ...patch } : r))
         );
@@ -401,7 +405,15 @@ export function PesananProvider({ children }: { children: ReactNode }) {
             ...(pendingPatches.current[id] || {}),
             ...patch,
         };
-    }, []);
+
+        if (autoFlush) {
+            if (timers.current[id]) clearTimeout(timers.current[id]);
+            timers.current[id] = setTimeout(() => {
+                flushRow(id);
+                delete timers.current[id];
+            }, 1000); // 1s debounce
+        }
+    }, [flushRow]);
 
     // Menghapus total fungsi reset untuk keamanan data (instruksi Faisal 13/04/26)
 

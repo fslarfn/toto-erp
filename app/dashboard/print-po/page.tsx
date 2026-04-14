@@ -60,7 +60,7 @@ function TabPrintPO() {
 
     const tandaiDiproduksi = () => {
         if (selectedIds.length === 0) return;
-        selectedIds.forEach((id) => updateRow(id, { di_produksi: true }));
+        selectedIds.forEach((id) => updateRow(id, { di_produksi: true }, true));
         setMarked(true);
         setTimeout(() => setMarked(false), 2500);
     };
@@ -71,7 +71,7 @@ function TabPrintPO() {
         // Gunakan ISO String Lengkap agar setiap sesi cetak punya ID unik di riwayat
         const fullISO = new Date().toISOString(); 
         selectedIds.forEach((id) =>
-            updateRow(id, { printed_at: fullISO, po_label: operator || "PO" })
+            updateRow(id, { printed_at: fullISO, po_label: operator || "PO" }, true)
         );
         const now = new Date();
         const fmtDate = now.toLocaleDateString("id-ID", { day: "2-digit", month: "2-digit", year: "numeric" });
