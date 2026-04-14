@@ -311,6 +311,12 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                 const rowToInsert = { ...makeEmptyRow(0), ...cleanPatch };
                 delete (rowToInsert as any).id;
 
+                // Bersihkan field timestamp dari makeEmptyRow default ("") → null
+                // Supabase menolak string kosong untuk kolom bertipe timestamp
+                ["printed_at", "shipped_at"].forEach(f => {
+                    if ((rowToInsert as any)[f] === "") (rowToInsert as any)[f] = null;
+                });
+
                 const hasData = rowToInsert.tanggal || rowToInsert.customer || rowToInsert.deskripsi || rowToInsert.ukuran || rowToInsert.qty;
                 if (hasData) {
                     const rowWithSync = { ...rowToInsert, sync_id: String(id) };
@@ -390,6 +396,10 @@ export function PesananProvider({ children }: { children: ReactNode }) {
             } else {
                 const rowToInsert = { ...makeEmptyRow(0), ...cleanPatch };
                 delete (rowToInsert as any).id;
+                // Bersihkan field timestamp dari makeEmptyRow default ("") → null
+                ["printed_at", "shipped_at"].forEach(f => {
+                    if ((rowToInsert as any)[f] === "") (rowToInsert as any)[f] = null;
+                });
                 const hasData = rowToInsert.tanggal || rowToInsert.customer || rowToInsert.deskripsi || rowToInsert.ukuran || rowToInsert.qty;
                 if (hasData) {
                     inserts.push(rowToInsert);
