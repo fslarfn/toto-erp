@@ -37,19 +37,47 @@ function normSel(sel: Sel) {
 function InlineCell({ value, onChange, width, align = "left", mono = false }: {
     value: string; onChange: (v: string) => void; width: number; align?: "left" | "center"; mono?: boolean;
 }) {
-    const [focus, setFocus] = useState(false);
+    const [local, setLocal] = useState(value);
+    const [isFocused, setIsFocused] = useState(false);
+    const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Sinkronisasi prop value ke local state hanya jika tidak sedang fokus
+    useEffect(() => {
+        if (!isFocused) setLocal(value);
+    }, [value, isFocused]);
+
+    const handleChange = (v: string) => {
+        setLocal(v);
+        // Debounce reporting to parent
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        timeoutRef.current = setTimeout(() => {
+            if (v !== value) onChange(v);
+        }, 500);
+    };
+
+    const handleBlur = () => {
+        setIsFocused(false);
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        if (local !== value) onChange(local);
+    };
+
     return (
         <td style={{
             height: 26, width, minWidth: width, padding: 0, boxSizing: "border-box",
             borderRight: "1px solid #E6D5BE", borderBottom: "1px solid #E6D5BE",
-            background: focus ? "#fffbf0" : "inherit",
-            outline: focus ? "2px solid #A67B5B" : "none", outlineOffset: -2,
+            background: isFocused ? "#fffbf0" : "inherit",
+            outline: isFocused ? "2px solid #A67B5B" : "none", outlineOffset: -2,
         }}>
             <input
-                type="text" value={value}
-                onChange={(e) => onChange(e.target.value)}
-                onFocus={() => setFocus(true)}
-                onBlur={() => setFocus(false)}
+                type="text" value={local}
+                onChange={(e) => handleChange(e.target.value)}
+                onFocus={() => setIsFocused(true)}
+                onBlur={handleBlur}
+                onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                        (e.target as HTMLInputElement).blur();
+                    }
+                }}
                 style={{ width: "100%", height: "100%", border: "none", outline: "none", background: "transparent", padding: "2px 5px", fontSize: 11, fontFamily: mono ? "monospace" : "inherit", textAlign: align, color: "#3C2F2F", boxSizing: "border-box" }}
             />
         </td>

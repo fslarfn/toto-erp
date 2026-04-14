@@ -160,30 +160,30 @@ export function PesananProvider({ children }: { children: ReactNode }) {
 
                             setRows((prev) => {
                                 const row = newRow as Record<string, any>;
+                                const existingId = row.id as number;
+                                const localPatches = pendingPatches.current[existingId] || {};
+                                
                                 const mapped: Partial<PesananRow> = {};
                                 if ("id" in row) mapped.id = row.id;
-                                if ("tanggal" in row) mapped.tanggal = row.tanggal;
-                                if ("customer" in row) mapped.customer = row.customer;
-                                if ("deskripsi" in row) mapped.deskripsi = row.deskripsi;
-                                if ("ukuran" in row) mapped.ukuran = row.ukuran;
-                                if ("qty" in row) mapped.qty = row.qty;
-                                if ("harga" in row) mapped.harga = row.harga;
-                                if ("no_inv" in row) mapped.no_inv = row.no_inv;
-                                if ("no_sj" in row) mapped.no_sj = row.no_sj;
-                                if ("di_produksi" in row) mapped.di_produksi = !!row.di_produksi;
-                                if ("di_warna" in row) mapped.di_warna = !!row.di_warna;
-                                if ("siap_kirim" in row) mapped.siap_kirim = !!row.siap_kirim;
-                                if ("di_kirim" in row) mapped.di_kirim = !!row.di_kirim;
-                                if ("ekspedisi" in row) mapped.ekspedisi = row.ekspedisi;
-                                if ("color_marker" in row) mapped.color_marker = row.color_marker;
-                                if ("printed_at" in row) mapped.printed_at = row.printed_at;
-                                if ("po_label" in row) mapped.po_label = row.po_label;
-                                if ("is_packing" in row) mapped.is_packing = !!row.is_packing;
-                                if ("is_paid" in row) mapped.is_paid = !!row.is_paid;
-                                if ("production_note" in row) mapped.production_note = row.production_note;
-                                if ("metode_kirim" in row) mapped.metode_kirim = row.metode_kirim;
-                                if ("shipped_at" in row) mapped.shipped_at = row.shipped_at;
-                                if ("sync_id" in row) mapped.sync_id = row.sync_id;
+
+                                // Hanya update field jika tidak sedang diedit lokal
+                                const fields: (keyof PesananRow)[] = [
+                                    "tanggal", "customer", "deskripsi", "ukuran", "qty", "harga", 
+                                    "no_inv", "no_sj", "di_produksi", "di_warna", "siap_kirim", 
+                                    "di_kirim", "ekspedisi", "color_marker", "printed_at", 
+                                    "po_label", "is_packing", "is_paid", "production_note", 
+                                    "metode_kirim", "shipped_at", "sync_id"
+                                ];
+
+                                fields.forEach(f => {
+                                    if (f in row && !(f in localPatches)) {
+                                        if (["di_produksi", "di_warna", "siap_kirim", "di_kirim", "is_packing", "is_paid"].includes(f)) {
+                                            (mapped as any)[f] = !!row[f];
+                                        } else {
+                                            (mapped as any)[f] = row[f];
+                                        }
+                                    }
+                                });
 
                                 const exists = prev.find((r) => r.id === mapped.id);
                                 let newList: PesananRow[];
