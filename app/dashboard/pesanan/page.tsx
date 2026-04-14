@@ -23,7 +23,7 @@ function normSel(sel: Sel) {
 const TableRow = memo(function TableRow({
     row, ri, active, selBounds, isFilling, fillEndRow,
     onMouseDown, onMouseEnter, onFocus, onChange, onPaste,
-    onFillHandleMouseDown, inputRefSetter,
+    onFillHandleMouseDown, inputRefSetter, onFlushRow,
     viewMode, inputStartIdx, browsePage,
 }: {
     row: PesananRow; ri: number;
@@ -36,6 +36,7 @@ const TableRow = memo(function TableRow({
     onPaste: (e: React.ClipboardEvent, r: number, c: number) => void;
     onFillHandleMouseDown: (e: React.MouseEvent) => void;
     inputRefSetter: (ri: number, ci: number, el: HTMLInputElement | null) => void;
+    onFlushRow: (id: number) => void;
     viewMode: string; inputStartIdx: number | null; browsePage: number;
 }) {
     const isFilled = row.customer || row.deskripsi;
@@ -78,6 +79,7 @@ const TableRow = memo(function TableRow({
                             onChange={(e) => onChange(row.id, key, e.target.value)}
                             onPaste={(e) => onPaste(e, ri, ci)}
                             onFocus={() => onFocus(ri, ci)}
+                            onBlur={() => onFlushRow(row.id)}
                             placeholder={key === "customer" ? "Nama customer..." : key === "deskripsi" ? "Deskripsi pesanan..." : key === "ukuran" ? "cth: 1,9" : key === "qty" ? "0" : ""}
                             style={{
                                 width: "100%", height: "100%", border: "none", outline: "none",
@@ -106,7 +108,8 @@ const TableRow = memo(function TableRow({
    MAIN PAGE
 ================================================================ */
 export default function PesananPage() {
-    const { rows, loading, updateRow, addRows, flushAllRows } = usePesanan();
+    const { rows, loading, updateRow, addRows, flushAllRows, flushRow } = usePesanan();
+    const [savedFlash, setSavedFlash] = useState(false);
     const [active, setActive] = useState<Pos | null>(null);
     const [sel, setSel] = useState<Sel | null>(null);
     const [isDragging, setIsDragging] = useState(false);
@@ -308,6 +311,7 @@ export default function PesananPage() {
         setIsDragging(false);
         if (isFilling && fillEndRow !== null && sel) {
             const b = normSel(sel);
+            const filledIds: number[] = [];
             for (let ri = b.r2 + 1; ri <= fillEndRow; ri++) {
                 const patch: Partial<PesananRow> = {};
                 for (let ci = b.c1; ci <= b.c2; ci++) {
@@ -315,12 +319,17 @@ export default function PesananPage() {
                     patch[key] = displayRows[b.r1][key] as string;
                 }
                 updateRow(displayRows[ri].id, patch);
+                filledIds.push(displayRows[ri].id);
             }
+            // Auto-save semua baris yang terkena fill-down
+            filledIds.forEach(id => flushRow(id));
+            setSavedFlash(true);
+            setTimeout(() => setSavedFlash(false), 2000);
             setSel((old) => old ? { start: old.start, end: { r: fillEndRow, c: sel ? normSel(sel).c2 : 0 } } : null);
             setFillEndRow(null);
         }
         setIsFilling(false);
-    }, [isFilling, fillEndRow, sel, displayRows, updateRow]);
+    }, [isFilling, fillEndRow, sel, displayRows, updateRow, flushRow]);
 
     useEffect(() => {
         window.addEventListener("mouseup", onMouseUp);
@@ -337,20 +346,36 @@ export default function PesananPage() {
     const handlePaste = useCallback((e: React.ClipboardEvent, startR: number, startC: number) => {
         e.preventDefault();
         const lines = e.clipboardData.getData("text").split(/\r?\n/).filter(Boolean);
+        const affectedIds = new Set<number>();
         lines.forEach((line, ri) => {
             line.split("\t").forEach((val, ci) => {
                 const tr = startR + ri, tc = startC + ci;
                 if (tr < displayRows.length && tc < 5) {
                     updateRow(displayRows[tr].id, { [COL_KEYS[tc]]: val } as Partial<PesananRow>);
+                    affectedIds.add(displayRows[tr].id);
                 }
             });
         });
-    }, [displayRows, updateRow]);
+        // Auto-save semua baris yang terkena paste
+        affectedIds.forEach(id => flushRow(id));
+        if (affectedIds.size > 0) {
+            setSavedFlash(true);
+            setTimeout(() => setSavedFlash(false), 2000);
+        }
+    }, [displayRows, updateRow, flushRow]);
 
-    /* ── Change handler ────────────────────────────────────── */
+    /* ── Change handler + Flush callback ───────────────────── */
     const handleChange = useCallback((id: number, key: ColKey, val: string) => {
-        updateRow(id, { [key]: val } as Partial<PesananRow>);
+        // autoFlush=true → debounce 1s dari store, save otomatis saat berhenti mengetik
+        updateRow(id, { [key]: val } as Partial<PesananRow>, true);
     }, [updateRow]);
+
+    const handleFlushRow = useCallback((id: number) => {
+        // Dipanggil saat blur (pindah cell) — save LANGSUNG tanpa tunggu debounce
+        flushRow(id);
+        setSavedFlash(true);
+        setTimeout(() => setSavedFlash(false), 2000);
+    }, [flushRow]);
 
     /* ── Focus handler ─────────────────────────────────────── */
 
@@ -420,32 +445,34 @@ export default function PesananPage() {
                 </div>
 
                 <span style={{ fontSize: 10, color: "#C5A882", marginLeft: 4 }}>↑↓←→ navigasi · Shift+drag seleksi · Ctrl+C salin · Ctrl+V tempel · drag 🟦 fill bawah</span>
-                <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+                    {/* Indikator auto-save */}
+                    {savedFlash && (
+                        <span style={{
+                            fontSize: 11, color: "#15803D", fontWeight: 600,
+                            background: "#DCFCE7", padding: "3px 10px", borderRadius: 99,
+                            border: "1px solid #86EFAC", transition: "opacity 0.3s",
+                        }}>✓ Tersimpan</span>
+                    )}
+                    {/* Tombol simpan semua sebagai fallback darurat */}
                     <button onClick={async () => {
                         const btn = document.getElementById('save-all-btn');
-                        if (btn) { 
-                            btn.innerText = "⏳ Menyimpan..."; 
-                            (btn as any).disabled = true; 
-                        }
-                        
+                        if (btn) { btn.innerText = "⏳ Menyimpan..."; (btn as any).disabled = true; }
                         try {
                             await flushAllRows();
-                            alert("✅ Data Berhasil Disimpan ke Database!");
+                            setSavedFlash(true);
+                            setTimeout(() => setSavedFlash(false), 2000);
                         } catch (err) {
                             alert("❌ Gagal menyimpan beberapa data. Silakan coba lagi.");
                         } finally {
-                            if (btn) { 
-                                btn.innerText = "💾 SIMPAN DATA"; 
-                                (btn as any).disabled = false; 
-                            }
+                            if (btn) { btn.innerText = "💾 SIMPAN DATA"; (btn as any).disabled = false; }
                         }
                     }}
                         id="save-all-btn"
-                        style={{ 
-                            border: "none", borderRadius: 6, padding: "6px 20px", fontSize: 13, 
-                            background: "#15803D", color: "white", cursor: "pointer", 
+                        style={{
+                            border: "none", borderRadius: 6, padding: "6px 16px", fontSize: 12,
+                            background: "#15803D", color: "white", cursor: "pointer",
                             fontWeight: 700, boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-                            transition: "all 0.2s"
                         }}>
                         💾 SIMPAN DATA
                     </button>
@@ -492,6 +519,7 @@ export default function PesananPage() {
                                 onPaste={handlePaste}
                                 onFillHandleMouseDown={onFillHandleMouseDown}
                                 inputRefSetter={inputRefSetter}
+                                onFlushRow={handleFlushRow}
                                 viewMode={viewMode}
                                 inputStartIdx={inputStartIdx}
                                 browsePage={browsePage}
