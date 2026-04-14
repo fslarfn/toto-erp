@@ -326,7 +326,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                  flushRow(id);
             }
         }
-    }, [setRows]););
+    }, [setRows]);
 
     const flushAllRows = useCallback(async () => {
         const idsToFlush = Object.keys(pendingPatches.current).map(Number).filter(id => !isNaN(id));
