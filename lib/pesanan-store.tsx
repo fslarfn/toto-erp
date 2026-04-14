@@ -220,7 +220,14 @@ export function PesananProvider({ children }: { children: ReactNode }) {
 
                         return newList
                             .filter((v, i, a) => a.findIndex(t => t.id === v.id) === i)
-                            .sort((a, b) => a.id - b.id);
+                            .sort((a, b) => {
+                                // Pastikan baris placeholder (ID besar) tetap di bawah
+                                const isTempA = a.id >= 1000000000;
+                                const isTempB = b.id >= 1000000000;
+                                if (isTempA && !isTempB) return 1;
+                                if (!isTempA && isTempB) return -1;
+                                return a.id - b.id;
+                            });
                     });
                 }
             )
@@ -319,6 +326,11 @@ export function PesananProvider({ children }: { children: ReactNode }) {
 
                 const hasData = rowToInsert.tanggal || rowToInsert.customer || rowToInsert.deskripsi || rowToInsert.ukuran || rowToInsert.qty;
                 if (hasData) {
+                    // Fallback: pastikan tanggal selalu terisi sebelum disimpan ke DB.
+                    // Normalnya sudah diisi oleh handleChange di page.tsx, ini sebagai safety net.
+                    if (!rowToInsert.tanggal) {
+                        rowToInsert.tanggal = new Date().toISOString().split("T")[0];
+                    }
                     const rowWithSync = { ...rowToInsert, sync_id: String(id) };
                     const { data, error } = await supabase.from("pesanan_rows").insert(rowWithSync).select("id").single();
                     if (error) {
@@ -456,7 +468,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
             timers.current[id] = setTimeout(() => {
                 flushRow(id);
                 delete timers.current[id];
-            }, 1000); // 1s debounce
+            }, 300); // Super fast debounce (300ms)
         }
     }, [flushRow]);
 

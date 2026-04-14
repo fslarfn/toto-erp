@@ -23,7 +23,7 @@ function normSel(sel: Sel) {
 const TableRow = memo(function TableRow({
     row, ri, active, selBounds, isFilling, fillEndRow,
     onMouseDown, onMouseEnter, onFocus, onChange, onPaste,
-    onFillHandleMouseDown, inputRefSetter, onFlushRow,
+    onFillHandleMouseDown, inputRefSetter, onFlushRow, onValidateAndCorrect,
     viewMode, inputStartIdx, browsePage,
 }: {
     row: PesananRow; ri: number;
@@ -37,6 +37,7 @@ const TableRow = memo(function TableRow({
     onFillHandleMouseDown: (e: React.MouseEvent) => void;
     inputRefSetter: (ri: number, ci: number, el: HTMLInputElement | null) => void;
     onFlushRow: (id: number) => void;
+    onValidateAndCorrect: (id: number, key: ColKey, val: string) => void;
     viewMode: string; inputStartIdx: number | null; browsePage: number;
 }) {
     const isFilled = row.customer || row.deskripsi;
@@ -79,7 +80,10 @@ const TableRow = memo(function TableRow({
                             onChange={(e) => onChange(row.id, key, e.target.value)}
                             onPaste={(e) => onPaste(e, ri, ci)}
                             onFocus={() => onFocus(ri, ci)}
-                            onBlur={() => onFlushRow(row.id)}
+                            onBlur={() => {
+                                onValidateAndCorrect(row.id, key, row[key] as string);
+                                onFlushRow(row.id);
+                            }}
                             placeholder={key === "customer" ? "Nama customer..." : key === "deskripsi" ? "Deskripsi pesanan..." : key === "ukuran" ? "cth: 1,9" : key === "qty" ? "0" : ""}
                             style={{
                                 width: "100%", height: "100%", border: "none", outline: "none",
@@ -110,6 +114,7 @@ const TableRow = memo(function TableRow({
 export default function PesananPage() {
     const { rows, loading, updateRow, addRows, flushAllRows, flushRow } = usePesanan();
     const [savedFlash, setSavedFlash] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
     const [active, setActive] = useState<Pos | null>(null);
     const [sel, setSel] = useState<Sel | null>(null);
     const [isDragging, setIsDragging] = useState(false);
@@ -167,17 +172,20 @@ export default function PesananPage() {
     useEffect(() => {
         if (!loading && viewMode === "input") {
             const targetStart = Math.max(0, lastFilledIdx + 1 - PAGE_SIZE);
-            
+
             // Initial load
             if (inputStartIdx === null) {
                 setInputStartIdx(targetStart);
-            } 
-            // Follow data if lastFilledIdx moves past current window
-            else if (lastFilledIdx >= (inputStartIdx + PAGE_SIZE)) {
+            }
+            // Follow data if lastFilledIdx moves past current window,
+            // BUT only when user is not actively editing a cell.
+            // Shifting the window mid-edit would invalidate active.r (row index),
+            // causing focus to jump to the wrong row.
+            else if (lastFilledIdx >= (inputStartIdx + PAGE_SIZE) && active === null) {
                 setInputStartIdx(targetStart);
             }
         }
-    }, [loading, lastFilledIdx, viewMode, inputStartIdx]);
+    }, [loading, lastFilledIdx, viewMode, inputStartIdx, active]);
 
     // Ensure enough empty rows exist
     useEffect(() => {
@@ -199,8 +207,14 @@ export default function PesananPage() {
         }
     }, [viewMode, inputStartIdx, browsePage, filteredRows]);
 
-    const displayFilledCount = useMemo(() =>
-        displayRows.filter(r => isRowFilled(r)).length, [displayRows]);
+    // Hanya hitung baris yang sudah tersimpan ke DB (id < 1000000000).
+    // Baris temp yang sedang diketik tidak ikut dihitung agar counter tidak berubah saat mengetik.
+    const displaySavedCount = useMemo(() =>
+        displayRows.filter(r => isRowFilled(r) && r.id < 1000000000).length, [displayRows]);
+
+    // Baris yang sudah diisi user tapi belum tersimpan (masih temp)
+    const displayUnsavedCount = useMemo(() =>
+        displayRows.filter(r => isRowFilled(r) && r.id >= 1000000000).length, [displayRows]);
 
     /* ── Navigation helpers ─────────────────────────────────── */
     const goToInput = useCallback(() => {
@@ -366,9 +380,19 @@ export default function PesananPage() {
 
     /* ── Change handler + Flush callback ───────────────────── */
     const handleChange = useCallback((id: number, key: ColKey, val: string) => {
-        // autoFlush=true → debounce 1s dari store, save otomatis saat berhenti mengetik
-        updateRow(id, { [key]: val } as Partial<PesananRow>, true);
-    }, [updateRow]);
+        const patch: Partial<PesananRow> = { [key]: val };
+
+        // Auto-fill tanggal hari ini saat user pertama kali mengisi baris kosong (temp row).
+        // Cek di rows langsung agar tidak perlu prop tambahan ke TableRow.
+        if (key !== "tanggal" && id >= 1000000000) {
+            const currentRow = rows.find(r => r.id === id);
+            if (currentRow && !currentRow.tanggal) {
+                patch.tanggal = new Date().toISOString().split("T")[0];
+            }
+        }
+
+        updateRow(id, patch, true);
+    }, [updateRow, rows]);
 
     const handleFlushRow = useCallback((id: number) => {
         // Dipanggil saat blur (pindah cell) — save LANGSUNG tanpa tunggu debounce
@@ -376,6 +400,23 @@ export default function PesananPage() {
         setSavedFlash(true);
         setTimeout(() => setSavedFlash(false), 2000);
     }, [flushRow]);
+
+    /* ── Validasi tipe data saat blur ──────────────────────── */
+    const handleValidateAndCorrect = useCallback((id: number, key: ColKey, val: string) => {
+        if (key === "qty") {
+            // Qty harus angka dan tidak boleh negatif
+            const num = parseFloat(val.replace(",", "."));
+            if (val !== "" && (isNaN(num) || num < 0)) {
+                updateRow(id, { qty: "0" }, false);
+            }
+        } else if (key === "ukuran") {
+            // Ukuran harus angka valid (boleh desimal dengan titik atau koma)
+            const num = parseFloat(val.replace(",", "."));
+            if (val !== "" && isNaN(num)) {
+                updateRow(id, { ukuran: "" }, false);
+            }
+        }
+    }, [updateRow]);
 
     /* ── Focus handler ─────────────────────────────────────── */
 
@@ -395,7 +436,10 @@ export default function PesananPage() {
         XLSX.writeFile(wb, `pesanan-${new Date().toISOString().slice(0, 10)}.xlsx`);
     };
 
-    const selBounds = sel ? normSel(sel) : null;
+    // Memoize selBounds agar referensinya stabil antar render.
+    // Tanpa ini, normSel() menghasilkan object baru setiap render sehingga
+    // React.memo pada TableRow tidak efektif dan semua baris re-render setiap keystroke.
+    const selBounds = useMemo(() => sel ? normSel(sel) : null, [sel]);
 
     /* ── Styles ────────────────────────────────────────────── */
     const thStyle: React.CSSProperties = {
@@ -426,7 +470,7 @@ export default function PesananPage() {
                     <span style={{ fontSize: 15, fontWeight: 700, color: "#5C4033" }}>Input Pesanan</span>
                     <span style={{ fontSize: 11, color: "#B89678", marginLeft: 10 }}>
                         {viewMode === "input"
-                            ? `${displayFilledCount} data + ${displayRows.length - displayFilledCount} kosong · Total: ${filledCount} pesanan`
+                            ? `${displaySavedCount} tersimpan${displayUnsavedCount > 0 ? ` · ${displayUnsavedCount} belum disimpan` : ""} · ${filledCount} pesanan total`
                             : `Hal. ${browsePage}/${totalBrowsePages} · ${filledCount} pesanan total`
                         }
                     </span>
@@ -456,25 +500,26 @@ export default function PesananPage() {
                     )}
                     {/* Tombol simpan semua sebagai fallback darurat */}
                     <button onClick={async () => {
-                        const btn = document.getElementById('save-all-btn');
-                        if (btn) { btn.innerText = "⏳ Menyimpan..."; (btn as any).disabled = true; }
+                        setIsSaving(true);
                         try {
                             await flushAllRows();
                             setSavedFlash(true);
-                            setTimeout(() => setSavedFlash(false), 2000);
+                            setTimeout(() => setSavedFlash(false), 3000);
                         } catch (err) {
                             alert("❌ Gagal menyimpan beberapa data. Silakan coba lagi.");
                         } finally {
-                            if (btn) { btn.innerText = "💾 SIMPAN DATA"; (btn as any).disabled = false; }
+                            setIsSaving(false);
                         }
                     }}
-                        id="save-all-btn"
+                        disabled={isSaving}
                         style={{
                             border: "none", borderRadius: 6, padding: "6px 16px", fontSize: 12,
-                            background: "#15803D", color: "white", cursor: "pointer",
+                            background: isSaving ? "#166534" : "#15803D", color: "white",
+                            cursor: isSaving ? "not-allowed" : "pointer",
                             fontWeight: 700, boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                            opacity: isSaving ? 0.8 : 1, minWidth: 130,
                         }}>
-                        💾 SIMPAN DATA
+                        {isSaving ? "⏳ Menyimpan..." : "💾 SIMPAN DATA"}
                     </button>
                     <button onClick={exportExcel}
                         style={{ border: "1px solid #D1BFA3", borderRadius: 5, padding: "4px 14px", fontSize: 12, background: "#F5EBDD", color: "#5C4033", cursor: "pointer", fontWeight: 600 }}>
@@ -505,7 +550,7 @@ export default function PesananPage() {
                     <tbody>
                         {displayRows.map((row, ri) => (
                             <TableRow
-                                key={row.id}
+                                key={row.sync_id || row.id}
                                 row={row}
                                 ri={ri}
                                 active={active}
@@ -520,6 +565,7 @@ export default function PesananPage() {
                                 onFillHandleMouseDown={onFillHandleMouseDown}
                                 inputRefSetter={inputRefSetter}
                                 onFlushRow={handleFlushRow}
+                                onValidateAndCorrect={handleValidateAndCorrect}
                                 viewMode={viewMode}
                                 inputStartIdx={inputStartIdx}
                                 browsePage={browsePage}
