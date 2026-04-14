@@ -75,6 +75,9 @@ export function PesananProvider({ children }: { children: ReactNode }) {
     const timers = useRef<Record<number, NodeJS.Timeout>>({});
     const pendingPatches = useRef<Record<number, Partial<PesananRow>>>({});
     const savingRef = useRef<Record<number, boolean>>({});
+    // Menyimpan field mana yang sedang dalam proses save (dalam penerbangan ke DB)
+    // Melindungi field tersebut dari overwrite oleh Realtime
+    const savingKeys = useRef<Record<number, Set<string>>>({});
 
     // Load from Supabase on mount
     useEffect(() => {
@@ -158,67 +161,67 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                 (payload) => {
                     const { eventType, new: newRow, old: oldRow } = payload;
 
-                            setRows((prev) => {
-                                const row = newRow as Record<string, any>;
-                                const existingId = row.id as number;
-                                const localPatches = pendingPatches.current[existingId] || {};
-                                
-                                const mapped: Partial<PesananRow> = {};
-                                if ("id" in row) mapped.id = row.id;
+                    // Hanya proses INSERT dan UPDATE — abaikan DELETE
+                    if (eventType === "DELETE") return;
+                    if (!newRow || typeof (newRow as any).id !== "number") return;
 
-                                // Hanya update field jika tidak sedang diedit lokal
-                                const fields: (keyof PesananRow)[] = [
-                                    "tanggal", "customer", "deskripsi", "ukuran", "qty", "harga", 
-                                    "no_inv", "no_sj", "di_produksi", "di_warna", "siap_kirim", 
-                                    "di_kirim", "ekspedisi", "color_marker", "printed_at", 
-                                    "po_label", "is_packing", "is_paid", "production_note", 
-                                    "metode_kirim", "shipped_at", "sync_id"
-                                ];
+                    setRows((prev) => {
+                        const row = newRow as Record<string, any>;
+                        const existingId = row.id as number;
 
-                                fields.forEach(f => {
-                                    if (f in row && !(f in localPatches)) {
-                                        if (["di_produksi", "di_warna", "siap_kirim", "di_kirim", "is_packing", "is_paid"].includes(f)) {
-                                            (mapped as any)[f] = !!row[f];
-                                        } else {
-                                            (mapped as any)[f] = row[f];
-                                        }
-                                    }
-                                });
+                        // Field yang dilindungi = pending (belum dikirim) ATAU sedang dikirim ke DB
+                        const localPatches = pendingPatches.current[existingId] || {};
+                        const inFlightKeys = savingKeys.current[existingId] || new Set<string>();
 
-                                const exists = prev.find((r) => r.id === mapped.id);
-                                let newList: PesananRow[];
-                                
-                                if (exists) {
-                                    newList = prev.map((r) => (r.id === mapped.id ? { ...r, ...mapped } : r));
-                                } else {
-                                    // Cek apakah ini data yang barusan kita input (mencocokkan konten di placeholder)
-                                    // 1. Cek berdasarkan sync_id (paling akurat)
-                                    let placeholderIdx = prev.findIndex(r => r.id >= 1000000000 && r.sync_id === mapped.sync_id);
-                                    
-                                    // 2. Fallback ke heuristic nama jika sync_id kosong (untuk data lama)
-                                    if (placeholderIdx === -1 && !mapped.sync_id) {
-                                        placeholderIdx = prev.findIndex(r => 
-                                            r.id >= 1000000000 && 
-                                            (r.customer === mapped.customer && r.deskripsi === mapped.deskripsi)
-                                        );
-                                    }
+                        const mapped: Partial<PesananRow> = {};
+                        if ("id" in row) mapped.id = row.id;
 
-                                    if (placeholderIdx !== -1) {
-                                        // Ganti placeholder tersebut dengan data asli dari DB
-                                        newList = [...prev];
-                                        newList[placeholderIdx] = { ...makeEmptyRow(0), ...mapped } as PesananRow;
-                                    } else {
-                                        // Memang data baru dari orang lain
-                                        const newFullRow = { ...makeEmptyRow(0), ...mapped } as PesananRow;
-                                        newList = [...prev, newFullRow];
-                                    }
-                                }
+                        const boolFields = new Set(["di_produksi", "di_warna", "siap_kirim", "di_kirim", "is_packing", "is_paid"]);
+                        const allFields: (keyof PesananRow)[] = [
+                            "tanggal", "customer", "deskripsi", "ukuran", "qty", "harga",
+                            "no_inv", "no_sj", "di_produksi", "di_warna", "siap_kirim",
+                            "di_kirim", "ekspedisi", "color_marker", "printed_at",
+                            "po_label", "is_packing", "is_paid", "production_note",
+                            "metode_kirim", "shipped_at", "sync_id"
+                        ];
 
-                                // Pengurutan: Data database (ID kecil) di atas, Data baru (ID > 1M) tetap di bawah
-                                return newList
-                                    .filter((v, i, a) => a.findIndex(t => t.id === v.id) === i)
-                                    .sort((a, b) => a.id - b.id);
-                            });
+                        allFields.forEach(f => {
+                            // Skip jika field sedang pending ATAU sedang dalam proses save
+                            if (f in localPatches || inFlightKeys.has(f)) return;
+                            if (f in row) {
+                                (mapped as any)[f] = boolFields.has(f) ? !!row[f] : row[f];
+                            }
+                        });
+
+                        const exists = prev.find((r) => r.id === mapped.id);
+                        let newList: PesananRow[];
+
+                        if (exists) {
+                            newList = prev.map((r) => (r.id === mapped.id ? { ...r, ...mapped } : r));
+                        } else {
+                            // Cek apakah ini data yang barusan kita input (mencocokkan sync_id)
+                            let placeholderIdx = prev.findIndex(r => r.id >= 1000000000 && r.sync_id === mapped.sync_id);
+
+                            if (placeholderIdx === -1 && !mapped.sync_id) {
+                                placeholderIdx = prev.findIndex(r =>
+                                    r.id >= 1000000000 &&
+                                    (r.customer === mapped.customer && r.deskripsi === mapped.deskripsi)
+                                );
+                            }
+
+                            if (placeholderIdx !== -1) {
+                                newList = [...prev];
+                                newList[placeholderIdx] = { ...makeEmptyRow(0), ...mapped } as PesananRow;
+                            } else {
+                                const newFullRow = { ...makeEmptyRow(0), ...mapped } as PesananRow;
+                                newList = [...prev, newFullRow];
+                            }
+                        }
+
+                        return newList
+                            .filter((v, i, a) => a.findIndex(t => t.id === v.id) === i)
+                            .sort((a, b) => a.id - b.id);
+                    });
                 }
             )
             .on("system", { event: "*" }, (payload) => console.log("Realtime System Event:", payload))
@@ -246,7 +249,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
 
 
     const flushRow = useCallback(async (id: number) => {
-        // Jika sedang dalam proses save, set timer ulang untuk retry
+        // Jika sedang dalam proses save, jadwalkan retry
         if (savingRef.current[id]) {
             if (timers.current[id]) clearTimeout(timers.current[id]);
             timers.current[id] = setTimeout(() => {
@@ -259,34 +262,44 @@ export function PesananProvider({ children }: { children: ReactNode }) {
         const patch = pendingPatches.current[id];
         if (!patch || Object.keys(patch).length === 0) return;
 
-        // Ambil snapshot patch saat ini dan hapus dari pending SEBELUM async
+        // Snapshot key mana saja yang akan disimpan
         const finalPatch = { ...patch };
-        delete pendingPatches.current[id];
+        const keysToSave = Object.keys(finalPatch) as (keyof PesananRow)[];
+
+        // HAPUS hanya key yang akan disimpan dari pending (bukan hapus semua)
+        // Sehingga key BARU yang masuk selama async tidak ikut terhapus
+        keysToSave.forEach(k => {
+            delete (pendingPatches.current[id] as any)?.[k];
+        });
+        if (pendingPatches.current[id] && Object.keys(pendingPatches.current[id]).length === 0) {
+            delete pendingPatches.current[id];
+        }
 
         if (timers.current[id]) {
             clearTimeout(timers.current[id]);
             delete timers.current[id];
         }
 
+        // Tandai key ini sebagai "sedang dalam penerbangan" agar Realtime tidak menimpanya
+        if (!savingKeys.current[id]) savingKeys.current[id] = new Set();
+        keysToSave.forEach(k => savingKeys.current[id].add(k));
+
         savingRef.current[id] = true;
-        let resolvedId = id; // Track ID asli (mungkin berubah setelah insert)
+        let resolvedId = id;
         try {
             const cleanPatch: any = { ...finalPatch };
             const fieldsToClean = ["qty", "ukuran", "harga", "tanggal", "printed_at", "shipped_at"];
             fieldsToClean.forEach(f => {
-                if (cleanPatch[f] === "" || cleanPatch[f] === undefined) {
-                    cleanPatch[f] = null;
-                }
+                if (cleanPatch[f] === "" || cleanPatch[f] === undefined) cleanPatch[f] = null;
             });
 
             const isTempId = id >= 1000000000;
 
             if (!isTempId) {
-                // Update baris yang sudah ada di DB
                 const { error } = await supabase.from("pesanan_rows").update(cleanPatch).eq("id", id);
                 if (error) {
                     // Kembalikan patch ke pending jika gagal
-                    pendingPatches.current[id] = { ...finalPatch, ...(pendingPatches.current[id] || {}) };
+                    pendingPatches.current[id] = { ...(pendingPatches.current[id] || {}), ...finalPatch };
                     throw error;
                 }
             } else {
@@ -299,7 +312,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                     const rowWithSync = { ...rowToInsert, sync_id: String(id) };
                     const { data, error } = await supabase.from("pesanan_rows").insert(rowWithSync).select("id").single();
                     if (error) {
-                        pendingPatches.current[id] = { ...finalPatch, ...(pendingPatches.current[id] || {}) };
+                        pendingPatches.current[id] = { ...(pendingPatches.current[id] || {}), ...finalPatch };
                         throw error;
                     }
 
@@ -308,14 +321,20 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                         resolvedId = newRealId;
                         setRows(prev => prev.map(r => r.id === id ? { ...r, id: newRealId } : r));
 
-                        // Pindahkan sisa patches yang mungkin masuk saat insert berlangsung
+                        // Pindahkan sisa patches yang masuk saat insert berlangsung ke ID baru
                         const leftovers = pendingPatches.current[id];
                         if (leftovers && Object.keys(leftovers).length > 0) {
                             pendingPatches.current[newRealId] = {
                                 ...(pendingPatches.current[newRealId] || {}),
                                 ...leftovers,
                             };
-                            delete pendingPatches.current[id];
+                        }
+                        delete pendingPatches.current[id];
+
+                        // Pindahkan savingKeys ke ID baru
+                        if (savingKeys.current[id]) {
+                            savingKeys.current[newRealId] = savingKeys.current[id];
+                            delete savingKeys.current[id];
                         }
                     }
                 }
@@ -326,8 +345,12 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                 alert("Simpan Gagal: " + (err.message || "Masalah Database"));
             }
         } finally {
+            // Hapus savingKeys setelah selesai (berhasil atau gagal)
+            keysToSave.forEach(k => savingKeys.current[resolvedId]?.delete(k));
+            if (savingKeys.current[resolvedId]?.size === 0) delete savingKeys.current[resolvedId];
+
             savingRef.current[resolvedId] = false;
-            // Jika ada patch baru masuk selama proses save, flush ulang
+            // Jika ada patch baru yang masuk selama proses save, flush ulang
             if (pendingPatches.current[resolvedId] && Object.keys(pendingPatches.current[resolvedId]).length > 0) {
                 setTimeout(() => flushRow(resolvedId), 100);
             }
