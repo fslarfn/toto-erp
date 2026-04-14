@@ -55,7 +55,8 @@ function InlineCell({ value, onChange, width, align = "left", mono = false }: {
         // Debounce kirim ke parent — selalu pakai ref supaya tidak stale
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
         timeoutRef.current = setTimeout(() => {
-            onChange(latestLocalRef.current);
+            // Hanya kirim jika nilai benar-benar berubah dari nilai asli
+            if (latestLocalRef.current !== value) onChange(latestLocalRef.current);
         }, 500);
     };
 
@@ -65,8 +66,9 @@ function InlineCell({ value, onChange, width, align = "left", mono = false }: {
             clearTimeout(timeoutRef.current);
             timeoutRef.current = null;
         }
-        // Langsung kirim saat blur (tidak menunggu debounce)
-        onChange(latestLocalRef.current);
+        // HANYA kirim ke DB jika nilai berbeda dari nilai asli
+        // Mencegah pengetikan null/kosong saat user hanya klik tanpa mengetik
+        if (latestLocalRef.current !== value) onChange(latestLocalRef.current);
     };
 
     return (

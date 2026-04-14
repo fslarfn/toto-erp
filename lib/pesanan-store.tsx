@@ -288,9 +288,13 @@ export function PesananProvider({ children }: { children: ReactNode }) {
         let resolvedId = id;
         try {
             const cleanPatch: any = { ...finalPatch };
+            // Konversi empty string ke null HANYA untuk field yang MEMANG ADA di patch
+            // Jangan tambahkan field baru dengan nilai null (itu akan menimpa data DB yang sudah ada!)
             const fieldsToClean = ["qty", "ukuran", "harga", "tanggal", "printed_at", "shipped_at"];
             fieldsToClean.forEach(f => {
-                if (cleanPatch[f] === "" || cleanPatch[f] === undefined) cleanPatch[f] = null;
+                if (f in cleanPatch && (cleanPatch[f] === "" || cleanPatch[f] === undefined)) {
+                    cleanPatch[f] = null;
+                }
             });
 
             const isTempId = id >= 1000000000;
@@ -373,9 +377,10 @@ export function PesananProvider({ children }: { children: ReactNode }) {
             if (Object.keys(patch).length === 0) continue;
 
             const cleanPatch: any = { ...patch };
+            // HANYA konversi field yang ada di patch, jangan tambahkan null untuk field lain
             const fieldsToClean = ["qty", "ukuran", "harga", "tanggal", "printed_at", "shipped_at"];
             fieldsToClean.forEach(f => {
-                if (cleanPatch[f] === "" || cleanPatch[f] === undefined) {
+                if (f in cleanPatch && (cleanPatch[f] === "" || cleanPatch[f] === undefined)) {
                     cleanPatch[f] = null;
                 }
             });
