@@ -246,21 +246,30 @@ export function PesananProvider({ children }: { children: ReactNode }) {
 
 
     const flushRow = useCallback(async (id: number) => {
-        if (savingRef.current[id]) return;
-        
-        const finalPatch = { ...pendingPatches.current[id] };
-        if (Object.keys(finalPatch).length === 0) {
-            if (timers.current[id]) {
-                clearTimeout(timers.current[id]);
+        // Jika sedang dalam proses save, set timer ulang untuk retry
+        if (savingRef.current[id]) {
+            if (timers.current[id]) clearTimeout(timers.current[id]);
+            timers.current[id] = setTimeout(() => {
                 delete timers.current[id];
-            }
+                flushRow(id);
+            }, 500);
             return;
         }
+
+        const patch = pendingPatches.current[id];
+        if (!patch || Object.keys(patch).length === 0) return;
+
+        // Ambil snapshot patch saat ini dan hapus dari pending SEBELUM async
+        const finalPatch = { ...patch };
+        delete pendingPatches.current[id];
 
         if (timers.current[id]) {
             clearTimeout(timers.current[id]);
             delete timers.current[id];
-        }        savingRef.current[id] = true;
+        }
+
+        savingRef.current[id] = true;
+        let resolvedId = id; // Track ID asli (mungkin berubah setelah insert)
         try {
             const cleanPatch: any = { ...finalPatch };
             const fieldsToClean = ["qty", "ukuran", "harga", "tanggal", "printed_at", "shipped_at"];
@@ -270,63 +279,61 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                 }
             });
 
-            const isTempId = typeof id === 'number' && id >= 1000000000;
+            const isTempId = id >= 1000000000;
 
             if (!isTempId) {
+                // Update baris yang sudah ada di DB
                 const { error } = await supabase.from("pesanan_rows").update(cleanPatch).eq("id", id);
-                if (error) throw error;
-                Object.keys(finalPatch).forEach(key => {
-                    if (pendingPatches.current[id]?.[key as keyof PesananRow] === finalPatch[key as keyof PesananRow]) {
-                        delete (pendingPatches.current[id] as any)[key];
-                    }
-                });
+                if (error) {
+                    // Kembalikan patch ke pending jika gagal
+                    pendingPatches.current[id] = { ...finalPatch, ...(pendingPatches.current[id] || {}) };
+                    throw error;
+                }
             } else {
+                // Insert baris baru
                 const rowToInsert = { ...makeEmptyRow(0), ...cleanPatch };
                 delete (rowToInsert as any).id;
-                
+
                 const hasData = rowToInsert.tanggal || rowToInsert.customer || rowToInsert.deskripsi || rowToInsert.ukuran || rowToInsert.qty;
                 if (hasData) {
                     const rowWithSync = { ...rowToInsert, sync_id: String(id) };
                     const { data, error } = await supabase.from("pesanan_rows").insert(rowWithSync).select("id").single();
-                    if (error) throw error;
-                    
-                    if (data?.id) {
-                        const newRealId = data?.id;
-                        setRows(prev => prev.map(r => r.id === id ? { ...r, id: newRealId } : r));
-                        
-                        // MIGRATION: Pindahkan sisa ketikan baru (jika ada) ke ID asli yang baru
-                        const currentInTemp = { ...pendingPatches.current[id] };
-                        Object.keys(finalPatch).forEach(key => {
-                            if (currentInTemp[key as keyof PesananRow] === finalPatch[key as keyof PesananRow]) {
-                                delete (currentInTemp as any)[key];
-                            }
-                        });
+                    if (error) {
+                        pendingPatches.current[id] = { ...finalPatch, ...(pendingPatches.current[id] || {}) };
+                        throw error;
+                    }
 
-                        if (Object.keys(currentInTemp).length > 0) {
-                             pendingPatches.current[newRealId] = {
-                                  ...(pendingPatches.current[newRealId] || {}),
-                                  ...currentInTemp
-                             };
+                    if (data?.id) {
+                        const newRealId = data.id;
+                        resolvedId = newRealId;
+                        setRows(prev => prev.map(r => r.id === id ? { ...r, id: newRealId } : r));
+
+                        // Pindahkan sisa patches yang mungkin masuk saat insert berlangsung
+                        const leftovers = pendingPatches.current[id];
+                        if (leftovers && Object.keys(leftovers).length > 0) {
+                            pendingPatches.current[newRealId] = {
+                                ...(pendingPatches.current[newRealId] || {}),
+                                ...leftovers,
+                            };
+                            delete pendingPatches.current[id];
                         }
-                        delete pendingPatches.current[id];
-                        // Update id to the new real ID for any subsequent flushes
-                        id = newRealId;
                     }
                 }
             }
         } catch (err: any) {
             console.error("Flush Row Error:", err);
-            if (err.message !== "Failed to fetch") {
+            if (err?.message && err.message !== "Failed to fetch") {
                 alert("Simpan Gagal: " + (err.message || "Masalah Database"));
             }
         } finally {
-            savingRef.current[id] = false;
-            // CHECK if more patches arrived during save
-            if (pendingPatches.current[id] && Object.keys(pendingPatches.current[id]).length > 0) {
-                 flushRow(id);
+            savingRef.current[resolvedId] = false;
+            // Jika ada patch baru masuk selama proses save, flush ulang
+            if (pendingPatches.current[resolvedId] && Object.keys(pendingPatches.current[resolvedId]).length > 0) {
+                setTimeout(() => flushRow(resolvedId), 100);
             }
         }
     }, [setRows]);
+
 
     const flushAllRows = useCallback(async () => {
         const idsToFlush = Object.keys(pendingPatches.current).map(Number).filter(id => !isNaN(id));

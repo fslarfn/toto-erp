@@ -33,32 +33,40 @@ function normSel(sel: Sel) {
     return { r1: Math.min(sel.start.r, sel.end.r), r2: Math.max(sel.start.r, sel.end.r), c1: Math.min(sel.start.c, sel.end.c), c2: Math.max(sel.start.c, sel.end.c) };
 }
 
-/* ── Inline text input cell (for No Inv / No SJ / Ekspedisi) ── */
 function InlineCell({ value, onChange, width, align = "left", mono = false }: {
     value: string; onChange: (v: string) => void; width: number; align?: "left" | "center"; mono?: boolean;
 }) {
     const [local, setLocal] = useState(value);
     const [isFocused, setIsFocused] = useState(false);
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const latestLocalRef = useRef(local); // Selalu menyimpan nilai terbaru untuk debounce
 
     // Sinkronisasi prop value ke local state hanya jika tidak sedang fokus
     useEffect(() => {
-        if (!isFocused) setLocal(value);
+        if (!isFocused) {
+            setLocal(value);
+            latestLocalRef.current = value;
+        }
     }, [value, isFocused]);
 
     const handleChange = (v: string) => {
         setLocal(v);
-        // Debounce reporting to parent
+        latestLocalRef.current = v; // Update ref dengan nilai terbaru
+        // Debounce kirim ke parent — selalu pakai ref supaya tidak stale
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
         timeoutRef.current = setTimeout(() => {
-            if (v !== value) onChange(v);
+            onChange(latestLocalRef.current);
         }, 500);
     };
 
     const handleBlur = () => {
         setIsFocused(false);
-        if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        if (local !== value) onChange(local);
+        if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+        }
+        // Langsung kirim saat blur (tidak menunggu debounce)
+        onChange(latestLocalRef.current);
     };
 
     return (
@@ -83,6 +91,7 @@ function InlineCell({ value, onChange, width, align = "left", mono = false }: {
         </td>
     );
 }
+
 
 /* ── Checkbox cell ───────────────────────────────────────────── */
 function CheckCell({ checked, onChange, width = 54 }: { checked: boolean; onChange: (v: boolean) => void; width?: number }) {
@@ -134,12 +143,13 @@ function parseIdNum(s: string): number {
 }
 
 /* ── StatusTable Component (memoized) ────────────────────────── */
-function StatusTable({ filtered, viewMode, colorRowId, setColorRowId, update, statusBadge, th }: {
+function StatusTable({ filtered, viewMode, colorRowId, setColorRowId, update, updateText, statusBadge, th }: {
     filtered: PesananRow[];
     viewMode: "detail" | "simple";
     colorRowId: number | null;
     setColorRowId: (id: number | null) => void;
     update: (id: number, patch: Partial<PesananRow>) => void;
+    updateText: (id: number, patch: Partial<PesananRow>) => void;
     statusBadge: (row: PesananRow) => { label: string; bg: string; color: string };
     th: (w: number, left?: boolean) => React.CSSProperties;
 }) {
@@ -194,15 +204,15 @@ function StatusTable({ filtered, viewMode, colorRowId, setColorRowId, update, st
                                 )}
                             </td>
 
-                            <InlineCell value={row.tanggal} onChange={(v) => update(row.id, { tanggal: v })} width={70} align="center" />
-                            <InlineCell value={row.customer} onChange={(v) => update(row.id, { customer: v })} width={130} />
-                            <InlineCell value={row.deskripsi} onChange={(v) => update(row.id, { deskripsi: v })} width={200} />
-                            <InlineCell value={row.ukuran} onChange={(v) => update(row.id, { ukuran: v })} width={60} align="center" />
-                            <InlineCell value={row.qty} onChange={(v) => update(row.id, { qty: v })} width={44} align="center" />
+                            <InlineCell value={row.tanggal} onChange={(v) => updateText(row.id, { tanggal: v })} width={70} align="center" />
+                            <InlineCell value={row.customer} onChange={(v) => updateText(row.id, { customer: v })} width={130} />
+                            <InlineCell value={row.deskripsi} onChange={(v) => updateText(row.id, { deskripsi: v })} width={200} />
+                            <InlineCell value={row.ukuran} onChange={(v) => updateText(row.id, { ukuran: v })} width={60} align="center" />
+                            <InlineCell value={row.qty} onChange={(v) => updateText(row.id, { qty: v })} width={44} align="center" />
 
                             {viewMode === "detail" && <>
-                                <InlineCell value={row.no_inv} onChange={(v) => update(row.id, { no_inv: v })} width={90} mono />
-                                <InlineCell value={row.harga} onChange={(v) => update(row.id, { harga: v })} width={115} align="center" />
+                                <InlineCell value={row.no_inv} onChange={(v) => updateText(row.id, { no_inv: v })} width={90} mono />
+                                <InlineCell value={row.harga} onChange={(v) => updateText(row.id, { harga: v })} width={115} align="center" />
                                 {(() => {
                                     const ukuran = parseIdNum(row.ukuran);
                                     const qty = parseIdNum(row.qty);
@@ -222,7 +232,8 @@ function StatusTable({ filtered, viewMode, colorRowId, setColorRowId, update, st
                             <CheckCell checked={row.di_kirim} onChange={(v) => update(row.id, { di_kirim: v })} width={48} />
                             <CheckCell checked={row.is_paid} onChange={(v) => update(row.id, { is_paid: v })} width={54} />
 
-                            {viewMode === "detail" && <InlineCell value={row.ekspedisi} onChange={(v) => update(row.id, { ekspedisi: v })} width={110} />}
+                            {viewMode === "detail" && <InlineCell value={row.ekspedisi} onChange={(v) => updateText(row.id, { ekspedisi: v })} width={110} />}
+
 
                             {/* Status badge */}
                             <td style={{ height: 26, width: 80, textAlign: "center", verticalAlign: "middle", borderRight: "1px solid #E6D5BE", borderBottom: "1px solid #E6D5BE", padding: "0 4px" }}>
@@ -439,10 +450,20 @@ export default function StatusBarangPage() {
 
     const flashSaved = () => { setSavedFlash(true); setTimeout(() => setSavedFlash(false), 2000); };
 
+    // Untuk text input: InlineCell sudah punya debounce sendiri (500ms),
+    // jadi kita langsung flush tanpa debounce tambahan dari store.
+    const updateText = (id: number, patch: Partial<PesananRow>) => {
+        updateRow(id, patch, false); // update state lokal dulu
+        flushRow(id);               // langsung flush ke DB
+        flashSaved();
+    };
+
+    // Untuk checkbox/status: perubahan instant, langsung flush dengan autoFlush
     const update = (id: number, patch: Partial<PesananRow>) => {
         updateRow(id, patch, true);
         flashSaved();
     };
+
 
     const years: number[] = [];
     for (let y = 2023; y <= now.getFullYear() + 1; y++) years.push(y);
@@ -586,6 +607,7 @@ export default function StatusBarangPage() {
                         colorRowId={colorRowId}
                         setColorRowId={setColorRowId}
                         update={update}
+                        updateText={updateText}
                         statusBadge={statusBadge}
                         th={th}
                     />
