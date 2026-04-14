@@ -34,29 +34,38 @@ function normSel(sel: Sel) {
 }
 
 function InlineCell({ value, onChange, width, align = "left", mono = false }: {
-    value: string; onChange: (v: string) => void; width: number; align?: "left" | "center"; mono?: boolean;
+    value: string | null | undefined;
+    onChange: (v: string) => void;
+    width: number;
+    align?: "left" | "center";
+    mono?: boolean;
 }) {
-    const [local, setLocal] = useState(value);
+    // Normalize: selalu string, tidak pernah null/undefined (mencegah React uncontrolled input warning)
+    const normalizedValue = value == null ? "" : String(value);
+
+    const [local, setLocal] = useState(normalizedValue);
     const [isFocused, setIsFocused] = useState(false);
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-    const latestLocalRef = useRef(local); // Selalu menyimpan nilai terbaru untuk debounce
 
-    // Sinkronisasi prop value ke local state hanya jika tidak sedang fokus
+    // valueRef selalu menyimpan prop terbaru — mencegah stale closure di debounce/blur
+    const valueRef = useRef(normalizedValue);
+    useEffect(() => {
+        valueRef.current = normalizedValue;
+    });
+
+    // Sinkronisasi prop → local HANYA jika tidak sedang mengetik
     useEffect(() => {
         if (!isFocused) {
-            setLocal(value);
-            latestLocalRef.current = value;
+            setLocal(normalizedValue);
         }
-    }, [value, isFocused]);
+    }, [normalizedValue, isFocused]);
 
     const handleChange = (v: string) => {
         setLocal(v);
-        latestLocalRef.current = v; // Update ref dengan nilai terbaru
-        // Debounce kirim ke parent — selalu pakai ref supaya tidak stale
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        // Debounce 500ms — gunakan valueRef.current (selalu fresh) bukan closure snapshot
         timeoutRef.current = setTimeout(() => {
-            // Hanya kirim jika nilai benar-benar berubah dari nilai asli
-            if (latestLocalRef.current !== value) onChange(latestLocalRef.current);
+            if (v !== valueRef.current) onChange(v);
         }, 500);
     };
 
@@ -66,9 +75,9 @@ function InlineCell({ value, onChange, width, align = "left", mono = false }: {
             clearTimeout(timeoutRef.current);
             timeoutRef.current = null;
         }
-        // HANYA kirim ke DB jika nilai berbeda dari nilai asli
-        // Mencegah pengetikan null/kosong saat user hanya klik tanpa mengetik
-        if (latestLocalRef.current !== value) onChange(latestLocalRef.current);
+        // Ambil nilai terkini dari input element (paling dapat dipercaya)
+        const currentLocal = local;
+        if (currentLocal !== valueRef.current) onChange(currentLocal);
     };
 
     return (
@@ -93,6 +102,7 @@ function InlineCell({ value, onChange, width, align = "left", mono = false }: {
         </td>
     );
 }
+
 
 
 /* ── Checkbox cell ───────────────────────────────────────────── */
