@@ -74,7 +74,8 @@ export default function BillingPage() {
             const { error } = await supabase.from("billing_manual_confirmations").insert({
                 username: user?.username,
                 amount: license?.is_setup_completed ? 5950000 : 20500000,
-                reference_number: refNumber, status: "pending", notes: notes
+                reference_number: refNumber, 
+                status: "pending"
             });
             if (!error) {
                 alert("Laporan terkirim! Menunggu verifikasi Faisal.");
@@ -133,7 +134,6 @@ export default function BillingPage() {
                 payment_type: isInitial ? "initial" : "monthly",
                 status: "settlement",
                 payment_method: "ADMIN_DIRECT",
-                notes: `Aktivasi instan oleh Faisal (Manual Extension)`,
                 created_at: new Date().toISOString()
             });
 

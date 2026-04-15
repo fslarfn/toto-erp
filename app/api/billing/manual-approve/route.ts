@@ -75,18 +75,17 @@ export async function POST(req: Request) {
 
         // c. Insert ke Billing History agar muncul di tabel riwayat
         const orderId = `MANUAL-${Date.now()}`;
-        await supabase
-            .from("billing_history")
-            .insert({
-                order_id: orderId,
-                amount: confirmation.amount,
-                payment_type: isInitial ? "initial" : "monthly",
-                status: "settlement", // Manual approval dianggap lunas langsung
-                payment_method: "MANUAL_TRANSFER",
-                gross_amount: confirmation.amount,
-                notes: `Approved manually by ${adminUsername}. Ref: ${confirmation.reference_number}`,
-                created_at: new Date().toISOString()
-            });
+            await supabase
+                .from("billing_history")
+                .insert({
+                    order_id: orderId,
+                    amount: confirmation.amount,
+                    payment_type: isInitial ? "initial" : "monthly",
+                    status: "settlement",
+                    payment_method: "MANUAL_TRANSFER",
+                    gross_amount: confirmation.amount,
+                    created_at: new Date().toISOString()
+                });
 
         return NextResponse.json({ 
             message: "License activated successfully", 
