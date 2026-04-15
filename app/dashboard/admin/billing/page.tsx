@@ -73,7 +73,7 @@ export default function BillingPage() {
         try {
             const { error } = await supabase.from("billing_manual_confirmations").insert({
                 username: user?.username,
-                amount: license?.is_setup_completed ? 5950000 : 15500000,
+                amount: license?.is_setup_completed ? 5950000 : 20500000,
                 reference_number: refNumber, status: "pending", notes: notes
             });
             if (!error) {
@@ -129,7 +129,7 @@ export default function BillingPage() {
             // 2. Insert History
             await supabase.from("billing_history").insert({
                 order_id: `ADMIN-MANUAL-${Date.now()}`,
-                amount: isInitial ? 15500000 : 5950000,
+                amount: isInitial ? 20500000 : 5950000,
                 payment_type: isInitial ? "initial" : "monthly",
                 status: "settlement",
                 payment_method: "ADMIN_DIRECT",
@@ -235,7 +235,7 @@ export default function BillingPage() {
                     </div>
                     <div>
                         <p className="text-xs font-medium text-gray-500">Tagihan Berikutnya</p>
-                        <h3 className="text-lg font-bold text-gray-800">{formatCurrency(license?.is_setup_completed ? 5950000 : 15500000)}</h3>
+                        <h3 className="text-lg font-bold text-gray-800">{formatCurrency(license?.is_setup_completed ? 5950000 : 20500000)}</h3>
                         <p className="text-[10px] text-gray-400 italic italic">{license?.is_setup_completed ? "Biaya Langganan Bulanan" : "Setup Awal + 2 Bulan"}</p>
                     </div>
                 </div>
