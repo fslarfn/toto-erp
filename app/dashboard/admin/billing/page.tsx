@@ -284,6 +284,40 @@ export default function BillingPage() {
                                 </ol>
                             </div>
 
+                            {!license?.is_setup_completed && (
+                                <div className="mb-8 p-6 bg-[#FDF3E7] rounded-xl border border-[#B89678] border-dashed">
+                                    <h4 className="text-sm font-bold text-[#5C4033] mb-4 flex items-center gap-2">
+                                        <FileText size={16} /> Rincian Pemberitahuan Tagihan
+                                    </h4>
+                                    <div className="space-y-3 text-xs text-[#5C4033]">
+                                        <div className="flex justify-between border-b border-[#B89678]/20 pb-2">
+                                            <span className="opacity-80">Lisensi Terusan (7 User Aktif)</span>
+                                            <span className="font-bold">Rp 18.585.000</span>
+                                        </div>
+                                        <div className="flex justify-between border-b border-[#B89678]/20 pb-2">
+                                            <span className="opacity-80">Cloud Server License (Singapore)</span>
+                                            <span className="font-bold">Rp 3.000.000</span>
+                                        </div>
+                                        <div className="flex justify-between border-b border-[#B89678]/20 pb-2">
+                                            <span className="opacity-80">Installation & Configuration Fee</span>
+                                            <span className="font-bold">Rp 4.415.000</span>
+                                        </div>
+                                        <div className="flex justify-between pt-2 border-t border-[#B89678]/30">
+                                            <span className="font-bold">Subtotal Biaya</span>
+                                            <span className="font-bold">Rp 26.000.000</span>
+                                        </div>
+                                        <div className="flex justify-between text-emerald-700">
+                                            <span className="font-bold italic">Diskon Aktivasi Awal</span>
+                                            <span className="font-black">- Rp 5.200.000</span>
+                                        </div>
+                                        <div className="flex justify-between pt-4 mt-2 border-t-2 border-[#5C4033]">
+                                            <span className="font-black text-sm">TOTAL PEMBAYARAN</span>
+                                            <span className="font-black text-lg">Rp 20.800.000</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                 <div className="space-y-6">
                                     <div>
