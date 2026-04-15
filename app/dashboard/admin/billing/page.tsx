@@ -27,6 +27,7 @@ export default function BillingPage() {
     const [refNumber, setRefNumber] = useState("");
     const [notes, setNotes] = useState("");
     const [showInvoice, setShowInvoice] = useState(false);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
 
     const isOwner = user?.username === "faisal";
@@ -78,7 +79,7 @@ export default function BillingPage() {
                 status: "pending"
             });
             if (!error) {
-                alert("Laporan terkirim! Menunggu verifikasi Faisal.");
+                setShowSuccessModal(true);
                 setRefNumber(""); setNotes(""); 
                 fetchData();
                 refreshBanner();
@@ -566,6 +567,26 @@ export default function BillingPage() {
                                 TUTUP
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal Sukses Validasi */}
+            {showSuccessModal && (
+                <div className="modal-overlay overflow-y-auto py-10" onClick={() => setShowSuccessModal(false)}>
+                    <div className="bg-white w-full max-w-sm mx-auto p-8 rounded-2xl shadow-2xl relative text-center animate-fade-in" onClick={e => e.stopPropagation()}>
+                        <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6 text-emerald-500 shadow-inner">
+                            <CheckCircle2 size={40} className="animate-pulse" />
+                        </div>
+                        <h3 className="text-xl font-black text-gray-800 mb-2 uppercase tracking-tight">Laporan Terkirim</h3>
+                        <p className="text-sm text-gray-500 mb-8 leading-relaxed">Terima kasih, pembayaran Anda <b>sedang divalidasi</b> oleh sistem & Tim Admin.</p>
+                        
+                        <button 
+                            onClick={() => setShowSuccessModal(false)}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white w-full py-4 rounded-xl font-bold uppercase tracking-widest text-xs transition-all shadow-lg shadow-emerald-200 active:scale-95"
+                        >
+                            Selesai & Tutup
+                        </button>
                     </div>
                 </div>
             )}
