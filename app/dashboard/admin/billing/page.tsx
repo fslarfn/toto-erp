@@ -462,20 +462,46 @@ export default function BillingPage() {
                                     <span className="cert-value text-emerald-600">DITERIMA & TERVALIDASI</span>
                                 </div>
                                 <div className="cert-row">
-                                    <span className="cert-label">ID Transaksi</span>
-                                    <span className="cert-value uppercase">{selectedInvoice.order_id}</span>
-                                </div>
-                                <div className="cert-row">
                                     <span className="cert-label">Waktu Pembayaran</span>
                                     <span className="cert-value">{format(new Date(selectedInvoice.created_at), "dd MMM yyyy HH:mm", { locale: localeId })}</span>
                                 </div>
                                 <div className="cert-row">
-                                    <span className="cert-label">Jenis Lisensi</span>
-                                    <span className="cert-value uppercase">
-                                        {selectedInvoice.payment_type === 'initial' ? "TOTO ERP - SETUP & LISENSI (60 HARI)" : "TOTO ERP - LANGGANAN BULANAN (30 HARI)"}
-                                    </span>
+                                    <span className="cert-label">ID Transaksi</span>
+                                    <span className="cert-value uppercase">{selectedInvoice.order_id}</span>
                                 </div>
-                                <div className="cert-row !border-none pt-2">
+                                
+                                {selectedInvoice.payment_type === 'initial' ? (
+                                    <div className="mt-4 pt-4 border-t border-dashed border-gray-200">
+                                        <p className="cert-label mb-2">Rincian Paket Aktivasi:</p>
+                                        <div className="cert-row !border-none !mb-1">
+                                            <span className="text-[10px] text-gray-500">Lisensi Terusan (7 User Aktif)</span>
+                                            <span className="text-[11px] font-bold">Rp 11.900.000</span>
+                                        </div>
+                                        <div className="cert-row !border-none !mb-1">
+                                            <span className="text-[10px] text-gray-500">Cloud Server License (Singapore)</span>
+                                            <span className="text-[11px] font-bold">Rp 3.000.000</span>
+                                        </div>
+                                        <div className="cert-row !border-none !mb-1">
+                                            <span className="text-[10px] text-gray-500">Installation & Configuration Fee</span>
+                                            <span className="text-[11px] font-bold">Rp 10.600.000</span>
+                                        </div>
+                                        <div className="cert-row !border-none !mt-2 pt-2 border-t border-gray-100">
+                                            <span className="text-[10px] font-bold">Subtotal Biaya</span>
+                                            <span className="text-[11px] font-bold">Rp 25.500.000</span>
+                                        </div>
+                                        <div className="cert-row !border-none !mb-1">
+                                            <span className="text-[10px] font-black italic text-emerald-600">Diskon Aktivasi Awal</span>
+                                            <span className="text-[11px] font-black text-emerald-600">- Rp 5.000.000</span>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="cert-row">
+                                        <span className="cert-label">Jenis Lisensi</span>
+                                        <span className="cert-value uppercase">TOTO ERP - LANGGANAN BULANAN (30 HARI)</span>
+                                    </div>
+                                )}
+
+                                <div className="cert-row !border-none pt-4 mt-2 border-t-2 border-primary">
                                     <span className="cert-label !text-gray-900 !text-xs">Total Pembayaran</span>
                                     <span className="cert-value !text-lg !font-black">{formatCurrency(selectedInvoice.amount)}</span>
                                 </div>
