@@ -54,38 +54,39 @@ export async function POST(req: Request) {
         // 5. UPDATE DATABASE (Transaction-like)
         
         // a. Update App Config
-        await supabase
+        const { error: err1 } = await supabase
             .from("app_config")
             .update({
                 license_expired_at: newExpiredAt.toISOString(),
-                is_setup_completed: true, // Setelah pembayaran pertama manual pun dianggap selesai setup
-                updated_at: new Date().toISOString()
+                is_setup_completed: true 
             })
             .eq("id", 1);
+            
+        if (err1) throw err1;
 
         // b. Update Confirmation Status
-        await supabase
+        const { error: err2 } = await supabase
             .from("billing_manual_confirmations")
-            .update({
-                status: "approved",
-                approved_by: adminUsername,
-                updated_at: new Date().toISOString()
-            })
+            .update({ status: "approved" })
             .eq("id", confirmationId);
+            
+        if (err2) throw err2;
 
-        // c. Insert ke Billing History agar muncul di tabel riwayat
+        // c. Insert ke Billing History
         const orderId = `MANUAL-${Date.now()}`;
-            await supabase
-                .from("billing_history")
-                .insert({
-                    order_id: orderId,
-                    amount: confirmation.amount,
-                    payment_type: isInitial ? "initial" : "monthly",
-                    status: "settlement",
-                    payment_method: "MANUAL_TRANSFER",
-                    gross_amount: confirmation.amount,
-                    created_at: new Date().toISOString()
-                });
+        const { error: err3 } = await supabase
+            .from("billing_history")
+            .insert({
+                order_id: orderId,
+                amount: confirmation.amount,
+                payment_type: isInitial ? "initial" : "monthly",
+                status: "settlement",
+                payment_method: "MANUAL_TRANSFER",
+                gross_amount: confirmation.amount,
+                created_at: new Date().toISOString()
+            });
+            
+        if (err3) throw err3;
 
         return NextResponse.json({ 
             message: "License activated successfully", 

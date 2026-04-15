@@ -28,6 +28,7 @@ export default function BillingPage() {
     const [notes, setNotes] = useState("");
     const [showInvoice, setShowInvoice] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [showApproveSuccess, setShowApproveSuccess] = useState(false);
     const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
 
     const isOwner = user?.username === "faisal";
@@ -83,6 +84,9 @@ export default function BillingPage() {
                 setRefNumber(""); setNotes(""); 
                 fetchData();
                 refreshBanner();
+            } else {
+                console.error(error);
+                alert("Gagal mengirim laporan: " + error.message);
             }
         } catch (err) { alert("Sistem error."); } finally { setSubmitting(false); }
     };
@@ -96,7 +100,7 @@ export default function BillingPage() {
                 body: JSON.stringify({ confirmationId: reportId, adminUsername: user?.username || "system" })
             });
             if (res.ok) { 
-                alert("Suksess! Lisensi Berhasil Diperpanjang."); 
+                setShowApproveSuccess(true);
                 refreshLicense(); 
                 fetchData(); 
                 refreshBanner();
@@ -138,7 +142,7 @@ export default function BillingPage() {
                 created_at: new Date().toISOString()
             });
 
-            alert(`BERHASIL! Lisensi diperpanjang ${daysToAdd} Hari.`);
+            setShowApproveSuccess(true);
             refreshLicense();
             fetchData();
             refreshBanner();
@@ -171,245 +175,234 @@ export default function BillingPage() {
     if (!hasAccess) return <div className="page-content text-center py-20 opacity-50">AKSES DITOLAK</div>;
 
     return (
-        <div className="page-content">
+        <div style={{ fontFamily: "'DM Sans', 'Segoe UI', sans-serif", background: "#f5f3f0", minHeight: "100vh", color: "#2d2a26", paddingBottom: "40px" }} className="page-content px-4 py-6 md:px-8">
+            <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+
             {/* Standard Header */}
-            <div className="page-header">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 30, flexWrap: "wrap", gap: 16 }}>
                 <div>
-                    <h1 className="page-title-h1">Admin Billing</h1>
-                    <p className="page-subtitle">Sistem Manajemen Lisensi & Pembayaran CV TOTO</p>
+                    <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, fontFamily: "'Playfair Display', serif", color: "#3a2e25" }}>
+                        Admin Billing
+                    </h1>
+                    <p style={{ margin: "4px 0 0", fontSize: 13, color: "#8a7e72" }}>Sistem Manajemen Lisensi & Pembayaran CV TOTO</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     {isOwner && (
                         <>
-                            <button onClick={manualExtend} className="btn btn-primary text-[10px] py-1 bg-emerald-700 hover:bg-emerald-900 border-none">
-                                <CheckCircle2 size={10} /> AKTIVASI LISENSI (MANUAL)
+                            <button onClick={manualExtend} style={{ background: "#5a8f6e", color: "white", padding: "8px 16px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: "0 2px 5px rgba(0,0,0,0.1)" }}>
+                                <CheckCircle2 size={14} /> AKTIVASI (MANUAL)
                             </button>
-                            <button onClick={resetInitialState} className="btn btn-secondary text-[10px] py-1">
-                                <Zap size={10} /> FORCE TRIAL 25 APR
+                            <button onClick={resetInitialState} style={{ background: "#fff", color: "#3a2e25", padding: "8px 16px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid #ebe5dd", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                                <Zap size={14} /> FORCE TRIAL 25 APR
                             </button>
                         </>
                     )}
-                    <button onClick={() => { fetchData(); refreshLicense(); }} className="btn btn-secondary text-[10px] py-1">
-                        <History size={10} /> SEGARKAN DATA
+                    <button onClick={() => { fetchData(); refreshLicense(); }} style={{ background: "#fff", color: "#3a2e25", padding: "8px 16px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid #ebe5dd", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                        <History size={14} /> SEGARKAN DATA
                     </button>
                 </div>
             </div>
 
             {isOwner && manualReports.length > 0 && (
-                <div className="mb-6 p-5 bg-red-600 rounded-xl shadow-xl animate-fade-in border-4 border-white flex flex-col md:flex-row items-center justify-between gap-4">
-                    <div className="flex items-center gap-4 text-white">
-                        <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center animate-pulse">
+                <div style={{ marginBottom: 24, padding: "20px 24px", background: "#d63230", borderRadius: 14, boxShadow: "0 10px 25px rgba(214,50,48,0.2)", border: "4px solid white", display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 16, color: "white" }}>
+                        <div style={{ width: 48, height: 48, background: "rgba(255,255,255,0.2)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
                             <Zap size={24} />
                         </div>
                         <div>
-                            <h4 className="font-black text-sm uppercase tracking-widest">Ada {manualReports.length} Laporan Pembayaran Baru!</h4>
-                            <p className="text-[10px] font-bold opacity-80 italic">Klik tombol di samping untuk mengaktifkan lisensi {license?.is_setup_completed ? '1 Bulan' : '3 Bulan'}.</p>
+                            <h4 style={{ margin: 0, fontWeight: 900, fontSize: 14, textTransform: "uppercase", letterSpacing: 1 }}>Ada {manualReports.length} Laporan Pembayaran Baru!</h4>
+                            <p style={{ margin: "4px 0 0", fontSize: 11, fontWeight: 600, opacity: 0.9, fontStyle: "italic" }}>Klik tombol di samping untuk mengaktifkan lisensi {license?.is_setup_completed ? '1 Bulan' : '3 Bulan'}.</p>
                         </div>
                     </div>
-                    <button 
-                        onClick={() => approveManual(manualReports[0].id)}
-                        className="bg-white text-red-600 px-8 py-3 rounded-full font-black uppercase text-[10px] tracking-[0.2em] shadow-lg hover:bg-black hover:text-white transition-all active:scale-95"
-                    >
-                        AKTIFKAN LISENSI {license?.is_setup_completed ? '1 BULAN' : '3 BULAN'} SEKARANG
+                    <button onClick={() => approveManual(manualReports[0].id)} style={{ background: "white", color: "#d63230", padding: "12px 24px", borderRadius: 30, fontWeight: 900, textTransform: "uppercase", fontSize: 11, letterSpacing: 1.5, border: "none", cursor: "pointer", boxShadow: "0 4px 10px rgba(0,0,0,0.1)" }}>
+                        AKTIFKAN LISENSI SEKARANG
                     </button>
                 </div>
             )}
 
-            {/* Metric Cards - Using standard .stat-card */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div className="stat-card flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                        <Calendar size={24} />
+            {/* Summary Cards */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16, marginBottom: 24 }}>
+                {[
+                    { icon: "📅", title: "Masa Aktif Aplikasi", value: license?.license_expired_at ? format(new Date(license.license_expired_at), "dd MMM yyyy", { locale: localeId }) : "—", sub: license?.isWarning ? <span style={{ color: "#d63230", fontWeight: 700 }}>⚠️ AKAN HABIS ({license.daysLeft} Hari)</span> : null, accent: "#c69c6d" },
+                    { icon: "💳", title: "Tagihan Berikutnya", value: formatCurrency(license?.is_setup_completed ? 6200000 : 20800000), sub: license?.is_setup_completed ? "Biaya Langganan Bulanan" : "Setup Awal + 3 Bulan", accent: "#5a8f6e" },
+                    { icon: "👥", title: "Kapasitas Sistem", value: `${license?.max_users || 7} User Aktif`, sub: "Unlimited Data Storage", accent: "#6b7fb5" },
+                ].map(card => (
+                    <div key={card.title} style={{ background: "#fff", borderRadius: 14, padding: "22px 24px", border: "1px solid #ebe5dd", position: "relative", overflow: "hidden" }}>
+                        <div style={{ position: "absolute", top: 0, left: 0, width: 4, height: "100%", background: card.accent, borderRadius: "14px 0 0 14px" }} />
+                        <div style={{ fontSize: 22, marginBottom: 10 }}>{card.icon}</div>
+                        <div style={{ fontSize: 11.5, color: "#8a7e72", fontWeight: 500, marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>{card.title}</div>
+                        <div style={{ fontSize: 22, fontWeight: 700, color: "#2d2a26", fontFamily: "'Playfair Display', serif" }}>{card.value}</div>
+                        {card.sub && <div style={{ fontSize: 12, color: "#a09488", marginTop: 4 }}>{card.sub}</div>}
                     </div>
-                    <div>
-                        <p className="text-xs font-medium text-gray-500">Masa Aktif Aplikasi</p>
-                        <h3 className="text-lg font-bold text-gray-800">
-                            {license?.license_expired_at ? format(new Date(license.license_expired_at), "dd MMM yyyy", { locale: localeId }) : "—"}
-                        </h3>
-                        {license?.isWarning && <span className="text-[10px] text-red-500 font-bold uppercase italic tracking-tighter shadow-sm">⚠️ AKAN HABIS ({license.daysLeft} Hari)</span>}
-                    </div>
-                </div>
-
-                <div className="stat-card flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-                        <CreditCard size={24} />
-                    </div>
-                    <div>
-                        <p className="text-xs font-medium text-gray-500">Tagihan Berikutnya</p>
-                        <h3 className="text-lg font-bold text-gray-800">{formatCurrency(license?.is_setup_completed ? 6200000 : 20800000)}</h3>
-                        <p className="text-[10px] text-gray-400 italic italic">{license?.is_setup_completed ? "Biaya Langganan Bulanan" : "Setup Awal + 3 Bulan"}</p>
-                    </div>
-                </div>
-
-                <div className="stat-card flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center">
-                        <Users size={24} />
-                    </div>
-                    <div>
-                        <p className="text-xs font-medium text-gray-500">Kapasitas Sistem</p>
-                        <h3 className="text-lg font-bold text-gray-800">{license?.max_users || 7} User Aktif</h3>
-                        <p className="text-[10px] text-gray-400 italic">Unlimited Data Storage</p>
-                    </div>
-                </div>
+                ))}
             </div>
 
-            {/* Main Content Card - Using standard .card */}
-            <div className="card">
-                <div className="flex border-b border-gray-100">
-                    <button onClick={() => setActiveTab("overview")} className={`px-6 py-4 text-xs font-bold uppercase tracking-wider transition-all border-b-2 ${activeTab === 'overview' ? 'border-primary text-primary' : 'border-transparent text-gray-400'}`}>
-                        Pembayaran
+            {/* Tabs */}
+            <div style={{ display: "flex", gap: 0, marginBottom: 24, borderBottom: "2px solid #ebe5dd", overflowX: "auto" }}>
+                {[
+                    { id: "overview", label: "Pembayaran" },
+                    { id: "history", label: "Riwayat & Invoice" },
+                    ...(isOwner && manualReports.length > 0 ? [{ id: "admin", label: `Verifikasi (${manualReports.length})` }] : [])
+                ].map(tab => (
+                    <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} style={{ padding: "12px 24px", background: "none", border: "none", borderBottom: activeTab === tab.id ? "2px solid #3a2e25" : "2px solid transparent", marginBottom: -2, fontWeight: activeTab === tab.id ? 700 : 500, fontSize: 13.5, color: activeTab === tab.id ? (tab.id === "admin" ? "#d63230" : "#3a2e25") : "#a09488", cursor: "pointer", letterSpacing: 0.3, textTransform: "uppercase", transition: "all 0.2s", whiteSpace: "nowrap" }}>
+                        {tab.label}
                     </button>
-                    <button onClick={() => setActiveTab("history")} className={`px-6 py-4 text-xs font-bold uppercase tracking-wider transition-all border-b-2 ${activeTab === 'history' ? 'border-primary text-primary' : 'border-transparent text-gray-400'}`}>
-                        Riwayat & Invoice
-                    </button>
-                    {isOwner && manualReports.length > 0 && (
-                        <button onClick={() => setActiveTab("admin")} className={`px-6 py-4 text-xs font-bold uppercase tracking-wider transition-all border-b-2 ${activeTab === 'admin' ? 'border-red-500 text-red-600' : 'border-transparent text-red-300'}`}>
-                            Verifikasi ({manualReports.length})
-                        </button>
-                    )}
-                </div>
+                ))}
+            </div>
 
-                <div className="card-body">
-                    {activeTab === "overview" && (
-                        <div className="max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-                            <div className="lg:col-span-2 space-y-8">
-                                <div className="p-6 bg-amber-50 rounded-xl border border-amber-100 border-dashed">
-                                    <h4 className="text-sm font-bold text-amber-900 mb-2 flex items-center gap-2">
-                                        <Zap size={16} /> Instruksi Perpanjangan Manual
-                                    </h4>
-                                    <ol className="text-xs text-amber-800 space-y-2 list-decimal list-inside leading-loose">
-                                        <li>Klik tombol <strong>"BUKA LINK PEMBAYARAN"</strong> di bawah.</li>
-                                        <li>Selesaikan pembayaran melalui QRIS/Transfer di link tersebut.</li>
-                                        <li>Simpan <strong>Nomor Referensi</strong> (ID Transaksi) dari lynk.id.</li>
-                                        <li>Masukkan Nomor Referensi tadi ke form konfirmasi di bawah ini.</li>
-                                        <li>Klik tombol cokelat <strong>"KIRIM KONFIRMASI"</strong>.</li>
-                                    </ol>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <div className="space-y-6">
-                                        <div>
-                                            <h3 className="text-base font-bold text-gray-800 mb-2">Portal Pembayaran</h3>
-                                            <p className="text-xs text-gray-500 leading-relaxed mb-4">Gunakan link eksternal di bawah ini (lynk.id) untuk memproses tagihan aplikasi Anda.</p>
-                                            <a href={LYNKID_URL} target="_blank" className="btn btn-primary w-full py-4 flex items-center justify-center gap-2">
-                                                BUKA LINK PEMBAYARAN <ExternalLink size={16} />
-                                            </a>
-                                        </div>
-                                        <div className="p-4 bg-gray-50 rounded-lg border border-gray-100 flex items-center gap-3 text-[10px] text-gray-400 uppercase font-black italic tracking-widest">
-                                            <Zap size={14} /> SECURED SESSION BY SSL
-                                        </div>
+            {/* Tab Overview: Pembayaran */}
+            {activeTab === "overview" && (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 24 }}>
+                    {/* Left Column */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                        <div style={{ background: "#fff", borderRadius: 14, padding: "24px 28px", border: "1px solid #ebe5dd" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
+                                <span style={{ fontSize: 16 }}>⚡</span>
+                                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#3a2e25" }}>Instruksi Perpanjangan Manual</h3>
+                            </div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                                {[
+                                    'Klik tombol "BUKA LINK PEMBAYARAN" di bawah.',
+                                    'Selesaikan pembayaran melalui QRIS/Transfer di link tersebut.',
+                                    'Simpan Nomor Referensi (ID Transaksi) dari lynk.id.',
+                                    'Masukkan Nomor Referensi ke form konfirmasi di bawah.',
+                                    'Klik tombol "KIRIM KONFIRMASI".'
+                                ].map((step, idx) => (
+                                    <div key={idx} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                                        <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#f5f0ea", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#8a7e72", flexShrink: 0, marginTop: 1 }}>{idx+1}</div>
+                                        <span style={{ fontSize: 13, lineHeight: 1.55, color: "#4a4440" }} dangerouslySetInnerHTML={{ __html: step.replace(/"(.*?)"/g, '<strong>"$1"</strong>') }}></span>
                                     </div>
+                                ))}
+                            </div>
+                        </div>
 
-                                    <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm shadow-sm space-y-4">
-                                        <h4 className="text-xs font-bold uppercase tracking-widest text-gray-400 border-b border-gray-50 pb-2">Form Konfirmasi</h4>
-                                        <form onSubmit={submitManualReport} className="space-y-4">
-                                            <div>
-                                                <label className="form-label">ID Transaksi / Nomor Referensi</label>
-                                                <input type="text" value={refNumber} onChange={e => setRefNumber(e.target.value)} placeholder="ABC-12345-XYZ" className="form-input" />
-                                            </div>
-                                            <div>
-                                                <label className="form-label">Catatan (Pilihan)</label>
-                                                <input type="text" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Contoh: QRIS MANDIRI" className="form-input" />
-                                            </div>
-                                            <button disabled={submitting} type="submit" className="btn btn-primary w-full py-3 flex items-center justify-center gap-2 shadow-lg">
-                                                {submitting ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
-                                                KIRIM KONFIRMASI
-                                            </button>
-                                        </form>
+                        {!license?.is_setup_completed && (
+                            <div style={{ background: "#fff", borderRadius: 14, padding: "24px 28px", border: "1px solid #ebe5dd" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
+                                    <span style={{ fontSize: 16 }}>🧾</span>
+                                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#3a2e25" }}>Rincian Pemberitahuan Tagihan</h3>
+                                </div>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                    {[
+                                        { label: "Lisensi Terusan (7 User Aktif)", amount: 18585000 },
+                                        { label: "Cloud Server License (Singapore)", amount: 3000000 },
+                                        { label: "Installation & Configuration Fee", amount: 4415000 },
+                                    ].map(item => (
+                                        <div key={item.label} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#4a4440", padding: "6px 0" }}>
+                                            <span>{item.label}</span>
+                                            <span style={{ fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{formatCurrency(item.amount)}</span>
+                                        </div>
+                                    ))}
+                                    <div style={{ borderTop: "1px solid #ebe5dd", margin: "4px 0", padding: "8px 0 0", display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 600 }}>
+                                        <span>Subtotal Biaya</span>
+                                        <span style={{ fontVariantNumeric: "tabular-nums" }}>{formatCurrency(26000000)}</span>
+                                    </div>
+                                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#5a8f6e", fontWeight: 500, padding: "2px 0" }}>
+                                        <span style={{ fontStyle: "italic" }}>Diskon Aktivasi Awal</span>
+                                        <span style={{ fontVariantNumeric: "tabular-nums" }}>- {formatCurrency(5200000)}</span>
+                                    </div>
+                                    <div style={{ borderTop: "2px solid #3a2e25", margin: "6px 0 0", padding: "12px 0 0", display: "flex", justifyContent: "space-between", fontSize: 16, fontWeight: 700, color: "#3a2e25" }}>
+                                        <span>TOTAL PEMBAYARAN</span>
+                                        <span style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, fontVariantNumeric: "tabular-nums" }}>{formatCurrency(20800000)}</span>
                                     </div>
                                 </div>
                             </div>
+                        )}
+                    </div>
 
-                            {!license?.is_setup_completed && (
-                                <div className="lg:col-span-1">
-                                    <div className="p-6 bg-[#FDF3E7] rounded-xl shadow-lg border border-[#B89678] sticky top-6">
-                                        <h4 className="text-sm font-bold text-[#5C4033] mb-4 flex items-center gap-2 border-b border-[#B89678]/20 pb-3">
-                                            <FileText size={16} /> Rincian Tagihan Awal
-                                        </h4>
-                                        <div className="space-y-3 text-xs text-[#5C4033]">
-                                            <div className="flex justify-between border-b border-[#B89678]/20 pb-2">
-                                                <span className="opacity-80 flex-1 pr-2">Lisensi Terusan (7 User)</span>
-                                                <span className="font-bold">Rp 18.585.000</span>
-                                            </div>
-                                            <div className="flex justify-between border-b border-[#B89678]/20 pb-2">
-                                                <span className="opacity-80 flex-1 pr-2">Cloud Server (Singapore)</span>
-                                                <span className="font-bold">Rp 3.000.000</span>
-                                            </div>
-                                            <div className="flex justify-between border-b border-[#B89678]/20 pb-2">
-                                                <span className="opacity-80 flex-1 pr-2">Installation & Config</span>
-                                                <span className="font-bold">Rp 4.415.000</span>
-                                            </div>
-                                            <div className="flex justify-between pt-2 border-t border-[#B89678]/30">
-                                                <span className="font-bold">Subtotal Biaya</span>
-                                                <span className="font-bold">Rp 26.000.000</span>
-                                            </div>
-                                            <div className="flex justify-between text-emerald-700 bg-emerald-50 p-2 rounded border border-emerald-100">
-                                                <span className="font-bold italic">Diskon Aktivasi</span>
-                                                <span className="font-black">- Rp 5.200.000</span>
-                                            </div>
-                                            <div className="pt-4 mt-2 border-t-2 border-[#5C4033]">
-                                                <span className="font-black text-[10px] uppercase opacity-60 block mb-1">TOTAL PEMBAYARAN</span>
-                                                <span className="font-black text-2xl">Rp 20.800.000</span>
-                                            </div>
-                                        </div>
-                                    </div>
+                    {/* Right Column */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                        <div style={{ background: "#fff", borderRadius: 14, padding: "24px 28px", border: "1px solid #ebe5dd" }}>
+                            <h3 style={{ margin: "0 0 8px", fontSize: 15, fontWeight: 700, color: "#3a2e25" }}>Portal Pembayaran</h3>
+                            <p style={{ margin: "0 0 18px", fontSize: 12.5, color: "#8a7e72", lineHeight: 1.5 }}>Gunakan link eksternal di bawah ini (lynk.id) untuk memproses tagihan aplikasi Anda.</p>
+                            <a href={LYNKID_URL} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+                                <button style={{ width: "100%", padding: "14px 20px", background: "linear-gradient(135deg, #3a2e25 0%, #4a3d32 100%)", color: "#fff", border: "none", borderRadius: 10, fontWeight: 600, fontSize: 13, cursor: "pointer", letterSpacing: 0.8, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 4px 14px rgba(58,46,37,0.2)" }}>
+                                    BUKA LINK PEMBAYARAN <span style={{ fontSize: 14 }}>↗</span>
+                                </button>
+                            </a>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 12, fontSize: 11, color: "#a09488" }}>
+                                <span>🔒</span><span style={{ fontWeight: 500 }}>SECURED SESSION BY SSL</span>
+                            </div>
+                        </div>
+
+                        <div style={{ background: "#fff", borderRadius: 14, padding: "24px 28px", border: "1px solid #ebe5dd" }}>
+                            <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#3a2e25" }}>Form Konfirmasi</h3>
+                            <form onSubmit={submitManualReport}>
+                                <div style={{ marginBottom: 16 }}>
+                                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#6b5e52", marginBottom: 6, letterSpacing: 0.3 }}>ID Transaksi / Nomor Referensi</label>
+                                    <input type="text" value={refNumber} onChange={e => setRefNumber(e.target.value)} placeholder="Masukkan nomor referensi..." style={{ width: "100%", padding: "11px 14px", borderRadius: 8, border: "1.5px solid #ddd6cd", fontSize: 13.5, fontFamily: "'DM Sans', sans-serif", background: "#faf8f5", outline: "none", boxSizing: "border-box", transition: "border-color 0.2s" }} onFocus={e => e.target.style.borderColor = "#c69c6d"} onBlur={e => e.target.style.borderColor = "#ddd6cd"} required />
                                 </div>
-                            )}
-                        </div>
-                    )}
-
-                    {activeTab === "history" && (
-                        <div className="table-container">
-                            <table className="data-table">
-                                <thead>
-                                    <tr>
-                                        <th>Tanggal</th>
-                                        <th>Jenis</th>
-                                        <th>Nominal</th>
-                                        <th style={{ textAlign: "center" }}>Invoice</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {history.map(item => (
-                                        <tr key={item.order_id}>
-                                            <td className="font-medium">{format(new Date(item.created_at), 'dd MMM yyyy')}</td>
-                                            <td className="uppercase text-[10px] font-bold text-gray-500">{item.payment_type === 'initial' ? 'Setup + Lisensi' : 'Langganan Bulanan'}</td>
-                                            <td className="font-bold">{formatCurrency(item.amount)}</td>
-                                            <td style={{ textAlign: "center" }}>
-                                                <button onClick={() => openInvoice(item)} className="btn btn-secondary py-1 text-[10px] uppercase font-black">LIHAT</button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {history.length === 0 && <tr><td colSpan={4} className="text-center py-10 opacity-30 italic italic">Belum ada riwayat pembayaran</td></tr>}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-
-                    {activeTab === "admin" && (
-                        <div className="space-y-4 max-w-4xl">
-                            <h3 className="text-sm font-bold uppercase text-red-600 mb-4 flex items-center gap-2">
-                                <Zap size={14} /> Review Pembayaran Manual
-                            </h3>
-                            {manualReports.map(report => (
-                                <div key={report.id} className="p-6 border border-gray-100 rounded-xl bg-gray-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                    <div className="grid grid-cols-2 gap-x-8 gap-y-2">
-                                        <div><p className="text-[10px] font-bold text-gray-400 mb-1 uppercase">User</p><p className="font-bold text-sm uppercase">{report.username}</p></div>
-                                        <div><p className="text-[10px] font-bold text-gray-400 mb-1 uppercase">Nominal</p><p className="font-bold text-sm">{formatCurrency(report.amount)}</p></div>
-                                        <div className="col-span-2"><p className="text-[10px] font-bold text-gray-400 mb-1 uppercase">Kode Ref</p><p className="font-bold text-base tracking-tight select-all text-blue-600">{report.reference_number}</p></div>
-                                    </div>
-                                    <button onClick={() => approveManual(report.id)} className="btn btn-success py-3 px-6 shadow-md uppercase font-black text-[10px]">Aktifkan Lisensi</button>
+                                <div style={{ marginBottom: 20 }}>
+                                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#6b5e52", marginBottom: 6, letterSpacing: 0.3 }}>Catatan (Pilihan)</label>
+                                    <input type="text" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Contoh: Transfer BCA, QRIS, dll." style={{ width: "100%", padding: "11px 14px", borderRadius: 8, border: "1.5px solid #ddd6cd", fontSize: 13.5, fontFamily: "'DM Sans', sans-serif", background: "#faf8f5", outline: "none", boxSizing: "border-box", transition: "border-color 0.2s" }} onFocus={e => e.target.style.borderColor = "#c69c6d"} onBlur={e => e.target.style.borderColor = "#ddd6cd"} />
                                 </div>
-                            ))}
+                                <button type="submit" disabled={submitting} style={{ width: "100%", padding: "13px 20px", background: submitting ? "#a09488" : "linear-gradient(135deg, #c69c6d 0%, #a67c52 100%)", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: submitting ? "not-allowed" : "pointer", letterSpacing: 0.8, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 4px 14px rgba(198,156,109,0.3)" }}>
+                                    {submitting ? <Loader2 size={16} className="animate-spin" /> : "✓"} {submitting ? "MENGIRIM..." : "KIRIM KONFIRMASI"}
+                                </button>
+                            </form>
                         </div>
-                    )}
+                    </div>
                 </div>
-            </div>
+            )}
+
+            {/* Tab Riwayat */}
+            {activeTab === "history" && (
+                <div style={{ background: "#fff", borderRadius: 14, padding: "24px 28px", border: "1px solid #ebe5dd", overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 500 }}>
+                        <thead>
+                            <tr>
+                                <th style={{ padding: "12px 16px", background: "#faf8f5", textAlign: "left", fontSize: 12, color: "#8a7e72", borderBottom: "1px solid #ebe5dd" }}>Tanggal</th>
+                                <th style={{ padding: "12px 16px", background: "#faf8f5", textAlign: "left", fontSize: 12, color: "#8a7e72", borderBottom: "1px solid #ebe5dd" }}>Jenis</th>
+                                <th style={{ padding: "12px 16px", background: "#faf8f5", textAlign: "left", fontSize: 12, color: "#8a7e72", borderBottom: "1px solid #ebe5dd" }}>Nominal</th>
+                                <th style={{ padding: "12px 16px", background: "#faf8f5", textAlign: "center", fontSize: 12, color: "#8a7e72", borderBottom: "1px solid #ebe5dd" }}>Invoice</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {history.length > 0 ? history.map(item => (
+                                <tr key={item.order_id} style={{ borderBottom: "1px solid #f5f3f0" }}>
+                                    <td style={{ padding: "14px 16px", fontSize: 13, fontWeight: 500 }}>{format(new Date(item.created_at), 'dd MMM yyyy')}</td>
+                                    <td style={{ padding: "14px 16px", fontSize: 11, textTransform: "uppercase", fontWeight: 700, color: "#8a7e72" }}>{item.payment_type === 'initial' ? 'Setup + Lisensi' : 'Langganan Bulanan'}</td>
+                                    <td style={{ padding: "14px 16px", fontSize: 13, fontWeight: 700, fontFamily: "'Playfair Display', serif" }}>{formatCurrency(item.amount)}</td>
+                                    <td style={{ padding: "14px 16px", textAlign: "center" }}>
+                                        <button onClick={() => openInvoice(item)} style={{ background: "#f5f3f0", color: "#3a2e25", border: "none", padding: "6px 12px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer" }}>LIHAT</button>
+                                    </td>
+                                </tr>
+                            )) : (
+                                <tr>
+                                    <td colSpan={4} style={{ padding: "40px", textAlign: "center", color: "#a09488" }}>
+                                        <div style={{ fontSize: 40, marginBottom: 12 }}>📄</div>
+                                        <div style={{ fontSize: 14, fontWeight: 500 }}>Belum ada riwayat pembayaran</div>
+                                        <div style={{ fontSize: 12.5, marginTop: 6 }}>Riwayat transaksi akan muncul setelah konfirmasi diverifikasi.</div>
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            {activeTab === "admin" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 800 }}>
+                    <h3 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 700, color: "#d63230", textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
+                        <Zap size={14} /> Review Pembayaran Manual
+                    </h3>
+                    {manualReports.map(report => (
+                        <div key={report.id} style={{ padding: "20px 24px", background: "#fff", borderRadius: 14, border: "1px solid #ebe5dd", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 32px", flex: 1 }}>
+                                <div><div style={{ fontSize: 10, fontWeight: 700, color: "#a09488", textTransform: "uppercase", marginBottom: 2 }}>User</div><div style={{ fontSize: 14, fontWeight: 700, textTransform: "uppercase", color: "#3a2e25" }}>{report.username}</div></div>
+                                <div><div style={{ fontSize: 10, fontWeight: 700, color: "#a09488", textTransform: "uppercase", marginBottom: 2 }}>Nominal</div><div style={{ fontSize: 14, fontWeight: 700, color: "#3a2e25" }}>{formatCurrency(report.amount)}</div></div>
+                                <div style={{ gridColumn: "span 2" }}><div style={{ fontSize: 10, fontWeight: 700, color: "#a09488", textTransform: "uppercase", marginBottom: 2 }}>Kode Ref</div><div style={{ fontSize: 15, fontWeight: 700, color: "#457b9d", letterSpacing: 0.5 }}>{report.reference_number}</div></div>
+                            </div>
+                            <button onClick={() => approveManual(report.id)} style={{ background: "#5a8f6e", color: "white", border: "none", padding: "12px 24px", borderRadius: 8, fontSize: 11, fontWeight: 700, textTransform: "uppercase", cursor: "pointer", boxShadow: "0 4px 10px rgba(90,143,110,0.2)" }}>Aktifkan Lisensi</button>
+                        </div>
+                    ))}
+                </div>
+            )}
 
             {/* Modal Invoice Pop-Up - Premium Certificate Design */}
             {showInvoice && selectedInvoice && (
-                <div className="modal-overlay overflow-y-auto py-10" onClick={() => setShowInvoice(false)}>
-                    <div className="bg-[#FDF3E7] w-full max-w-3xl mx-auto p-4 md:p-8 rounded-sm shadow-2xl relative" onClick={e => e.stopPropagation()}>
+                <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, overflowY: "auto" }} onClick={() => setShowInvoice(false)}>
+                    <div className="bg-[#FDF3E7] w-full max-w-3xl mx-auto p-4 md:p-8 rounded-sm shadow-2xl relative" onClick={e => e.stopPropagation()} style={{ margin: "auto" }}>
                         {/* Styles for Certificate */}
                         <style jsx>{`
                             .cert-container {
@@ -471,7 +464,6 @@ export default function BillingPage() {
                             .signature-line { width: 150px; height: 1px; background: #5C4033; margin-bottom: 8px; margin-top: 40px; }
                             
                             @media print {
-                                .modal-overlay { background: white !important; padding: 0 !important; }
                                 .cert-container { border: none !important; box-shadow: none !important; }
                                 .no-print { display: none !important; }
                             }
@@ -513,24 +505,24 @@ export default function BillingPage() {
                                     <div className="mt-4 pt-4 border-t border-dashed border-gray-200">
                                         <p className="cert-label mb-2">Rincian Paket Aktivasi:</p>
                                         <div className="cert-row !border-none !mb-1">
-                                            <span className="text-[10px] text-gray-500">Lisensi Terusan (7 User Aktif)</span>
-                                            <span className="text-[11px] font-bold">Rp 18.585.000</span>
+                                            <span style={{ fontSize: 10, color: "#6b7280" }}>Lisensi Terusan (7 User Aktif)</span>
+                                            <span style={{ fontSize: 11, fontWeight: "bold" }}>Rp 18.585.000</span>
                                         </div>
                                         <div className="cert-row !border-none !mb-1">
-                                            <span className="text-[10px] text-gray-500">Cloud Server License (Singapore)</span>
-                                            <span className="text-[11px] font-bold">Rp 3.000.000</span>
+                                            <span style={{ fontSize: 10, color: "#6b7280" }}>Cloud Server (Singapore)</span>
+                                            <span style={{ fontSize: 11, fontWeight: "bold" }}>Rp 3.000.000</span>
                                         </div>
                                         <div className="cert-row !border-none !mb-1">
-                                            <span className="text-[10px] text-gray-500">Installation & Configuration Fee</span>
-                                            <span className="text-[11px] font-bold">Rp 4.415.000</span>
+                                            <span style={{ fontSize: 10, color: "#6b7280" }}>Installation & Config</span>
+                                            <span style={{ fontSize: 11, fontWeight: "bold" }}>Rp 4.415.000</span>
                                         </div>
                                         <div className="cert-row !border-none !mt-2 pt-2 border-t border-gray-100">
-                                            <span className="text-[10px] font-bold">Subtotal Biaya</span>
-                                            <span className="text-[11px] font-bold">Rp 26.000.000</span>
+                                            <span style={{ fontSize: 10, fontWeight: "bold" }}>Subtotal Biaya</span>
+                                            <span style={{ fontSize: 11, fontWeight: "bold" }}>Rp 26.000.000</span>
                                         </div>
                                         <div className="cert-row !border-none !mb-1">
-                                            <span className="text-[10px] font-black italic text-emerald-600">Diskon Aktivasi Awal</span>
-                                            <span className="text-[11px] font-black text-emerald-600">- Rp 5.200.000</span>
+                                            <span style={{ fontSize: 10, fontStyle: "italic", fontWeight: 900, color: "#059669" }}>Diskon Aktivasi</span>
+                                            <span style={{ fontSize: 11, fontWeight: 900, color: "#059669" }}>- Rp 5.200.000</span>
                                         </div>
                                     </div>
                                 ) : (
@@ -560,10 +552,10 @@ export default function BillingPage() {
                         </div>
 
                         <div className="mt-8 flex justify-center gap-4 no-print">
-                            <button onClick={() => window.print()} className="btn btn-primary px-8 bg-[#5C4033] hover:bg-[#B89678] border-none flex items-center gap-2">
+                            <button onClick={() => window.print()} style={{ background: "#5C4033", color: "white", padding: "12px 24px", borderRadius: 8, fontWeight: 700, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
                                 <Printer size={16} /> CETAK SERTIFIKAT
                             </button>
-                            <button onClick={() => setShowInvoice(false)} className="btn btn-secondary px-8">
+                            <button onClick={() => setShowInvoice(false)} style={{ background: "#fff", color: "#5C4033", padding: "12px 24px", borderRadius: 8, fontWeight: 700, border: "1px solid #5C4033", cursor: "pointer" }}>
                                 TUTUP
                             </button>
                         </div>
@@ -573,19 +565,38 @@ export default function BillingPage() {
 
             {/* Modal Sukses Validasi */}
             {showSuccessModal && (
-                <div className="modal-overlay overflow-y-auto py-10" onClick={() => setShowSuccessModal(false)}>
-                    <div className="bg-white w-full max-w-sm mx-auto p-8 rounded-2xl shadow-2xl relative text-center animate-fade-in" onClick={e => e.stopPropagation()}>
-                        <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6 text-emerald-500 shadow-inner">
-                            <CheckCircle2 size={40} className="animate-pulse" />
+                <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={() => setShowSuccessModal(false)}>
+                    <div style={{ background: "#fff", width: "100%", maxWidth: 400, padding: 32, borderRadius: 20, textAlign: "center", boxShadow: "0 20px 40px rgba(0,0,0,0.2)", position: "relative" }} onClick={e => e.stopPropagation()}>
+                        <div style={{ width: 80, height: 80, background: "#e8f5e9", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px", color: "#4caf50", boxShadow: "inset 0 4px 8px rgba(0,0,0,0.05)" }}>
+                            <CheckCircle2 size={40} />
                         </div>
-                        <h3 className="text-xl font-black text-gray-800 mb-2 uppercase tracking-tight">Laporan Terkirim</h3>
-                        <p className="text-sm text-gray-500 mb-8 leading-relaxed">Terima kasih, pembayaran Anda <b>sedang divalidasi</b> oleh sistem & Tim Admin.</p>
+                        <h3 style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 900, color: "#3a2e25", textTransform: "uppercase", letterSpacing: 0.5 }}>Laporan Terkirim</h3>
+                        <p style={{ margin: "0 0 24px", fontSize: 13, color: "#8a7e72", lineHeight: 1.6 }}>Terima kasih, pembayaran Anda <b style={{ color: "#3a2e25" }}>sedang divalidasi</b> oleh sistem & Tim Admin.</p>
                         
                         <button 
                             onClick={() => setShowSuccessModal(false)}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white w-full py-4 rounded-xl font-bold uppercase tracking-widest text-xs transition-all shadow-lg shadow-emerald-200 active:scale-95"
+                            style={{ background: "#5a8f6e", color: "white", width: "100%", padding: "14px", borderRadius: 12, fontWeight: 700, textTransform: "uppercase", fontSize: 12, border: "none", cursor: "pointer", letterSpacing: 0.5, boxShadow: "0 4px 12px rgba(90,143,110,0.3)" }}
                         >
                             Selesai & Tutup
+                        </button>
+                    </div>
+                </div>
+            )}
+            {/* Modal Sukses Aktifasi */}
+            {showApproveSuccess && (
+                <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={() => setShowApproveSuccess(false)}>
+                    <div style={{ background: "#fff", width: "100%", maxWidth: 400, padding: 32, borderRadius: 20, textAlign: "center", boxShadow: "0 20px 40px rgba(0,0,0,0.2)", position: "relative" }} onClick={e => e.stopPropagation()}>
+                        <div style={{ width: 80, height: 80, background: "#e8f5e9", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px", color: "#4caf50", boxShadow: "inset 0 4px 8px rgba(0,0,0,0.05)" }}>
+                            <CheckCircle2 size={40} />
+                        </div>
+                        <h3 style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 900, color: "#3a2e25", textTransform: "uppercase", letterSpacing: 0.5 }}>Aktivasi Sukses</h3>
+                        <p style={{ margin: "0 0 24px", fontSize: 13, color: "#8a7e72", lineHeight: 1.6 }}>Lisensi aplikasi berhasil diperpanjang. Seluruh sistem kini dapat diakses kembali.</p>
+                        
+                        <button 
+                            onClick={() => setShowApproveSuccess(false)}
+                            style={{ background: "#5a8f6e", color: "white", width: "100%", padding: "14px", borderRadius: 12, fontWeight: 700, textTransform: "uppercase", fontSize: 12, border: "none", cursor: "pointer", letterSpacing: 0.5, boxShadow: "0 4px 12px rgba(90,143,110,0.3)" }}
+                        >
+                            Oke, Lanjutkan
                         </button>
                     </div>
                 </div>
