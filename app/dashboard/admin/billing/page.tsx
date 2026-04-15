@@ -270,86 +270,90 @@ export default function BillingPage() {
 
                 <div className="card-body">
                     {activeTab === "overview" && (
-                        <div className="max-w-4xl">
-                            <div className="mb-8 p-6 bg-amber-50 rounded-xl border border-amber-100 border-dashed">
-                                <h4 className="text-sm font-bold text-amber-900 mb-2 flex items-center gap-2">
-                                    <Zap size={16} /> Instruksi Perpanjangan Manual
-                                </h4>
-                                <ol className="text-xs text-amber-800 space-y-2 list-decimal list-inside leading-loose">
-                                    <li>Klik tombol <strong>"BUKA LINK PEMBAYARAN"</strong> di bawah.</li>
-                                    <li>Selesaikan pembayaran melalui QRIS/Transfer di link tersebut.</li>
-                                    <li>Simpan <strong>Nomor Referensi</strong> (ID Transaksi) dari lynk.id.</li>
-                                    <li>Masukkan Nomor Referensi tadi ke form konfirmasi di bawah ini.</li>
-                                    <li>Klik tombol cokelat <strong>"KIRIM KONFIRMASI"</strong>.</li>
-                                </ol>
+                        <div className="max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+                            <div className="lg:col-span-2 space-y-8">
+                                <div className="p-6 bg-amber-50 rounded-xl border border-amber-100 border-dashed">
+                                    <h4 className="text-sm font-bold text-amber-900 mb-2 flex items-center gap-2">
+                                        <Zap size={16} /> Instruksi Perpanjangan Manual
+                                    </h4>
+                                    <ol className="text-xs text-amber-800 space-y-2 list-decimal list-inside leading-loose">
+                                        <li>Klik tombol <strong>"BUKA LINK PEMBAYARAN"</strong> di bawah.</li>
+                                        <li>Selesaikan pembayaran melalui QRIS/Transfer di link tersebut.</li>
+                                        <li>Simpan <strong>Nomor Referensi</strong> (ID Transaksi) dari lynk.id.</li>
+                                        <li>Masukkan Nomor Referensi tadi ke form konfirmasi di bawah ini.</li>
+                                        <li>Klik tombol cokelat <strong>"KIRIM KONFIRMASI"</strong>.</li>
+                                    </ol>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <div className="space-y-6">
+                                        <div>
+                                            <h3 className="text-base font-bold text-gray-800 mb-2">Portal Pembayaran</h3>
+                                            <p className="text-xs text-gray-500 leading-relaxed mb-4">Gunakan link eksternal di bawah ini (lynk.id) untuk memproses tagihan aplikasi Anda.</p>
+                                            <a href={LYNKID_URL} target="_blank" className="btn btn-primary w-full py-4 flex items-center justify-center gap-2">
+                                                BUKA LINK PEMBAYARAN <ExternalLink size={16} />
+                                            </a>
+                                        </div>
+                                        <div className="p-4 bg-gray-50 rounded-lg border border-gray-100 flex items-center gap-3 text-[10px] text-gray-400 uppercase font-black italic tracking-widest">
+                                            <Zap size={14} /> SECURED SESSION BY SSL
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm shadow-sm space-y-4">
+                                        <h4 className="text-xs font-bold uppercase tracking-widest text-gray-400 border-b border-gray-50 pb-2">Form Konfirmasi</h4>
+                                        <form onSubmit={submitManualReport} className="space-y-4">
+                                            <div>
+                                                <label className="form-label">ID Transaksi / Nomor Referensi</label>
+                                                <input type="text" value={refNumber} onChange={e => setRefNumber(e.target.value)} placeholder="ABC-12345-XYZ" className="form-input" />
+                                            </div>
+                                            <div>
+                                                <label className="form-label">Catatan (Pilihan)</label>
+                                                <input type="text" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Contoh: QRIS MANDIRI" className="form-input" />
+                                            </div>
+                                            <button disabled={submitting} type="submit" className="btn btn-primary w-full py-3 flex items-center justify-center gap-2 shadow-lg">
+                                                {submitting ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                                                KIRIM KONFIRMASI
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
                             </div>
 
                             {!license?.is_setup_completed && (
-                                <div className="mb-8 p-6 bg-[#FDF3E7] rounded-xl border border-[#B89678] border-dashed">
-                                    <h4 className="text-sm font-bold text-[#5C4033] mb-4 flex items-center gap-2">
-                                        <FileText size={16} /> Rincian Pemberitahuan Tagihan
-                                    </h4>
-                                    <div className="space-y-3 text-xs text-[#5C4033]">
-                                        <div className="flex justify-between border-b border-[#B89678]/20 pb-2">
-                                            <span className="opacity-80">Lisensi Terusan (7 User Aktif)</span>
-                                            <span className="font-bold">Rp 18.585.000</span>
-                                        </div>
-                                        <div className="flex justify-between border-b border-[#B89678]/20 pb-2">
-                                            <span className="opacity-80">Cloud Server License (Singapore)</span>
-                                            <span className="font-bold">Rp 3.000.000</span>
-                                        </div>
-                                        <div className="flex justify-between border-b border-[#B89678]/20 pb-2">
-                                            <span className="opacity-80">Installation & Configuration Fee</span>
-                                            <span className="font-bold">Rp 4.415.000</span>
-                                        </div>
-                                        <div className="flex justify-between pt-2 border-t border-[#B89678]/30">
-                                            <span className="font-bold">Subtotal Biaya</span>
-                                            <span className="font-bold">Rp 26.000.000</span>
-                                        </div>
-                                        <div className="flex justify-between text-emerald-700">
-                                            <span className="font-bold italic">Diskon Aktivasi Awal</span>
-                                            <span className="font-black">- Rp 5.200.000</span>
-                                        </div>
-                                        <div className="flex justify-between pt-4 mt-2 border-t-2 border-[#5C4033]">
-                                            <span className="font-black text-sm">TOTAL PEMBAYARAN</span>
-                                            <span className="font-black text-lg">Rp 20.800.000</span>
+                                <div className="lg:col-span-1">
+                                    <div className="p-6 bg-[#FDF3E7] rounded-xl shadow-lg border border-[#B89678] sticky top-6">
+                                        <h4 className="text-sm font-bold text-[#5C4033] mb-4 flex items-center gap-2 border-b border-[#B89678]/20 pb-3">
+                                            <FileText size={16} /> Rincian Tagihan Awal
+                                        </h4>
+                                        <div className="space-y-3 text-xs text-[#5C4033]">
+                                            <div className="flex justify-between border-b border-[#B89678]/20 pb-2">
+                                                <span className="opacity-80 flex-1 pr-2">Lisensi Terusan (7 User)</span>
+                                                <span className="font-bold">Rp 18.585.000</span>
+                                            </div>
+                                            <div className="flex justify-between border-b border-[#B89678]/20 pb-2">
+                                                <span className="opacity-80 flex-1 pr-2">Cloud Server (Singapore)</span>
+                                                <span className="font-bold">Rp 3.000.000</span>
+                                            </div>
+                                            <div className="flex justify-between border-b border-[#B89678]/20 pb-2">
+                                                <span className="opacity-80 flex-1 pr-2">Installation & Config</span>
+                                                <span className="font-bold">Rp 4.415.000</span>
+                                            </div>
+                                            <div className="flex justify-between pt-2 border-t border-[#B89678]/30">
+                                                <span className="font-bold">Subtotal Biaya</span>
+                                                <span className="font-bold">Rp 26.000.000</span>
+                                            </div>
+                                            <div className="flex justify-between text-emerald-700 bg-emerald-50 p-2 rounded border border-emerald-100">
+                                                <span className="font-bold italic">Diskon Aktivasi</span>
+                                                <span className="font-black">- Rp 5.200.000</span>
+                                            </div>
+                                            <div className="pt-4 mt-2 border-t-2 border-[#5C4033]">
+                                                <span className="font-black text-[10px] uppercase opacity-60 block mb-1">TOTAL PEMBAYARAN</span>
+                                                <span className="font-black text-2xl">Rp 20.800.000</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
                             )}
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                <div className="space-y-6">
-                                    <div>
-                                        <h3 className="text-base font-bold text-gray-800 mb-2">Portal Pembayaran</h3>
-                                        <p className="text-xs text-gray-500 leading-relaxed mb-4">Gunakan link eksternal di bawah ini (lynk.id) untuk memproses tagihan aplikasi Anda.</p>
-                                        <a href={LYNKID_URL} target="_blank" className="btn btn-primary w-full py-4 flex items-center justify-center gap-2">
-                                            BUKA LINK PEMBAYARAN <ExternalLink size={16} />
-                                        </a>
-                                    </div>
-                                    <div className="p-4 bg-gray-50 rounded-lg border border-gray-100 flex items-center gap-3 text-[10px] text-gray-400 uppercase font-black italic tracking-widest">
-                                        <Zap size={14} /> SECURED SESSION BY SSL
-                                    </div>
-                                </div>
-
-                                <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm shadow-sm space-y-4">
-                                    <h4 className="text-xs font-bold uppercase tracking-widest text-gray-400 border-b border-gray-50 pb-2">Form Konfirmasi</h4>
-                                    <form onSubmit={submitManualReport} className="space-y-4">
-                                        <div>
-                                            <label className="form-label">ID Transaksi / Nomor Referensi</label>
-                                            <input type="text" value={refNumber} onChange={e => setRefNumber(e.target.value)} placeholder="ABC-12345-XYZ" className="form-input" />
-                                        </div>
-                                        <div>
-                                            <label className="form-label">Catatan (Pilihan)</label>
-                                            <input type="text" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Contoh: QRIS MANDIRI" className="form-input" />
-                                        </div>
-                                        <button disabled={submitting} type="submit" className="btn btn-primary w-full py-3 flex items-center justify-center gap-2 shadow-lg">
-                                            {submitting ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
-                                            KIRIM KONFIRMASI
-                                        </button>
-                                    </form>
-                                </div>
-                            </div>
                         </div>
                     )}
 
