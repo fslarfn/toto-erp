@@ -73,7 +73,7 @@ export default function BillingPage() {
         try {
             const { error } = await supabase.from("billing_manual_confirmations").insert({
                 username: user?.username,
-                amount: license?.is_setup_completed ? 5950000 : 20500000,
+                amount: license?.is_setup_completed ? 6200000 : 20800000,
                 reference_number: refNumber, 
                 status: "pending"
             });
@@ -105,7 +105,7 @@ export default function BillingPage() {
 
     const manualExtend = async () => {
         const isInitial = !license?.is_setup_completed;
-        const daysToAdd = isInitial ? 60 : 30;
+        const daysToAdd = isInitial ? 90 : 30;
         
         if (!confirm(`Lakukan Aktivasi Manual? \nIni akan menambah masa aktif ${daysToAdd} hari ${isInitial ? '(Setiap Awal)' : '(Bulanan)'} secara instan.`)) return;
         
@@ -130,7 +130,7 @@ export default function BillingPage() {
             // 2. Insert History
             await supabase.from("billing_history").insert({
                 order_id: `ADMIN-MANUAL-${Date.now()}`,
-                amount: isInitial ? 20500000 : 5950000,
+                amount: isInitial ? 20800000 : 6200000,
                 payment_type: isInitial ? "initial" : "monthly",
                 status: "settlement",
                 payment_method: "ADMIN_DIRECT",
@@ -202,14 +202,14 @@ export default function BillingPage() {
                         </div>
                         <div>
                             <h4 className="font-black text-sm uppercase tracking-widest">Ada {manualReports.length} Laporan Pembayaran Baru!</h4>
-                            <p className="text-[10px] font-bold opacity-80 italic">Klik tombol di samping untuk mengaktifkan lisensi {license?.is_setup_completed ? '1 Bulan' : '2 Bulan'}.</p>
+                            <p className="text-[10px] font-bold opacity-80 italic">Klik tombol di samping untuk mengaktifkan lisensi {license?.is_setup_completed ? '1 Bulan' : '3 Bulan'}.</p>
                         </div>
                     </div>
                     <button 
                         onClick={() => approveManual(manualReports[0].id)}
                         className="bg-white text-red-600 px-8 py-3 rounded-full font-black uppercase text-[10px] tracking-[0.2em] shadow-lg hover:bg-black hover:text-white transition-all active:scale-95"
                     >
-                        AKTIFKAN LISENSI {license?.is_setup_completed ? '1 BULAN' : '2 BULAN'} SEKARANG
+                        AKTIFKAN LISENSI {license?.is_setup_completed ? '1 BULAN' : '3 BULAN'} SEKARANG
                     </button>
                 </div>
             )}
@@ -235,8 +235,8 @@ export default function BillingPage() {
                     </div>
                     <div>
                         <p className="text-xs font-medium text-gray-500">Tagihan Berikutnya</p>
-                        <h3 className="text-lg font-bold text-gray-800">{formatCurrency(license?.is_setup_completed ? 5950000 : 20500000)}</h3>
-                        <p className="text-[10px] text-gray-400 italic italic">{license?.is_setup_completed ? "Biaya Langganan Bulanan" : "Setup Awal + 2 Bulan"}</p>
+                        <h3 className="text-lg font-bold text-gray-800">{formatCurrency(license?.is_setup_completed ? 6200000 : 20800000)}</h3>
+                        <p className="text-[10px] text-gray-400 italic italic">{license?.is_setup_completed ? "Biaya Langganan Bulanan" : "Setup Awal + 3 Bulan"}</p>
                     </div>
                 </div>
 
@@ -475,7 +475,7 @@ export default function BillingPage() {
                                         <p className="cert-label mb-2">Rincian Paket Aktivasi:</p>
                                         <div className="cert-row !border-none !mb-1">
                                             <span className="text-[10px] text-gray-500">Lisensi Terusan (7 User Aktif)</span>
-                                            <span className="text-[11px] font-bold">Rp 11.900.000</span>
+                                            <span className="text-[11px] font-bold">Rp 18.585.000</span>
                                         </div>
                                         <div className="cert-row !border-none !mb-1">
                                             <span className="text-[10px] text-gray-500">Cloud Server License (Singapore)</span>
@@ -483,15 +483,15 @@ export default function BillingPage() {
                                         </div>
                                         <div className="cert-row !border-none !mb-1">
                                             <span className="text-[10px] text-gray-500">Installation & Configuration Fee</span>
-                                            <span className="text-[11px] font-bold">Rp 10.600.000</span>
+                                            <span className="text-[11px] font-bold">Rp 4.415.000</span>
                                         </div>
                                         <div className="cert-row !border-none !mt-2 pt-2 border-t border-gray-100">
                                             <span className="text-[10px] font-bold">Subtotal Biaya</span>
-                                            <span className="text-[11px] font-bold">Rp 25.500.000</span>
+                                            <span className="text-[11px] font-bold">Rp 26.000.000</span>
                                         </div>
                                         <div className="cert-row !border-none !mb-1">
                                             <span className="text-[10px] font-black italic text-emerald-600">Diskon Aktivasi Awal</span>
-                                            <span className="text-[11px] font-black text-emerald-600">- Rp 5.000.000</span>
+                                            <span className="text-[11px] font-black text-emerald-600">- Rp 5.200.000</span>
                                         </div>
                                     </div>
                                 ) : (
