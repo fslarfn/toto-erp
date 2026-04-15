@@ -63,11 +63,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const [collapsed, setCollapsed] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
     const [chatOpen, setChatOpen] = useState(false);
+    const [showTrialModal, setShowTrialModal] = useState(false);
+    
+    const isAdmin = ["faisal", "vira", "toto", "fauzi", "yuni"].includes(user?.username || "");
 
     // Redirect to login if not authenticated
     useEffect(() => {
         if (!user) router.replace("/login");
-    }, [user, router]);
+        else if (license && !license.is_setup_completed) {
+            setShowTrialModal(true);
+        }
+    }, [user, router, license]);
 
     if (!user) return null;
 
@@ -266,7 +272,122 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             {children}
                         </main>
                     </div>
-                     <ChatOrderBox isOpen={chatOpen} onClose={() => setChatOpen(false)} />
+                    {/* User Provided Exact HTML Banner */}
+                    {showTrialModal && license && !license.is_setup_completed && (
+                        <div className="modal-overlay z-[9999]" style={{ position:'fixed', top:0, left:0, right:0, bottom:0, display:'flex', alignItems:'center', justifyContent:'center', padding:'2rem', backgroundColor:'rgba(0,0,0,0.6)', backdropFilter:'blur(4px)', fontFamily:'system-ui,-apple-system,sans-serif' }}>
+                            <div style={{ display:'flex', flexDirection:'row', borderRadius:'16px', overflow:'hidden', width:'680px', maxWidth:'100%', boxShadow:'0 8px 32px rgba(0,0,0,0.18)', backgroundColor:'#FFFFFF' }}>
+                                
+                                {/* Left Panel */}
+                                <div style={{ width:'42%', backgroundColor:'#3B1F0F', padding:'32px', color:'white', display:'flex', flexDirection:'column', justifyContent:'space-between', minHeight:'320px', boxSizing:'border-box' }}>
+                                    <div>
+                                        <div style={{ fontSize:'10px', fontWeight:600, letterSpacing:'0.12em', background:'rgba(255,255,255,0.15)', borderRadius:'4px', padding:'4px 10px', display:'inline-block', marginBottom:'20px' }}>MASA TRIAL</div>
+                                        <div style={{ fontSize:'26px', fontWeight:700, lineHeight:1.25, margin:0, padding:0, marginBottom:'6px' }}>Sistem ERP<br/>Toto Official</div>
+                                        <div style={{ fontSize:'10px', fontWeight:500, letterSpacing:'0.1em', color:'rgba(255,255,255,0.5)', marginBottom:'32px' }}>ENTERPRISE EDITION V2.4</div>
+                                        <div style={{ borderTop:'1px solid rgba(255,255,255,0.15)', paddingTop:'20px' }}>
+                                            <div style={{ fontSize:'10px', color:'rgba(255,255,255,0.5)', letterSpacing:'0.08em', marginBottom:'4px' }}>BERAKHIR PADA</div>
+                                            <div style={{ fontSize:'28px', fontWeight:700, letterSpacing:'-0.5px', margin:0, padding:0 }}>25 April 2026</div>
+                                        </div>
+                                    </div>
+                                    <div style={{ background:'#D97B2A', borderRadius:'20px', padding:'6px 14px', fontSize:'12px', fontWeight:600, marginTop:'20px', display:'inline-flex', alignItems:'center', gap:'6px', width:'fit-content' }}>
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                        <span>
+                                            {(() => {
+                                                // Gunakan syntax parameter untuk membuat Date persis berdasarkan timezone lokal browser/user
+                                                // Bulan di Array dimulai dari 0 (Jan = 0, April = 3)
+                                                const targetDate = new Date(2026, 3, 25);
+                                                targetDate.setHours(0, 0, 0, 0); // Reset ke Jam 00:00:00 lokal
+                                                
+                                                const today = new Date();
+                                                today.setHours(0, 0, 0, 0); // Kunci di jam 00:00:00 hari ini
+                                                
+                                                const diffTime = targetDate.getTime() - today.getTime();
+                                                // Pembulatan yang solid
+                                                const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+                                                
+                                                if (diffDays > 0) return `${diffDays} Hari Tersisa`;
+                                                if (diffDays === 0) return 'Berakhir Hari Ini';
+                                                return 'Masa Trial Berakhir';
+                                            })()}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Right Panel */}
+                                <div style={{ width:'58%', background:'#FFFFFF', padding:'28px 28px 24px 28px', display:'flex', flexDirection:'column', justifyContent:'space-between', boxSizing:'border-box' }}>
+                                    <div>
+                                        <div style={{ fontSize:'18px', fontWeight:700, color:'#1A1A1A', marginBottom:'6px', lineHeight:1.3 }}>Buka Potensi Penuh Bisnis Anda</div>
+                                        <div style={{ fontSize:'12.5px', color:'#666', lineHeight:1.6, marginBottom:'18px' }}>
+                                            Jangan biarkan operasional Anda terhenti. Tingkatkan ke <strong style={{ color:'#3B1F0F' }}>Enterprise</strong> untuk terus menikmati kemudahan pengelolaan sistem.
+                                        </div>
+                                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px' }}>
+                                            <div style={{ display:'flex', gap:'10px', alignItems:'flex-start' }}>
+                                                <div style={{ width:'34px', height:'34px', borderRadius:'50%', background:'#F5EFE8', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8B5E3C" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize:'12.5px', fontWeight:600, color:'#1A1A1A', lineHeight:1.4 }}>Akses Tak Terbatas</div>
+                                                    <div style={{ fontSize:'11.5px', color:'#888', lineHeight:1.4 }}>Kolaborasi seluruh tim tanpa batas.</div>
+                                                </div>
+                                            </div>
+                                            <div style={{ display:'flex', gap:'10px', alignItems:'flex-start' }}>
+                                                <div style={{ width:'34px', height:'34px', borderRadius:'50%', background:'#F5EFE8', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8B5E3C" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></svg>
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize:'12.5px', fontWeight:600, color:'#1A1A1A', lineHeight:1.4 }}>Backup Cloud</div>
+                                                    <div style={{ fontSize:'11.5px', color:'#888', lineHeight:1.4 }}>Data aman otomatis.</div>
+                                                </div>
+                                            </div>
+                                            <div style={{ display:'flex', gap:'10px', alignItems:'flex-start' }}>
+                                                <div style={{ width:'34px', height:'34px', borderRadius:'50%', background:'#F5EFE8', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8B5E3C" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize:'12.5px', fontWeight:600, color:'#1A1A1A', lineHeight:1.4 }}>Prioritas Support</div>
+                                                    <div style={{ fontSize:'11.5px', color:'#888', lineHeight:1.4 }}>Bantuan teknis 24/7.</div>
+                                                </div>
+                                            </div>
+                                            <div style={{ display:'flex', gap:'10px', alignItems:'flex-start' }}>
+                                                <div style={{ width:'34px', height:'34px', borderRadius:'50%', background:'#F5EFE8', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8B5E3C" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize:'12.5px', fontWeight:600, color:'#1A1A1A', lineHeight:1.4 }}>Audit Log & Security</div>
+                                                    <div style={{ fontSize:'11.5px', color:'#888', lineHeight:1.4 }}>Keamanan tingkat tinggi.</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div style={{ marginTop:'22px', display:'flex', gap:'12px', alignItems:'center' }}>
+                                        {isAdmin ? (
+                                            <>
+                                                <button 
+                                                    onClick={() => { setShowTrialModal(false); router.push("/dashboard/admin/billing"); }}
+                                                    style={{ background:'#3B1F0F', color:'white', borderRadius:'8px', padding:'10px 22px', fontSize:'12.5px', fontWeight:600, letterSpacing:'0.05em', border:'none', cursor:'pointer', fontFamily:'inherit' }}
+                                                >
+                                                    AKTIVASI SEKARANG
+                                                </button>
+                                                <button 
+                                                    onClick={() => setShowTrialModal(false)}
+                                                    style={{ background:'transparent', color:'#888', fontSize:'12.5px', border:'none', cursor:'pointer', padding:'10px 8px', fontFamily:'inherit' }}
+                                                >
+                                                    TUTUP (SAYA PAHAM)
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <button 
+                                                onClick={() => setShowTrialModal(false)}
+                                                style={{ background:'#3B1F0F', color:'white', borderRadius:'8px', padding:'10px 22px', fontSize:'12.5px', fontWeight:600, letterSpacing:'0.05em', border:'none', cursor:'pointer', fontFamily:'inherit', width:'100%' }}
+                                            >
+                                                SAYA MENGERTI
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
                     </TagihanBahanProvider>
                 </SJBahanProvider>
@@ -432,3 +553,23 @@ function PenawaranIcon({ size = 18 }: { size?: number }) {
         </svg>
     );
 }
+
+function ZapIcon({ size = 18 }: { size?: number }) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+        </svg>
+    );
+}
+
+function CalendarIcon({ size = 18, className }: { size?: number, className?: string }) {
+    return (
+        <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+        </svg>
+    );
+}
+
