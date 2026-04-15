@@ -367,44 +367,141 @@ export default function BillingPage() {
                 </div>
             </div>
 
-            {/* Modal Invoice Pop-Up - Standard Look */}
+            {/* Modal Invoice Pop-Up - Premium Certificate Design */}
             {showInvoice && selectedInvoice && (
-                <div className="modal-overlay">
-                    <div className="modal-box max-w-2xl">
-                        <div className="flex justify-between items-center border-b pb-4 mb-6">
-                            <h3 className="font-bold text-gray-800">Bukti Pembayaran</h3>
-                            <button onClick={() => setShowInvoice(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+                <div className="modal-overlay overflow-y-auto py-10" onClick={() => setShowInvoice(false)}>
+                    <div className="bg-[#FDF3E7] w-full max-w-3xl mx-auto p-4 md:p-8 rounded-sm shadow-2xl relative" onClick={e => e.stopPropagation()}>
+                        {/* Styles for Certificate */}
+                        <style jsx>{`
+                            .cert-container {
+                                background: #FFFFFF;
+                                padding: 40px;
+                                position: relative;
+                                border-radius: 4px;
+                                border: 15px solid #FFFFFF;
+                                outline: 1px solid #B89678;
+                                overflow: hidden;
+                                color: #5C4033;
+                                font-family: 'Outfit', sans-serif;
+                            }
+                            .cert-container::before {
+                                content: "";
+                                position: absolute;
+                                top: 15px;
+                                left: 15px;
+                                right: 15px;
+                                bottom: 15px;
+                                border: 2px solid #B89678;
+                                pointer-events: none;
+                                opacity: 0.3;
+                            }
+                            .watermark {
+                                position: absolute;
+                                top: 50%;
+                                left: 50%;
+                                transform: translate(-50%, -50%) rotate(-30deg);
+                                font-size: 100px;
+                                font-weight: 900;
+                                color: #B89678;
+                                opacity: 0.05;
+                                white-space: nowrap;
+                                pointer-events: none;
+                                text-transform: uppercase;
+                                z-index: 0;
+                            }
+                            .cert-header { text-align: center; margin-bottom: 40px; position: relative; z-index: 1; }
+                            .cert-header h1 { font-family: sans-serif; font-size: 32px; font-weight: 900; margin: 0; color: #5C4033; text-transform: uppercase; letter-spacing: -0.02em; }
+                            .cert-header p { font-size: 10px; font-weight: 700; letter-spacing: 0.4em; text-transform: uppercase; color: #B89678; margin-top: 5px; }
+                            
+                            .cert-badge {
+                                width: 80px; height: 80px; background: #D4AF37; margin: 20px auto; border-radius: 50%;
+                                display: flex; align-items: center; justify-content: center; color: white;
+                                box-shadow: 0 10px 20px rgba(212, 175, 55, 0.3); border: 4px double white; position: relative; z-index: 1;
+                            }
+                            
+                            .cert-title { text-align: center; margin-bottom: 30px; position: relative; z-index: 1; }
+                            .cert-title h2 { font-size: 22px; font-style: italic; margin-bottom: 5px; font-family: serif; }
+                            .cert-title .line { width: 50px; height: 2px; background: #D4AF37; margin: 15px auto; }
+                            
+                            .cert-details { background: #FAFAFA; padding: 25px; border-radius: 12px; border: 1px solid #EEE; margin-bottom: 30px; position: relative; z-index: 1; }
+                            .cert-row { display: flex; justify-content: space-between; margin-bottom: 12px; border-bottom: 1px solid #F0F0F0; padding-bottom: 8px; }
+                            .cert-label { font-size: 9px; font-weight: 700; color: #B89678; text-transform: uppercase; letter-spacing: 0.1em; }
+                            .cert-value { font-size: 12px; font-weight: 700; color: #5C4033; }
+                            
+                            .cert-footer { margin-top: 40px; display: flex; justify-content: space-between; align-items: flex-end; font-size: 9px; border-top: 1px solid #EEE; padding-top: 25px; position: relative; z-index: 1; }
+                            .signature-line { width: 150px; height: 1px; background: #5C4033; margin-bottom: 8px; margin-top: 40px; }
+                            
+                            @media print {
+                                .modal-overlay { background: white !important; padding: 0 !important; }
+                                .cert-container { border: none !important; box-shadow: none !important; }
+                                .no-print { display: none !important; }
+                            }
+                        `}</style>
+
+                        <div className="cert-container">
+                            <div className="watermark">T O T O</div>
+
+                            <div className="cert-header">
+                                <h1>RFW Conecting</h1>
+                                <p>Digital Architecture & Solution</p>
+                            </div>
+
+                            <div className="cert-badge">
+                                <Zap size={40} fill="white" />
+                            </div>
+
+                            <div className="cert-title">
+                                <h2>Payment Successful Notice</h2>
+                                <p className="text-[10px] text-gray-400 mt-1">Dokumen ini merupakan pengakuan resmi atas transaksi lisensi aktif.</p>
+                                <div className="line"></div>
+                            </div>
+
+                            <div className="cert-details">
+                                <div className="cert-row">
+                                    <span className="cert-label">Status Pembayaran</span>
+                                    <span className="cert-value text-emerald-600">DITERIMA & TERVALIDASI</span>
+                                </div>
+                                <div className="cert-row">
+                                    <span className="cert-label">ID Transaksi</span>
+                                    <span className="cert-value uppercase">{selectedInvoice.order_id}</span>
+                                </div>
+                                <div className="cert-row">
+                                    <span className="cert-label">Waktu Pembayaran</span>
+                                    <span className="cert-value">{format(new Date(selectedInvoice.created_at), "dd MMM yyyy HH:mm", { locale: localeId })}</span>
+                                </div>
+                                <div className="cert-row">
+                                    <span className="cert-label">Jenis Lisensi</span>
+                                    <span className="cert-value uppercase">
+                                        {selectedInvoice.payment_type === 'initial' ? "TOTO ERP - SETUP & LISENSI (60 HARI)" : "TOTO ERP - LANGGANAN BULANAN (30 HARI)"}
+                                    </span>
+                                </div>
+                                <div className="cert-row !border-none pt-2">
+                                    <span className="cert-label !text-gray-900 !text-xs">Total Pembayaran</span>
+                                    <span className="cert-value !text-lg !font-black">{formatCurrency(selectedInvoice.amount)}</span>
+                                </div>
+                            </div>
+
+                            <div className="cert-footer">
+                                <div className="signature">
+                                    <div className="signature-line"></div>
+                                    <p className="font-bold uppercase mb-0">SIGIT PUJO HARIYANTO</p>
+                                    <p className="opacity-60">Managing Director - RFW Conecting</p>
+                                </div>
+                                <div className="text-right opacity-40 uppercase font-bold tracking-tighter">
+                                    &copy; 2026 RFW Conecting<br />
+                                    Official Licensing Department
+                                </div>
+                            </div>
                         </div>
-                        <div className="p-4 bg-gray-50 rounded-lg border mb-6 flex justify-between items-center">
-                            <div>
-                                <p className="text-[10px] font-bold text-gray-400 uppercase">Order ID</p>
-                                <p className="font-black text-xs">{selectedInvoice.order_id}</p>
-                            </div>
-                            <div className="text-right">
-                                <p className="text-[10px] font-bold text-gray-400 uppercase">Status</p>
-                                <p className="text-emerald-600 font-bold uppercase text-xs">Settlement / Paid</p>
-                            </div>
-                        </div>
-                        <div className="space-y-4 mb-8">
-                            <div className="flex justify-between border-b border-gray-50 pb-2">
-                                <span className="text-xs text-gray-500">Layanan</span>
-                                <span className="text-xs font-bold">{selectedInvoice.payment_type === 'initial' ? "Setup & Licensing (60 Hari)" : "Subscription Extension"}</span>
-                            </div>
-                            <div className="flex justify-between border-b border-gray-50 pb-2">
-                                <span className="text-xs text-gray-500">Waktu Bayar</span>
-                                <span className="text-xs font-bold">{format(new Date(selectedInvoice.created_at), "dd MMM yyyy HH:mm", { locale: localeId })}</span>
-                            </div>
-                            <div className="flex justify-between pt-2">
-                                <span className="text-base font-bold">Total Pembayaran</span>
-                                <span className="text-xl font-black text-gray-800">{formatCurrency(selectedInvoice.amount)}</span>
-                            </div>
-                        </div>
-                        <div className="flex justify-center gap-4">
-                            <button onClick={() => window.print()} className="btn btn-primary px-8">
-                                <Printer size={16} /> CETAK INVOICE
+
+                        <div className="mt-8 flex justify-center gap-4 no-print">
+                            <button onClick={() => window.print()} className="btn btn-primary px-8 bg-[#5C4033] hover:bg-[#B89678] border-none flex items-center gap-2">
+                                <Printer size={16} /> CETAK SERTIFIKAT
+                            </button>
+                            <button onClick={() => setShowInvoice(false)} className="btn btn-secondary px-8">
+                                TUTUP
                             </button>
                         </div>
-                        <p className="text-center text-[10px] text-gray-300 mt-6 italic">Invoice digital diterbitkan oleh RFW Conecting Environment.</p>
                     </div>
                 </div>
             )}
