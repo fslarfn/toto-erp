@@ -30,7 +30,30 @@ export default function ChatOrderBox({ isOpen, onClose }: { isOpen: boolean, onC
     const [showMentions, setShowMentions] = useState(false);
 
     const scrollRef = useRef<HTMLDivElement>(null);
-    const audioRef = useRef<HTMLAudioElement | null>(null);
+
+    const playNotificationSound = () => {
+        try {
+            const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(800, audioCtx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.1); 
+            
+            gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+            gainNode.gain.linearRampToValueAtTime(0.5, audioCtx.currentTime + 0.05);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+
+            oscillator.start(audioCtx.currentTime);
+            oscillator.stop(audioCtx.currentTime + 0.3);
+        } catch (e) {
+            console.error("Audio failed", e);
+        }
+    };
 
     // 1. Fetch Users untuk Autocomplete Mention
     useEffect(() => {
@@ -80,10 +103,10 @@ export default function ChatOrderBox({ isOpen, onClose }: { isOpen: boolean, onC
                         // Audio & Unread if not open
                         if (!isOpen || isMinimized) {
                             setUnreadCount((c) => c + 1);
-                            if (audioRef.current) {
-                                audioRef.current.play().catch(() => {});
-                            }
                         }
+                        
+                        // Play sound on ANY new message insert, whether open or closed
+                        playNotificationSound();
                     }
                 }
             )
@@ -157,6 +180,7 @@ export default function ChatOrderBox({ isOpen, onClose }: { isOpen: boolean, onC
         <>
             {/* The Masterpiece Toto Chat Window */}
             <div
+                style={{ animation: 'slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
                 className={`fixed right-6 z-[9999] flex flex-col bg-white shadow-[0_20px_60px_rgba(0,0,0,0.12)] border border-slate-100 transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] overflow-hidden ${
                     isMinimized
                     ? "bottom-6 w-72 h-16 rounded-2xl scale-95 opacity-90 shadow-lg"
@@ -324,11 +348,6 @@ export default function ChatOrderBox({ isOpen, onClose }: { isOpen: boolean, onC
                     </>
                 )}
             </div>
-
-            {/* Audio notification for new messages */}
-            <audio ref={audioRef} preload="auto" className="hidden">
-                <source src="/notification.mp3" type="audio/mpeg" />
-            </audio>
         </>
     );
 }

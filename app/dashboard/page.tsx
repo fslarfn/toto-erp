@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { usePesanan, isRowFilled } from "@/lib/pesanan-store";
 import { useAuth } from "@/lib/auth";
+import { useSuratJalan } from "@/lib/surat-jalan-store";
 import { formatCurrency, formatDate, PRODUCTION_STATUS_LABELS, parseIdNum } from "@/lib/utils";
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -22,6 +23,7 @@ export default function DashboardPage() {
     const { orders, cashFlow, materials, bankAccounts } = useStore();
     const { rows: pesananRows } = usePesanan();
     const { user } = useAuth();
+    const { suratJalans } = useSuratJalan();
 
     const now = new Date();
     const [month, setMonth] = useState(now.getMonth() + 1);
@@ -206,6 +208,10 @@ export default function DashboardPage() {
                             </span>
                         );
                     })}
+                    
+                    <span className="badge" style={{ background: "#DBEAFE", color: "#1D4ED8", fontSize: 12, padding: "3px 12px", borderRadius: 999 }}>
+                        Dalam Pengiriman: <strong style={{ marginLeft: 4 }}>{suratJalans.filter(sj => sj.statusPengiriman === "Dikirim" || sj.statusPengiriman === "Dalam Perjalanan").length}</strong>
+                    </span>
                 </div>
             </div>
 

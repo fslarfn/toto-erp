@@ -62,6 +62,7 @@ function TabPrintPO() {
         if (selectedIds.length === 0) return;
         selectedIds.forEach((id) => updateRow(id, { di_produksi: true }, true));
         setMarked(true);
+        setSelectedIds([]); // <-- Clear pilihan setelah sukses
         setTimeout(() => setMarked(false), 2500);
     };
 
@@ -101,6 +102,10 @@ ${el.innerHTML}
 <script>window.onload=()=>{window.print();window.close();}<\/script>
 </body></html>`);
         win.document.close();
+        
+        // CLEAR pilihan setelah print sukses agar tidak terbawa ke print selanjutnya
+        setSelectedIds([]);
+        setOperator(""); // Opsional: Kosongkan juga nama operator setelah selesai
     };
 
     const now = new Date();

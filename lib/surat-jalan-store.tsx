@@ -17,6 +17,11 @@ export type SuratJalanRow = {
     ekspedisi: string;
     dibuat_oleh: string;
     items: SJItem[];
+    statusPengiriman: string;
+    nomorResi: string | null;
+    catatanPengiriman: string | null;
+    tanggalDiterima: string | null;
+    updatedAt: string | null;
 };
 
 export type SJItem = {
@@ -37,6 +42,11 @@ function dbToSuratJalan(r: Record<string, unknown>, items: Record<string, unknow
         vendor: (r.vendor as string) || "",
         ekspedisi: (r.ekspedisi as string) || "",
         dibuat_oleh: (r.dibuat_oleh as string) || "",
+        statusPengiriman: (r.status_pengiriman as string) || "Diproses",
+        nomorResi: (r.nomor_resi as string) || null,
+        catatanPengiriman: (r.catatan_pengiriman as string) || null,
+        tanggalDiterima: (r.tanggal_diterima as string) || null,
+        updatedAt: (r.updated_at as string) || null,
         items: items.map(it => ({
             pesananId: (it.pesanan_id as number) || 0,
             customer: (it.customer as string) || "",
@@ -51,7 +61,8 @@ function dbToSuratJalan(r: Record<string, unknown>, items: Record<string, unknow
 type Ctx = {
     suratJalans: SuratJalanRow[];
     loading: boolean;
-    addSJ: (sj: Omit<SuratJalanRow, "id">) => string;
+    addSJ: (sj: Omit<SuratJalanRow, "id" | "statusPengiriman" | "nomorResi" | "catatanPengiriman" | "tanggalDiterima" | "updatedAt">) => string;
+    updateSJStatus: (id: string, partial: Partial<SuratJalanRow>) => void;
     deleteSJ: (id: string) => void;
 };
 
@@ -65,19 +76,22 @@ export function SuratJalanProvider({ children }: { children: ReactNode }) {
         let cancelled = false;
         (async () => {
             try {
-                const { data: headers } = await supabase
+                const { data: headers, error: headersErr } = await supabase
                     .from("surat_jalan")
                     .select("*")
                     .order("tanggal", { ascending: false });
+
+                if (headersErr) console.error("Error fetching surat_jalan:", headersErr);
 
                 if (!cancelled && headers) {
                     const ids = headers.map(h => h.id);
                     let itemsData: Record<string, unknown>[] = [];
                     if (ids.length > 0) {
-                        const { data: items } = await supabase
+                        const { data: items, error: itemsErr } = await supabase
                             .from("surat_jalan_items")
                             .select("*")
                             .in("surat_jalan_id", ids);
+                        if (itemsErr) console.error("Error fetching surat_jalan_items:", itemsErr);
                         if (items) itemsData = items;
                     }
                     setSuratJalans(headers.map(h =>
@@ -135,11 +149,20 @@ export function SuratJalanProvider({ children }: { children: ReactNode }) {
         };
     }, []);
 
-    const addSJ = useCallback((sj: Omit<SuratJalanRow, "id">): string => {
+    const addSJ = useCallback((sj: Omit<SuratJalanRow, "id" | "statusPengiriman" | "nomorResi" | "catatanPengiriman" | "tanggalDiterima" | "updatedAt">): string => {
         const id = `SJ-${Date.now()}`;
-        setSuratJalans(prev => [{ ...sj, id }, ...prev]);
+        const newSj: SuratJalanRow = { 
+            ...sj, 
+            id, 
+            statusPengiriman: "Diproses", 
+            nomorResi: null, 
+            catatanPengiriman: null, 
+            tanggalDiterima: null, 
+            updatedAt: null 
+        };
+        setSuratJalans(prev => [newSj, ...prev]);
         (async () => {
-            await supabase.from("surat_jalan").insert({
+            const { error: err1 } = await supabase.from("surat_jalan").insert({
                 id,
                 type: sj.type,
                 tanggal: sj.tanggal,
@@ -148,8 +171,10 @@ export function SuratJalanProvider({ children }: { children: ReactNode }) {
                 ekspedisi: sj.ekspedisi,
                 dibuat_oleh: sj.dibuat_oleh,
             });
+            if (err1) console.error("Error inserting surat_jalan:", err1);
+
             if (sj.items.length > 0) {
-                await supabase.from("surat_jalan_items").insert(
+                const { error: err2 } = await supabase.from("surat_jalan_items").insert(
                     sj.items.map(it => ({
                         surat_jalan_id: id,
                         pesanan_id: it.pesananId,
@@ -160,6 +185,7 @@ export function SuratJalanProvider({ children }: { children: ReactNode }) {
                         no_inv: it.noInv,
                     }))
                 );
+                if (err2) console.error("Error inserting surat_jalan_items:", err2);
             }
         })();
         return id;
@@ -170,8 +196,22 @@ export function SuratJalanProvider({ children }: { children: ReactNode }) {
         supabase.from("surat_jalan").delete().eq("id", id).then();
     }, []);
 
+    const updateSJStatus = useCallback((id: string, partialData: Partial<SuratJalanRow>) => {
+        setSuratJalans(prev => prev.map(sj => sj.id === id ? { ...sj, ...partialData } : sj));
+        
+        const dbPayload: any = { updated_at: new Date().toISOString() };
+        if (partialData.statusPengiriman !== undefined) dbPayload.status_pengiriman = partialData.statusPengiriman;
+        if (partialData.nomorResi !== undefined) dbPayload.nomor_resi = partialData.nomorResi;
+        if (partialData.catatanPengiriman !== undefined) dbPayload.catatan_pengiriman = partialData.catatanPengiriman;
+        if (partialData.tanggalDiterima !== undefined) dbPayload.tanggal_diterima = partialData.tanggalDiterima;
+
+        supabase.from("surat_jalan").update(dbPayload).eq("id", id).then(({error}) => {
+            if (error) console.error("Error updating SJ status:", error);
+        });
+    }, []);
+
     return (
-        <SJCtx.Provider value={{ suratJalans, loading, addSJ, deleteSJ }}>
+        <SJCtx.Provider value={{ suratJalans, loading, addSJ, updateSJStatus, deleteSJ }}>
             {children}
         </SJCtx.Provider>
     );

@@ -370,17 +370,55 @@ function TabPewarnaan() {
    TAB 3: Surat Jalan Log
 ================================================================ */
 function TabLog() {
-    const { suratJalans, deleteSJ } = useSuratJalan();
+    const { suratJalans, deleteSJ, updateSJStatus } = useSuratJalan();
     const [filterType, setFilterType] = useState<"semua" | "customer" | "pewarnaan">("semua");
+    const [filterStatus, setFilterStatus] = useState<string>("semua");
     const [search, setSearch] = useState("");
 
     const displayed = suratJalans.filter((sj) => {
         if (filterType !== "semua" && sj.type !== filterType) return false;
-        if (search && ![sj.noSJ, sj.vendor, sj.dibuat_oleh].join(" ").toLowerCase().includes(search.toLowerCase())) return false;
+        if (filterStatus !== "semua" && sj.statusPengiriman !== filterStatus) return false;
+        if (search && ![sj.noSJ, sj.vendor, sj.dibuat_oleh, sj.nomorResi || ""].join(" ").toLowerCase().includes(search.toLowerCase())) return false;
         return true;
     });
 
     const [expanded, setExpanded] = useState<string | null>(null);
+
+    const [updateModal, setUpdateModal] = useState<string | null>(null);
+    const [updateForm, setUpdateForm] = useState<{status: string, resi: string, catatan: string, tanggal: string}>({
+        status: "Diproses", resi: "", catatan: "", tanggal: ""
+    });
+
+    const openUpdateModal = (sj: any) => {
+        setUpdateForm({
+            status: sj.statusPengiriman || "Diproses",
+            resi: sj.nomorResi || "",
+            catatan: sj.catatanPengiriman || "",
+            tanggal: sj.tanggalDiterima || new Date().toISOString().slice(0, 10)
+        });
+        setUpdateModal(sj.id);
+    };
+
+    const handleUpdateSJ = () => {
+        if (!updateModal) return;
+        updateSJStatus(updateModal, {
+            statusPengiriman: updateForm.status,
+            nomorResi: updateForm.resi || null,
+            catatanPengiriman: updateForm.catatan || null,
+            tanggalDiterima: updateForm.status === "Diterima" ? (updateForm.tanggal || null) : null
+        });
+        setUpdateModal(null);
+    };
+
+    const formatStatusBadge = (status: string | null) => {
+        const s = status || "Diproses";
+        let bg = "#F3F4F6", color = "#4B5563"; // abu
+        if (s === "Dikirim") { bg = "#DBEAFE"; color = "#1D4ED8"; } // biru
+        else if (s === "Dalam Perjalanan") { bg = "#FEF9C3"; color = "#A16207"; } // kuning
+        else if (s === "Diterima") { bg = "#DCFCE7"; color = "#15803D"; } // hijau
+        
+        return <span style={{ background: bg, color, borderRadius: 99, padding: "2px 8px", fontSize: 10, fontWeight: 700, whiteSpace:"nowrap", display: "inline-block" }}>{s}</span>;
+    };
 
     return (
         <div style={{ flex: 1, overflow: "auto", background: "white" }}>
@@ -389,9 +427,18 @@ function TabLog() {
                 {(["semua", "customer", "pewarnaan"] as const).map((t) => (
                     <button key={t} onClick={() => setFilterType(t)}
                         style={{ padding: "4px 14px", borderRadius: 99, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 11, whiteSpace: "nowrap", background: filterType === t ? (t === "customer" ? "#DBEAFE" : t === "pewarnaan" ? "#FEF9C3" : "#EDE0D4") : "#F3F4F6", color: filterType === t ? (t === "customer" ? "#1D4ED8" : t === "pewarnaan" ? "#A16207" : "#5C4033") : "#9CA3AF", outline: filterType === t ? `2px solid ${t === "customer" ? "#1D4ED8" : t === "pewarnaan" ? "#A16207" : "#A67B5B"}` : "none", outlineOffset: -1 }}>
-                        {t === "semua" ? "Semua" : t === "customer" ? "Untuk Customer" : "Untuk Pewarnaan"}
+                        {t === "semua" ? "Semua Tipe" : t === "customer" ? "Untuk Customer" : "Untuk Pewarnaan"}
                     </button>
                 ))}
+                <div style={{ width: 1, height: 20, background: "#D1BFA3", margin: "0 4px" }} />
+                <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
+                    style={{ border: "1px solid #D1BFA3", borderRadius: 5, padding: "4px 8px", fontSize: 11, height: 28, color: "#5C4033", background: "#FFFBF7", outline: "none", fontWeight: 600 }}>
+                    <option value="semua">Semua Status</option>
+                    <option value="Diproses">Diproses</option>
+                    <option value="Dikirim">Dikirim</option>
+                    <option value="Dalam Perjalanan">Dalam Perjalanan</option>
+                    <option value="Diterima">Diterima</option>
+                </select>
                 <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
                     placeholder="🔍 Cari no. SJ, vendor..."
                     style={{ border: "1px solid #D1BFA3", borderRadius: 5, padding: "4px 8px", fontSize: 11, width: 200, height: 28, color: "#5C4033", background: "#FFFBF7", outline: "none" }} />
@@ -408,8 +455,8 @@ function TabLog() {
                 <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12 }}>
                     <thead>
                         <tr>
-                            {["Tanggal", "No. Surat Jalan", "Tipe", "Vendor / Ekspedisi", "Total Item", "Total Qty", "Dibuat Oleh", ""].map((h) => (
-                                <th key={h} style={{ background: "#EDE0D4", color: "#5C4033", fontWeight: 700, fontSize: 11, padding: "7px 10px", borderBottom: "2px solid #C5A882", borderRight: "1px solid #D1BFA3", whiteSpace: "nowrap", textAlign: h === "Total Item" || h === "Total Qty" ? "center" : "left", position: "sticky", top: 0, zIndex: 4 }}>{h}</th>
+                            {["Tanggal", "No. Surat Jalan", "Tipe", "Vendor / Ekspedisi", "Total Item", "No. Resi", "Status", "Dibuat Oleh", "Aksi"].map((h) => (
+                                <th key={h} style={{ background: "#EDE0D4", color: "#5C4033", fontWeight: 700, fontSize: 11, padding: "7px 10px", borderBottom: "2px solid #C5A882", borderRight: "1px solid #D1BFA3", whiteSpace: "nowrap", textAlign: h === "Total Item" || h === "Total Qty" || h === "Status" ? "center" : "left", position: "sticky", top: 0, zIndex: 4 }}>{h}</th>
                             ))}
                         </tr>
                     </thead>
@@ -430,13 +477,21 @@ function TabLog() {
                                         </td>
                                         <td style={{ padding: "7px 10px", borderBottom: "1px solid #E6D5BE", borderRight: "1px solid #E6D5BE", fontWeight: 600 }}>{sj.vendor}</td>
                                         <td style={{ padding: "7px 10px", borderBottom: "1px solid #E6D5BE", borderRight: "1px solid #E6D5BE", textAlign: "center", fontWeight: 700 }}>{sj.items.length}</td>
-                                        <td style={{ padding: "7px 10px", borderBottom: "1px solid #E6D5BE", borderRight: "1px solid #E6D5BE", textAlign: "center" }}>{totalQty > 0 ? totalQty.toFixed(2) : "—"}</td>
+                                        <td style={{ padding: "7px 10px", borderBottom: "1px solid #E6D5BE", borderRight: "1px solid #E6D5BE", fontSize: 11, fontWeight: 600, color: sj.nomorResi ? "#111" : "#999", cursor: "pointer" }} onClick={() => openUpdateModal(sj)}>
+                                            {sj.nomorResi || "Belum ada"}
+                                        </td>
+                                        <td style={{ padding: "7px 10px", borderBottom: "1px solid #E6D5BE", borderRight: "1px solid #E6D5BE", textAlign: "center", cursor: "pointer" }} onClick={() => openUpdateModal(sj)}>
+                                            {formatStatusBadge(sj.statusPengiriman)}
+                                        </td>
                                         <td style={{ padding: "7px 10px", borderBottom: "1px solid #E6D5BE", borderRight: "1px solid #E6D5BE", color: "#6B5E55" }}>{sj.dibuat_oleh}</td>
                                         <td style={{ padding: "4px 8px", borderBottom: "1px solid #E6D5BE", whiteSpace: "nowrap" }}>
                                             <div style={{ display: "flex", gap: 4 }}>
+                                                <button onClick={() => openUpdateModal(sj)} style={{ padding: "3px 8px", borderRadius: 5, border: "1px solid #10B981", background: "#ECFDF5", cursor: "pointer", fontSize: 10, fontWeight: 600, color: "#047857" }}>
+                                                    Status
+                                                </button>
                                                 <button onClick={() => setExpanded(isExpanded ? null : sj.id)}
                                                     style={{ padding: "3px 8px", borderRadius: 5, border: "1px solid #D1BFA3", background: isExpanded ? "#EDE0D4" : "white", cursor: "pointer", fontSize: 10, fontWeight: 600, color: "#5C4033" }}>
-                                                    {isExpanded ? "▲ Tutup" : "▼ Detail"}
+                                                    {isExpanded ? "▲" : "▼ Detail"}
                                                 </button>
                                                 <button onClick={() => deleteSJ(sj.id)}
                                                     style={{ padding: "3px 8px", borderRadius: 5, border: "1px solid #FCA5A5", background: "#FEF2F2", cursor: "pointer", fontSize: 10, fontWeight: 600, color: "#991B1B" }}>
@@ -477,6 +532,49 @@ function TabLog() {
                         })}
                     </tbody>
                 </table>
+            )}
+
+            {updateModal && (
+                <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <div style={{ background: "white", borderRadius: 16, width: 400, boxShadow: "0 10px 25px rgba(0,0,0,0.2)", padding: 24 }}>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: "#3C2F2F", marginBottom: 16 }}>Update Status Pengiriman</div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                            <div>
+                                <label style={{ fontSize: 11, fontWeight: 700, color: "#B89678", marginBottom: 4, display: "block" }}>Status</label>
+                                <select value={updateForm.status} onChange={(e) => setUpdateForm({ ...updateForm, status: e.target.value })}
+                                    style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1.5px solid #D1BFA3", fontSize: 13, color: "#3C2F2F", outline: "none", background: "white" }}>
+                                    <option value="Diproses">Diproses</option>
+                                    <option value="Dikirim">Dikirim</option>
+                                    <option value="Dalam Perjalanan">Dalam Perjalanan</option>
+                                    <option value="Diterima">Diterima</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style={{ fontSize: 11, fontWeight: 700, color: "#B89678", marginBottom: 4, display: "block" }}>Nomor Resi</label>
+                                <input type="text" value={updateForm.resi} onChange={(e) => setUpdateForm({ ...updateForm, resi: e.target.value })}
+                                    placeholder="Opsional..."
+                                    style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1.5px solid #D1BFA3", fontSize: 13, color: "#3C2F2F", outline: "none", boxSizing: "border-box" }} />
+                            </div>
+                            <div>
+                                <label style={{ fontSize: 11, fontWeight: 700, color: "#B89678", marginBottom: 4, display: "block" }}>Catatan</label>
+                                <textarea value={updateForm.catatan} onChange={(e) => setUpdateForm({ ...updateForm, catatan: e.target.value })}
+                                    rows={2} placeholder="Kondisi barang / catatan supir..."
+                                    style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1.5px solid #D1BFA3", fontSize: 13, color: "#3C2F2F", outline: "none", boxSizing: "border-box", resize: "none", fontFamily: "inherit" }} />
+                            </div>
+                            {updateForm.status === "Diterima" && (
+                                <div>
+                                    <label style={{ fontSize: 11, fontWeight: 700, color: "#B89678", marginBottom: 4, display: "block" }}>Tanggal Diterima</label>
+                                    <input type="date" value={updateForm.tanggal} onChange={(e) => setUpdateForm({ ...updateForm, tanggal: e.target.value })}
+                                        style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1.5px solid #D1BFA3", fontSize: 13, color: "#3C2F2F", outline: "none", boxSizing: "border-box" }} />
+                                </div>
+                            )}
+                        </div>
+                        <div style={{ display: "flex", gap: 10, marginTop: 24, justifyContent: "flex-end" }}>
+                            <button onClick={() => setUpdateModal(null)} style={{ padding: "8px 16px", borderRadius: 8, background: "#F3F4F6", color: "#4B5563", fontWeight: 700, fontSize: 12, border: "none", cursor: "pointer" }}>Batal</button>
+                            <button onClick={handleUpdateSJ} style={{ padding: "8px 16px", borderRadius: 8, background: "#A67B5B", color: "white", fontWeight: 700, fontSize: 12, border: "none", cursor: "pointer" }}>Simpan</button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );
