@@ -50,9 +50,8 @@ function TabCustomer() {
     const [flash, setFlash] = useState(false);
     const [lastNoSJ, setLastNoSJ] = useState("");
 
-    // Logic candidates: 
-    // Jika searchedInv ada -> filter by no_inv (dan !di_kirim)
-    // Jika tidak ada -> filter by siap_kirim && !di_kirim (perilaku lama)
+    const [isSaving, setIsSaving] = useState(false);
+
     const candidates = useMemo(() => {
         let base = rows.filter((r) => (r.customer || r.deskripsi) && !r.di_kirim);
 
@@ -94,31 +93,48 @@ function TabCustomer() {
 
     const selectedItems = candidates.filter((r) => selectedIds.includes(r.id));
 
-    const cetakSJ = () => {
-        if (selectedItems.length === 0 || !ekspedisi) return;
-        const noSJ = generateNoSJ("customer");
-        const todayISO = new Date().toISOString().slice(0, 10);
+    const { flushAllRows } = usePesanan();
 
-        // Tandai di_kirim = true
-        selectedIds.forEach((id) => updateRow(id, { di_kirim: true, ekspedisi }, true));
+    const cetakSJ = async () => {
+        if (selectedItems.length === 0 || !ekspedisi || isSaving) return;
+        
+        setIsSaving(true);
+        try {
+            const noSJ = generateNoSJ("customer");
+            const todayISO = new Date().toISOString().slice(0, 10);
 
-        // Simpan ke log
-        const items: SJItem[] = selectedItems.map((r) => ({
-            pesananId: r.id, customer: r.customer, deskripsi: r.deskripsi,
-            ukuran: r.ukuran, qty: r.qty, noInv: r.no_inv,
-        }));
-        addSJ({ type: "customer", tanggal: todayISO, noSJ, vendor: ekspedisi, ekspedisi, dibuat_oleh: dibuatOleh || "—", items });
-        setLastNoSJ(noSJ);
+            // 1. Tandai di_kirim = true (update local state & queue for flush)
+            selectedIds.forEach((id) => updateRow(id, { di_kirim: true, ekspedisi }, false));
+            
+            // 2. Simpan ke log (Await the store save)
+            const items: SJItem[] = selectedItems.map((r) => ({
+                pesananId: r.id, customer: r.customer, deskripsi: r.deskripsi,
+                ukuran: r.ukuran, qty: r.qty, noInv: r.no_inv,
+            }));
+            
+            // Await both the log entry and the bulk status updates
+            await Promise.all([
+                addSJ({ type: "customer", tanggal: todayISO, noSJ, vendor: ekspedisi, ekspedisi, dibuat_oleh: dibuatOleh || "—", items }),
+                flushAllRows()
+            ]);
 
-        // Print
-        printSJ(noSJ, "customer", ekspedisi, todayISO, dibuatOleh, selectedItems);
+            setLastNoSJ(noSJ);
 
-        setFlash(true);
-        setSelectedIds([]);
-        setEkspedisi("");
-        setSearchedInv(null);
-        setNoInvInput("");
-        setTimeout(() => setFlash(false), 3000);
+            // 3. Print
+            printSJ(noSJ, "customer", ekspedisi, todayISO, dibuatOleh, selectedItems);
+
+            setFlash(true);
+            setSelectedIds([]);
+            setEkspedisi("");
+            setSearchedInv(null);
+            setNoInvInput("");
+            setTimeout(() => setFlash(false), 3000);
+        } catch (err) {
+            console.error("Failed to process SJ:", err);
+            // Error is already alerted by the store
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const inputSt: React.CSSProperties = {
@@ -216,12 +232,16 @@ function TabCustomer() {
                     </div>
                     {flash && <div style={{ background: "#DCFCE7", color: "#15803D", borderRadius: 7, padding: "6px 10px", fontSize: 11, fontWeight: 700, marginBottom: 8 }}>✓ SJ {lastNoSJ} berhasil dibuat & item ditandai Di Kirim!</div>}
                     <button onClick={cetakSJ}
-                        disabled={selectedIds.length === 0 || !ekspedisi}
-                        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "10px 0", borderRadius: 8, border: "none", cursor: selectedIds.length === 0 || !ekspedisi ? "not-allowed" : "pointer", fontWeight: 800, fontSize: 13, background: selectedIds.length === 0 || !ekspedisi ? "#D1BFA3" : "#A67B5B", color: "white", opacity: selectedIds.length === 0 || !ekspedisi ? 0.5 : 1 }}>
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" /><rect x="6" y="14" width="12" height="8" />
-                        </svg>
-                        Buat & Cetak SJ Customer ({selectedIds.length} item)
+                        disabled={selectedIds.length === 0 || !ekspedisi || isSaving}
+                        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "10px 0", borderRadius: 8, border: "none", cursor: selectedIds.length === 0 || !ekspedisi || isSaving ? "not-allowed" : "pointer", fontWeight: 800, fontSize: 13, background: selectedIds.length === 0 || !ekspedisi || isSaving ? "#D1BFA3" : "#A67B5B", color: "white", opacity: selectedIds.length === 0 || !ekspedisi || isSaving ? 0.5 : 1 }}>
+                        {isSaving ? (
+                             <div style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.3)", borderTop: "2px solid white", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} />
+                        ) : (
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" /><rect x="6" y="14" width="12" height="8" />
+                            </svg>
+                        )}
+                        {isSaving ? "Menyimpan..." : `Buat & Cetak SJ Customer (${selectedIds.length} item)`}
                     </button>
                 </div>
             </div>
@@ -247,6 +267,9 @@ function TabPewarnaan() {
     const [flash, setFlash] = useState(false);
     const [lastNoSJ, setLastNoSJ] = useState("");
 
+    const [isSaving, setIsSaving] = useState(false);
+    const { flushAllRows } = usePesanan();
+
     // Item di_produksi = true, di_warna = false → belum ke warna
     const candidates = useMemo(() =>
         rows.filter((r) => (r.customer || r.deskripsi) && r.di_produksi && !r.di_warna)
@@ -263,28 +286,41 @@ function TabPewarnaan() {
 
     const selectedItems = candidates.filter((r) => selectedIds.includes(r.id));
 
-    const cetakSJ = () => {
-        if (selectedItems.length === 0 || !vendorWarna) return;
-        const noSJ = generateNoSJ("pewarnaan");
-        const todayISO = new Date().toISOString().slice(0, 10);
+    const cetakSJ = async () => {
+        if (selectedItems.length === 0 || !vendorWarna || isSaving) return;
+        
+        setIsSaving(true);
+        try {
+            const noSJ = generateNoSJ("pewarnaan");
+            const todayISO = new Date().toISOString().slice(0, 10);
 
-        // Tandai di_warna = true
-        selectedIds.forEach((id) => updateRow(id, { di_warna: true }, true));
+            // 1. Tandai di_warna = true
+            selectedIds.forEach((id) => updateRow(id, { di_warna: true }, false));
 
-        const items: SJItem[] = selectedItems.map((r) => ({
-            pesananId: r.id, customer: r.customer, deskripsi: r.deskripsi,
-            ukuran: r.ukuran, qty: r.qty, noInv: r.no_inv,
-        }));
-        addSJ({ type: "pewarnaan", tanggal: todayISO, noSJ, vendor: vendorWarna, ekspedisi: "", dibuat_oleh: dibuatOleh || "—", items });
-        setLastNoSJ(noSJ);
+            const items: SJItem[] = selectedItems.map((r) => ({
+                pesananId: r.id, customer: r.customer, deskripsi: r.deskripsi,
+                ukuran: r.ukuran, qty: r.qty, noInv: r.no_inv,
+            }));
+            
+            await Promise.all([
+                addSJ({ type: "pewarnaan", tanggal: todayISO, noSJ, vendor: vendorWarna, ekspedisi: "", dibuat_oleh: dibuatOleh || "—", items }),
+                flushAllRows()
+            ]);
 
-        printSJ(noSJ, "pewarnaan", vendorWarna, todayISO, dibuatOleh, selectedItems, catatan);
+            setLastNoSJ(noSJ);
 
-        setFlash(true);
-        setSelectedIds([]);
-        setVendorWarna("");
-        setCatatan("");
-        setTimeout(() => setFlash(false), 3000);
+            printSJ(noSJ, "pewarnaan", vendorWarna, todayISO, dibuatOleh, selectedItems, catatan);
+
+            setFlash(true);
+            setSelectedIds([]);
+            setVendorWarna("");
+            setCatatan("");
+            setTimeout(() => setFlash(false), 3000);
+        } catch (err) {
+            console.error("Failed to process SJ:", err);
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     return (
@@ -350,12 +386,16 @@ function TabPewarnaan() {
                     </div>
                     {flash && <div style={{ background: "#FEF9C3", color: "#A16207", borderRadius: 7, padding: "6px 10px", fontSize: 11, fontWeight: 700, marginBottom: 8 }}>✓ SJ {lastNoSJ} berhasil dibuat!</div>}
                     <button onClick={cetakSJ}
-                        disabled={selectedIds.length === 0 || !vendorWarna}
-                        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "10px 0", borderRadius: 8, border: "none", cursor: selectedIds.length === 0 || !vendorWarna ? "not-allowed" : "pointer", fontWeight: 800, fontSize: 13, background: selectedIds.length === 0 || !vendorWarna ? "#D1BFA3" : "#A16207", color: "white", opacity: selectedIds.length === 0 || !vendorWarna ? 0.5 : 1 }}>
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" /><rect x="6" y="14" width="12" height="8" />
-                        </svg>
-                        Buat & Cetak SJ Pewarnaan ({selectedIds.length} item)
+                        disabled={selectedIds.length === 0 || !vendorWarna || isSaving}
+                        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "10px 0", borderRadius: 8, border: "none", cursor: selectedIds.length === 0 || !vendorWarna || isSaving ? "not-allowed" : "pointer", fontWeight: 800, fontSize: 13, background: selectedIds.length === 0 || !vendorWarna || isSaving ? "#D1BFA3" : "#A16207", color: "white", opacity: selectedIds.length === 0 || !vendorWarna || isSaving ? 0.5 : 1 }}>
+                        {isSaving ? (
+                             <div style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.3)", borderTop: "2px solid #A16207", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} />
+                        ) : (
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" /><rect x="6" y="14" width="12" height="8" />
+                            </svg>
+                        )}
+                        {isSaving ? "Menyimpan..." : `Buat & Cetak SJ Pewarnaan (${selectedIds.length} item)`}
                     </button>
                 </div>
             </div>
@@ -705,7 +745,11 @@ function printSJ(noSJ: string, type: "customer" | "pewarnaan", vendor: string, t
         </tr>`).join("");
 
     const win = window.open("", "_blank", "width=820,height=900");
-    if (!win) return;
+    if (!win) {
+        alert("Gagal membuka jendela cetak. Pastikan pop-up tidak diblokir.");
+        return;
+    }
+
     win.document.write(`<!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8"/>
@@ -779,7 +823,14 @@ function printSJ(noSJ: string, type: "customer" | "pewarnaan", vendor: string, t
     <div class="sign"><div class="sign-line"></div><p>Penerima</p></div>
   </div>
 
-<script>window.onload = () => { window.print(); window.close(); }<\/script>
+<script>
+  window.onload = () => {
+    setTimeout(() => {
+        window.print();
+        window.close();
+    }, 300);
+  }
+<\/script>
 </body></html>`);
     win.document.close();
 }

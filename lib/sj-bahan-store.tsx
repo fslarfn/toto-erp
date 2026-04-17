@@ -55,7 +55,7 @@ function dbToSJBahan(r: Record<string, unknown>, items: Record<string, unknown>[
 type Ctx = {
     sjBahan: SJBahanRow[];
     loading: boolean;
-    addSJBahan: (sj: Omit<SJBahanRow, "id">) => string;
+    addSJBahan: (sj: Omit<SJBahanRow, "id">) => Promise<string>;
     updateSJBahan: (id: string, updates: Partial<SJBahanRow>) => void;
     deleteSJBahan: (id: string) => void;
 };
@@ -154,11 +154,11 @@ export function SJBahanProvider({ children }: { children: ReactNode }) {
         };
     }, []);
 
-    const addSJBahan = useCallback((sj: Omit<SJBahanRow, "id">): string => {
+    const addSJBahan = useCallback(async (sj: Omit<SJBahanRow, "id">): Promise<string> => {
         const id = `SJB-${Date.now()}`;
         setSjBahan(prev => [{ ...sj, id }, ...prev]);
-        (async () => {
-            await supabase.from("sj_bahan").insert({
+        try {
+            const { error: err1 } = await supabase.from("sj_bahan").insert({
                 id,
                 no_sj: sj.noSJ,
                 tanggal: sj.tanggal,
@@ -169,8 +169,10 @@ export function SJBahanProvider({ children }: { children: ReactNode }) {
                 total_meter: sj.totalMeter,
                 status: sj.status,
             });
+            if (err1) throw err1;
+
             if (sj.items.length > 0) {
-                await supabase.from("sj_bahan_items").insert(
+                const { error: err2 } = await supabase.from("sj_bahan_items").insert(
                     sj.items.map(it => ({
                         sj_bahan_id: id,
                         material_id: it.materialId,
@@ -182,9 +184,15 @@ export function SJBahanProvider({ children }: { children: ReactNode }) {
                         catatan: it.catatan,
                     }))
                 );
+                if (err2) throw err2;
             }
-        })();
-        return id;
+            return id;
+        } catch (err: any) {
+            console.error("Error creating sj_bahan:", err);
+            setSjBahan(prev => prev.filter(x => x.id !== id));
+            alert("Gagal menyimpan SJ Bahan: " + (err.message || "Unknown Error"));
+            throw err;
+        }
     }, []);
 
     const updateSJBahan = useCallback((id: string, updates: Partial<SJBahanRow>) => {

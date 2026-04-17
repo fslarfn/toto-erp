@@ -55,6 +55,7 @@ function TabBuatSJ() {
     const [selectedItems, setSelectedItems] = useState<{ materialId: string; kode: string; nama: string; jumlahBatang: number; panjang: number }[]>([]);
     const [flash, setFlash] = useState(false);
     const [lastNoSJ, setLastNoSJ] = useState("");
+    const [isSaving, setIsSaving] = useState(false);
 
     const toggleBahan = (m: typeof bahanBaku[0]) => {
         setSelectedItems(prev => {
@@ -73,52 +74,61 @@ function TabBuatSJ() {
     const totalBatang = selectedItems.reduce((a, s) => a + s.jumlahBatang, 0);
     const totalMeter = selectedItems.reduce((a, s) => a + (s.jumlahBatang * s.panjang), 0);
 
-    const cetakSJ = () => {
-        if (selectedItems.length === 0 || !vendorWarna) return;
-        const noSJ = generateNoSJB();
-        const todayISO = new Date().toISOString().slice(0, 10);
+    const cetakSJ = async () => {
+        if (selectedItems.length === 0 || !vendorWarna || isSaving) return;
+        
+        setIsSaving(true);
+        try {
+            const noSJ = generateNoSJB();
+            const todayISO = new Date().toISOString().slice(0, 10);
 
-        const items: SJBahanItem[] = selectedItems.map(s => ({
-            materialId: s.materialId,
-            kode: s.kode,
-            nama: s.nama,
-            jumlahBatang: s.jumlahBatang,
-            panjangPerBatang: s.panjang,
-            totalMeter: s.jumlahBatang * s.panjang,
-            catatan: "",
-        }));
+            const items: SJBahanItem[] = selectedItems.map(s => ({
+                materialId: s.materialId,
+                kode: s.kode,
+                nama: s.nama,
+                jumlahBatang: s.jumlahBatang,
+                panjangPerBatang: s.panjang,
+                totalMeter: s.jumlahBatang * s.panjang,
+                catatan: "",
+            }));
 
-        addSJBahan({
-            noSJ,
-            tanggal: todayISO,
-            vendorWarna,
-            warna,
-            dibuatOleh: dibuatOleh || "—",
-            items,
-            totalBatang,
-            totalMeter,
-            status: "dikirim",
-        });
+            // Await the store save
+            await addSJBahan({
+                noSJ,
+                tanggal: todayISO,
+                vendorWarna,
+                warna,
+                dibuatOleh: dibuatOleh || "—",
+                items,
+                totalBatang,
+                totalMeter,
+                status: "dikirim",
+            });
 
-        // Kurangi stok di Stok Bahan
-        selectedItems.forEach(s => {
-            const mat = materials.find(m => m.id === s.materialId);
-            if (mat) {
-                const newStock = Math.max(0, mat.currentStock - s.jumlahBatang);
-                updateMaterial(s.materialId, { currentStock: newStock, lastUpdated: new Date().toISOString().slice(0, 10) });
-            }
-        });
+            // Kurangi stok di Stok Bahan
+            selectedItems.forEach(s => {
+                const mat = materials.find(m => m.id === s.materialId);
+                if (mat) {
+                    const newStock = Math.max(0, mat.currentStock - s.jumlahBatang);
+                    updateMaterial(s.materialId, { currentStock: newStock, lastUpdated: new Date().toISOString().slice(0, 10) });
+                }
+            });
 
-        setLastNoSJ(noSJ);
+            setLastNoSJ(noSJ);
 
-        // Print
-        printSJBahan(noSJ, todayISO, vendorWarna, warna, dibuatOleh, items, totalBatang, totalMeter);
+            // Print
+            printSJBahan(noSJ, todayISO, vendorWarna, warna, dibuatOleh, items, totalBatang, totalMeter);
 
-        setFlash(true);
-        setSelectedItems([]);
-        setVendorWarna("");
-        setWarna("");
-        setTimeout(() => setFlash(false), 3000);
+            setFlash(true);
+            setSelectedItems([]);
+            setVendorWarna("");
+            setWarna("");
+            setTimeout(() => setFlash(false), 3000);
+        } catch (err) {
+            console.error("Failed to process SJ Bahan:", err);
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     return (
@@ -236,20 +246,24 @@ function TabBuatSJ() {
                     {flash && <div style={{ background: "#DCFCE7", color: "#15803D", borderRadius: 7, padding: "6px 10px", fontSize: 11, fontWeight: 700, marginBottom: 8 }}>✓ SJ {lastNoSJ} berhasil dibuat & dicetak!</div>}
 
                     <button onClick={cetakSJ}
-                        disabled={selectedItems.length === 0 || !vendorWarna}
+                        disabled={selectedItems.length === 0 || !vendorWarna || isSaving}
                         style={{
                             width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
                             padding: "10px 0", borderRadius: 8, border: "none",
-                            cursor: selectedItems.length === 0 || !vendorWarna ? "not-allowed" : "pointer",
+                            cursor: selectedItems.length === 0 || !vendorWarna || isSaving ? "not-allowed" : "pointer",
                             fontWeight: 800, fontSize: 13,
-                            background: selectedItems.length === 0 || !vendorWarna ? "#D1BFA3" : "#A67B5B",
+                            background: selectedItems.length === 0 || !vendorWarna || isSaving ? "#D1BFA3" : "#A67B5B",
                             color: "white",
-                            opacity: selectedItems.length === 0 || !vendorWarna ? 0.5 : 1,
+                            opacity: selectedItems.length === 0 || !vendorWarna || isSaving ? 0.5 : 1,
                         }}>
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" /><rect x="6" y="14" width="12" height="8" />
-                        </svg>
-                        Buat & Cetak SJ Bahan Baku ({selectedItems.length} bahan)
+                        {isSaving ? (
+                            <div style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.3)", borderTop: "2px solid white", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} />
+                        ) : (
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" /><rect x="6" y="14" width="12" height="8" />
+                            </svg>
+                        )}
+                        {isSaving ? "Menyimpan..." : `Buat & Cetak SJ Bahan Baku (${selectedItems.length} bahan)`}
                     </button>
                 </div>
             </div>
@@ -475,7 +489,11 @@ function printSJBahan(noSJ: string, tanggal: string, vendor: string, warna: stri
         </tr>`).join("");
 
     const win = window.open("", "_blank", "width=820,height=900");
-    if (!win) return;
+    if (!win) {
+        alert("Gagal membuka jendela cetak. Pastikan pop-up tidak diblokir.");
+        return;
+    }
+
     win.document.write(`<!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8"/>
@@ -548,7 +566,14 @@ function printSJBahan(noSJ: string, tanggal: string, vendor: string, warna: stri
     <div class="sign"><div class="sign-line"></div><p>Penerima</p></div>
   </div>
 
-<script>window.onload = () => { window.print(); window.close(); }<\/script>
+<script>
+  window.onload = () => {
+    setTimeout(() => {
+        window.print();
+        window.close();
+    }, 300);
+  }
+<\/script>
 </body></html>`);
     win.document.close();
 }

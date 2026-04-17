@@ -61,7 +61,7 @@ function dbToSuratJalan(r: Record<string, unknown>, items: Record<string, unknow
 type Ctx = {
     suratJalans: SuratJalanRow[];
     loading: boolean;
-    addSJ: (sj: Omit<SuratJalanRow, "id" | "statusPengiriman" | "nomorResi" | "catatanPengiriman" | "tanggalDiterima" | "updatedAt">) => string;
+    addSJ: (sj: Omit<SuratJalanRow, "id" | "statusPengiriman" | "nomorResi" | "catatanPengiriman" | "tanggalDiterima" | "updatedAt">) => Promise<string>;
     updateSJStatus: (id: string, partial: Partial<SuratJalanRow>) => void;
     deleteSJ: (id: string) => void;
 };
@@ -149,7 +149,7 @@ export function SuratJalanProvider({ children }: { children: ReactNode }) {
         };
     }, []);
 
-    const addSJ = useCallback((sj: Omit<SuratJalanRow, "id" | "statusPengiriman" | "nomorResi" | "catatanPengiriman" | "tanggalDiterima" | "updatedAt">): string => {
+    const addSJ = useCallback(async (sj: Omit<SuratJalanRow, "id" | "statusPengiriman" | "nomorResi" | "catatanPengiriman" | "tanggalDiterima" | "updatedAt">): Promise<string> => {
         const id = `SJ-${Date.now()}`;
         const newSj: SuratJalanRow = { 
             ...sj, 
@@ -164,44 +164,43 @@ export function SuratJalanProvider({ children }: { children: ReactNode }) {
         // Optimistic update
         setSuratJalans(prev => [newSj, ...prev]);
 
-        (async () => {
-            try {
-                // 1. Insert Header
-                const { error: err1 } = await supabase.from("surat_jalan").insert({
-                    id,
-                    type: sj.type,
-                    tanggal: sj.tanggal,
-                    no_sj: sj.noSJ,
-                    vendor: sj.vendor,
-                    ekspedisi: sj.ekspedisi,
-                    dibuat_oleh: sj.dibuat_oleh,
-                });
-                
-                if (err1) throw err1;
+        try {
+            // 1. Insert Header
+            const { error: err1 } = await supabase.from("surat_jalan").insert({
+                id,
+                type: sj.type,
+                tanggal: sj.tanggal,
+                no_sj: sj.noSJ,
+                vendor: sj.vendor,
+                ekspedisi: sj.ekspedisi,
+                dibuat_oleh: sj.dibuat_oleh,
+            });
+            
+            if (err1) throw err1;
 
-                // 2. Insert Items
-                if (sj.items.length > 0) {
-                    const { error: err2 } = await supabase.from("surat_jalan_items").insert(
-                        sj.items.map(it => ({
-                            surat_jalan_id: id,
-                            pesanan_id: it.pesananId,
-                            customer: it.customer,
-                            deskripsi: it.deskripsi,
-                            ukuran: it.ukuran,
-                            qty: it.qty,
-                            no_inv: it.noInv,
-                        }))
-                    );
-                    if (err2) throw err2;
-                }
-            } catch (err: any) {
-                console.error("Error creating surat_jalan:", err);
-                // Rollback optimistic update
-                setSuratJalans(prev => prev.filter(x => x.id !== id));
-                alert("Gagal menyimpan Surat Jalan ke Database: " + (err.message || "Unknown Error"));
+            // 2. Insert Items
+            if (sj.items.length > 0) {
+                const { error: err2 } = await supabase.from("surat_jalan_items").insert(
+                    sj.items.map(it => ({
+                        surat_jalan_id: id,
+                        pesanan_id: it.pesananId,
+                        customer: it.customer,
+                        deskripsi: it.deskripsi,
+                        ukuran: it.ukuran,
+                        qty: it.qty,
+                        no_inv: it.noInv,
+                    }))
+                );
+                if (err2) throw err2;
             }
-        })();
-        return id;
+            return id;
+        } catch (err: any) {
+            console.error("Error creating surat_jalan:", err);
+            // Rollback optimistic update
+            setSuratJalans(prev => prev.filter(x => x.id !== id));
+            alert("Gagal menyimpan Surat Jalan ke Database: " + (err.message || "Unknown Error"));
+            throw err;
+        }
     }, []);
 
     const deleteSJ = useCallback(async (id: string) => {

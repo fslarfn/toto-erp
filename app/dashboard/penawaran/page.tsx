@@ -7,7 +7,7 @@ import {
     Plus, Trash2, Printer, Save, History, 
     X, CheckCircle2, Loader2, Search,
     ArrowRightLeft, FileSpreadsheet, Eye, 
-    ChevronLeft, ChevronRight, FileText
+    ChevronLeft, ChevronRight, FileText, Pencil
 } from "lucide-react";
 
 /* ================================================================
@@ -59,6 +59,7 @@ export default function PenawaranPage() {
     const { addRow } = usePesanan();
     const [activeTab, setActiveTab] = useState<"buat" | "riwayat">("buat");
     const [showPreview, setShowPreview] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
     
     // Form States
     const [customer, setCustomer] = useState("");
@@ -130,10 +131,38 @@ export default function PenawaranPage() {
         if (activeTab === "riwayat") fetchRiwayat();
     }, [activeTab]);
 
+    const resetForm = () => {
+        setCustomer("");
+        setNoQuote(() => {
+            const d = new Date();
+            const ymd = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+            const rand = Math.floor(Math.random() * 900) + 100;
+            return `QT-${ymd}-${rand}`;
+        });
+        setTanggal(new Date().toISOString().split('T')[0]);
+        setItems([{ id: "1", description: "", size: "", qty: "", price: "", total: 0 }]);
+        setDp("");
+        setDiskon("");
+        setNotes("Sistem pembayaran : DP 30% dari total harga. Pelunasan saat barang diterima / terpasang.");
+        setEditingId(null);
+    };
+
+    const handleEdit = (quote: Quotation) => {
+        setEditingId(quote.id);
+        setCustomer(quote.customer);
+        setNoQuote(quote.no_quote);
+        setTanggal(quote.tanggal);
+        setItems(quote.items);
+        setDp(String(quote.dp));
+        setDiskon(String(quote.diskon));
+        setNotes(quote.notes);
+        setActiveTab("buat");
+    };
+
     const handleSave = async () => {
         if (!customer) return alert("Pilih customer dulu!");
         try {
-            const { error } = await supabase.from("quotations").insert([{
+            const payload = {
                 no_quote: noQuote,
                 customer,
                 tanggal,
@@ -144,9 +173,24 @@ export default function PenawaranPage() {
                 grand_total: grandTotal,
                 notes,
                 created_by: user?.username
-            }]);
-            if (error) throw error;
-            alert("Penawaran berhasil disimpan!");
+            };
+
+            if (editingId) {
+                const { error } = await supabase
+                    .from("quotations")
+                    .update(payload)
+                    .eq("id", editingId);
+                if (error) throw error;
+                alert("Penawaran berhasil diperbarui!");
+            } else {
+                const { error } = await supabase
+                    .from("quotations")
+                    .insert([payload]);
+                if (error) throw error;
+                alert("Penawaran berhasil disimpan!");
+            }
+            
+            resetForm();
             setActiveTab("riwayat");
         } catch (err) {
             alert("Gagal simpan: " + (err as any).message);
@@ -213,18 +257,18 @@ export default function PenawaranPage() {
                 </div>
                 <div className="flex gap-2">
                     <button 
-                        onClick={() => setActiveTab("buat")}
-                        className={`btn ${activeTab === "buat" ? "btn-primary" : "btn-secondary"}`}
+                        onClick={() => { resetForm(); setActiveTab("buat"); }}
+                        className={`btn ${activeTab === "buat" && !editingId ? "btn-primary" : "btn-secondary"}`}
                         style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}
                     >
                         <Plus size={16} /> BUAT BARU
                     </button>
                     <button 
                         onClick={() => setActiveTab("riwayat")}
-                        className={`btn ${activeTab === "riwayat" ? "btn-primary" : "btn-secondary"}`}
+                        className={`btn ${activeTab === "riwayat" || editingId ? "btn-primary" : "btn-secondary"}`}
                         style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}
                     >
-                        <History size={16} /> RIWAYAT
+                        <History size={16} /> RIWAYAT / EDIT
                     </button>
                 </div>
             </div>
@@ -234,7 +278,14 @@ export default function PenawaranPage() {
                     
                     {/* Card 1: Informasi Klien */}
                     <div className="card">
-                        <div className="card-header">Informasi Klien & Dokumen</div>
+                        <div className="card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span>Informasi Klien & Dokumen</span>
+                            {editingId && (
+                                <span style={{ background: "#FEF3C7", color: "#B45309", padding: "4px 10px", borderRadius: 20, fontSize: 10, fontWeight: 800 }}>
+                                    MODE EDIT: {noQuote}
+                                </span>
+                            )}
+                        </div>
                         <div className="card-body">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 <div>
@@ -395,10 +446,18 @@ export default function PenawaranPage() {
                                         <button 
                                             onClick={handleSave}
                                             disabled={!customer || items[0].description === ""}
-                                            className="flex-1 btn btn-primary py-3 text-sm font-bold"
+                                            className={`flex-1 btn py-3 text-sm font-bold ${editingId ? "bg-amber-500 hover:bg-amber-600 border-none text-white" : "btn-primary"}`}
                                         >
-                                            <Save size={18} className="mr-2 inline" /> SIMPAN PENAWARAN
+                                            <Save size={18} className="mr-2 inline" /> {editingId ? "UPDATE PENAWARAN" : "SIMPAN PENAWARAN"}
                                         </button>
+                                        {editingId && (
+                                            <button 
+                                                onClick={resetForm}
+                                                className="btn btn-secondary py-3 text-sm font-bold border-red-200 text-red-500 hover:bg-red-50"
+                                            >
+                                                BATAL EDIT
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -444,8 +503,15 @@ export default function PenawaranPage() {
                                         <td style={{ textAlign: "right", fontWeight: 700 }}>{fmtRp(q.grand_total)}</td>
                                         <td style={{ textAlign: "center" }}>
                                             <div className="flex justify-center gap-2">
-                                                <button onClick={() => { setCustomer(q.customer); setTanggal(q.tanggal); setItems(q.items); setNotes(q.notes); setDp(String(q.dp)); setDiskon(String(q.diskon)); setShowPreview(true); }} className="p-2 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
+                                                <button onClick={() => { setCustomer(q.customer); setTanggal(q.tanggal); setItems(q.items); setNotes(q.notes); setDp(String(q.dp)); setDiskon(String(q.diskon)); setNoQuote(q.no_quote); setShowPreview(true); }} className="p-2 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors" title="Print">
                                                     <Printer size={14} className="text-[#5C4033]" />
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleEdit(q)}
+                                                    className="p-2 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors"
+                                                    title="Edit Penawaran"
+                                                >
+                                                    <Pencil size={14} className="text-amber-600" />
                                                 </button>
                                                 <button 
                                                     onClick={() => handleDeleteQuote(q.id)}
