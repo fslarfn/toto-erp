@@ -160,55 +160,93 @@ export function SuratJalanProvider({ children }: { children: ReactNode }) {
             tanggalDiterima: null, 
             updatedAt: null 
         };
+        
+        // Optimistic update
         setSuratJalans(prev => [newSj, ...prev]);
-        (async () => {
-            const { error: err1 } = await supabase.from("surat_jalan").insert({
-                id,
-                type: sj.type,
-                tanggal: sj.tanggal,
-                no_sj: sj.noSJ,
-                vendor: sj.vendor,
-                ekspedisi: sj.ekspedisi,
-                dibuat_oleh: sj.dibuat_oleh,
-            });
-            if (err1) console.error("Error inserting surat_jalan:", err1);
 
-            if (sj.items.length > 0) {
-                const { error: err2 } = await supabase.from("surat_jalan_items").insert(
-                    sj.items.map(it => ({
-                        surat_jalan_id: id,
-                        pesanan_id: it.pesananId,
-                        customer: it.customer,
-                        deskripsi: it.deskripsi,
-                        ukuran: it.ukuran,
-                        qty: it.qty,
-                        no_inv: it.noInv,
-                    }))
-                );
-                if (err2) console.error("Error inserting surat_jalan_items:", err2);
+        (async () => {
+            try {
+                // 1. Insert Header
+                const { error: err1 } = await supabase.from("surat_jalan").insert({
+                    id,
+                    type: sj.type,
+                    tanggal: sj.tanggal,
+                    no_sj: sj.noSJ,
+                    vendor: sj.vendor,
+                    ekspedisi: sj.ekspedisi,
+                    dibuat_oleh: sj.dibuat_oleh,
+                });
+                
+                if (err1) throw err1;
+
+                // 2. Insert Items
+                if (sj.items.length > 0) {
+                    const { error: err2 } = await supabase.from("surat_jalan_items").insert(
+                        sj.items.map(it => ({
+                            surat_jalan_id: id,
+                            pesanan_id: it.pesananId,
+                            customer: it.customer,
+                            deskripsi: it.deskripsi,
+                            ukuran: it.ukuran,
+                            qty: it.qty,
+                            no_inv: it.noInv,
+                        }))
+                    );
+                    if (err2) throw err2;
+                }
+            } catch (err: any) {
+                console.error("Error creating surat_jalan:", err);
+                // Rollback optimistic update
+                setSuratJalans(prev => prev.filter(x => x.id !== id));
+                alert("Gagal menyimpan Surat Jalan ke Database: " + (err.message || "Unknown Error"));
             }
         })();
         return id;
     }, []);
 
-    const deleteSJ = useCallback((id: string) => {
-        setSuratJalans(prev => prev.filter(s => s.id !== id));
-        supabase.from("surat_jalan").delete().eq("id", id).then();
-    }, []);
+    const deleteSJ = useCallback(async (id: string) => {
+        const target = suratJalans.find(s => s.id === id);
+        if (!target) return;
 
-    const updateSJStatus = useCallback((id: string, partialData: Partial<SuratJalanRow>) => {
+        if (!confirm(`Hapus Surat Jalan ${target.noSJ}?`)) return;
+
+        // Optimistic update
+        setSuratJalans(prev => prev.filter(s => s.id !== id));
+
+        try {
+            const { error } = await supabase.from("surat_jalan").delete().eq("id", id);
+            if (error) throw error;
+        } catch (err: any) {
+            console.error("Error deleting surat_jalan:", err);
+            // Rollback
+            setSuratJalans(prev => [target, ...prev].sort((a, b) => b.tanggal.localeCompare(a.tanggal)));
+            alert("Gagal menghapus Surat Jalan: " + (err.message || "Unknown Error"));
+        }
+    }, [suratJalans]);
+
+    const updateSJStatus = useCallback(async (id: string, partialData: Partial<SuratJalanRow>) => {
+        const oldData = suratJalans.find(sj => sj.id === id);
+        if (!oldData) return;
+
+        // Optimistic update
         setSuratJalans(prev => prev.map(sj => sj.id === id ? { ...sj, ...partialData } : sj));
         
-        const dbPayload: any = { updated_at: new Date().toISOString() };
-        if (partialData.statusPengiriman !== undefined) dbPayload.status_pengiriman = partialData.statusPengiriman;
-        if (partialData.nomorResi !== undefined) dbPayload.nomor_resi = partialData.nomorResi;
-        if (partialData.catatanPengiriman !== undefined) dbPayload.catatan_pengiriman = partialData.catatanPengiriman;
-        if (partialData.tanggalDiterima !== undefined) dbPayload.tanggal_diterima = partialData.tanggalDiterima;
+        try {
+            const dbPayload: any = { updated_at: new Date().toISOString() };
+            if (partialData.statusPengiriman !== undefined) dbPayload.status_pengiriman = partialData.statusPengiriman;
+            if (partialData.nomorResi !== undefined) dbPayload.nomor_resi = partialData.nomorResi;
+            if (partialData.catatanPengiriman !== undefined) dbPayload.catatan_pengiriman = partialData.catatanPengiriman;
+            if (partialData.tanggalDiterima !== undefined) dbPayload.tanggal_diterima = partialData.tanggalDiterima;
 
-        supabase.from("surat_jalan").update(dbPayload).eq("id", id).then(({error}) => {
-            if (error) console.error("Error updating SJ status:", error);
-        });
-    }, []);
+            const { error } = await supabase.from("surat_jalan").update(dbPayload).eq("id", id);
+            if (error) throw error;
+        } catch (err: any) {
+            console.error("Error updating SJ status:", err);
+            // Rollback
+            setSuratJalans(prev => prev.map(sj => sj.id === id ? oldData : sj));
+            alert("Gagal mengupdate status Surat Jalan: " + (err.message || "Unknown Error"));
+        }
+    }, [suratJalans]);
 
     return (
         <SJCtx.Provider value={{ suratJalans, loading, addSJ, updateSJStatus, deleteSJ }}>

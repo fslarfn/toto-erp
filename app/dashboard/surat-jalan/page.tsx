@@ -370,7 +370,7 @@ function TabPewarnaan() {
    TAB 3: Surat Jalan Log
 ================================================================ */
 function TabLog() {
-    const { suratJalans, deleteSJ, updateSJStatus } = useSuratJalan();
+    const { suratJalans, deleteSJ, updateSJStatus, loading } = useSuratJalan();
     const [filterType, setFilterType] = useState<"semua" | "customer" | "pewarnaan">("semua");
     const [filterStatus, setFilterStatus] = useState<string>("semua");
     const [search, setSearch] = useState("");
@@ -445,7 +445,13 @@ function TabLog() {
                 <span style={{ marginLeft: "auto", fontSize: 11, color: "#B89678" }}>{displayed.length} surat jalan</span>
             </div>
 
-            {displayed.length === 0 ? (
+            {loading ? (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "60%", color: "#A67B5B" }}>
+                    <div style={{ width: 30, height: 30, border: "3px solid #EDE0D4", borderTop: "3px solid #A67B5B", borderRadius: "50%", animation: "spin 1s linear infinite", marginBottom: 12 }} />
+                    <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+                    <div style={{ fontSize: 13, fontWeight: 700 }}>Mengambil data surat jalan...</div>
+                </div>
+            ) : displayed.length === 0 ? (
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "55%", color: "#C5A882", fontSize: 13 }}>
                     <div style={{ fontSize: 48, marginBottom: 12 }}>📜</div>
                     <div style={{ fontWeight: 700 }}>Belum ada Surat Jalan</div>
