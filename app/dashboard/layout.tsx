@@ -8,6 +8,7 @@ import { PesananProvider } from "@/lib/pesanan-store";
 import { SuratJalanProvider } from "@/lib/surat-jalan-store";
 import { SJBahanProvider } from "@/lib/sj-bahan-store";
 import { TagihanBahanProvider } from "@/lib/tagihan-bahan-store";
+import { QuotationProvider } from "@/lib/quotation-store";
 import ChatOrderBox from "@/components/layout/ChatOrderBox";
 
 
@@ -94,6 +95,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <SuratJalanProvider>
                 <SJBahanProvider>
                     <TagihanBahanProvider>
+                        <QuotationProvider>
                 <div id="app-container" className={containerClass} style={{ background: "var(--bg)" }}>
                     {/* Mobile Backdrop */}
                     <div id="sidebar-backdrop" onClick={() => setMobileOpen(false)} />
@@ -393,6 +395,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     {/* Komponen ChatBox dimasukkan ke dalam DOM di sini */}
                     <ChatOrderBox isOpen={chatOpen} onClose={() => setChatOpen(false)} />
                 </div>
+                        </QuotationProvider>
                     </TagihanBahanProvider>
                 </SJBahanProvider>
             </SuratJalanProvider>

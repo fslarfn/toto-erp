@@ -9,6 +9,7 @@ import {
     ArrowRightLeft, FileSpreadsheet, Eye, 
     ChevronLeft, ChevronRight, FileText, Pencil
 } from "lucide-react";
+import { useQuotation, Quotation, QuoteItem } from "@/lib/quotation-store";
 
 /* ================================================================
    MODUL PENAWARAN (QUOTATION) - ERP STANDARD UI
@@ -16,29 +17,13 @@ import {
    Modeled after: Keuangan & Status Barang
    ================================================================ */
 
-interface QuoteItem {
+interface QuoteItem_Local {
     id: string;
     description: string;
     size: string;
     qty: string;
     price: string;
     total: number;
-}
-
-interface Quotation {
-    id: string;
-    no_quote: string;
-    customer: string;
-    tanggal: string;
-    items: QuoteItem[];
-    subtotal: number;
-    dp: number;
-    diskon: number;
-    grand_total: number;
-    notes: string;
-    payment_terms: string;
-    franco: string;
-    remark: string;
 }
 
 function fmtRp(val: number): string {
@@ -70,17 +55,15 @@ export default function PenawaranPage() {
         return `QT-${ymd}-${rand}`;
     });
     const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]);
+    const { quotations, addQuotation, updateQuotation, deleteQuotation, loading: loadingRiwayat } = useQuotation();
+    const [searchRiwayat, setSearchRiwayat] = useState("");
+
     const [items, setItems] = useState<QuoteItem[]>([
         { id: "1", description: "", size: "", qty: "", price: "", total: 0 }
     ]);
     const [dp, setDp] = useState("");
     const [diskon, setDiskon] = useState("");
     const [notes, setNotes] = useState("Sistem pembayaran : DP 30% dari total harga. Pelunasan saat barang diterima / terpasang.");
-    
-    // History States
-    const [riwayat, setRiwayat] = useState<Quotation[]>([]);
-    const [loadingRiwayat, setLoadingRiwayat] = useState(false);
-    const [searchRiwayat, setSearchRiwayat] = useState("");
 
     // Calculations
     const subtotal = useMemo(() => items.reduce((acc, it) => acc + it.total, 0), [items]);
@@ -111,25 +94,7 @@ export default function PenawaranPage() {
         if (items.length > 1) setItems(items.filter(it => it.id !== id));
     };
 
-    const fetchRiwayat = async () => {
-        setLoadingRiwayat(true);
-        try {
-            const { data, error } = await supabase
-                .from("quotations")
-                .select("*")
-                .order("created_at", { ascending: false });
-            if (error) throw error;
-            setRiwayat(data || []);
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setLoadingRiwayat(false);
-        }
-    };
-
-    useEffect(() => {
-        if (activeTab === "riwayat") fetchRiwayat();
-    }, [activeTab]);
+/* No longer needed manual fetch, handled by Provider */
 
     const resetForm = () => {
         setCustomer("");
@@ -172,21 +137,14 @@ export default function PenawaranPage() {
                 diskon: diskonNum,
                 grand_total: grandTotal,
                 notes,
-                created_by: user?.username
+                created_by: user?.username || "Admin"
             };
 
             if (editingId) {
-                const { error } = await supabase
-                    .from("quotations")
-                    .update(payload)
-                    .eq("id", editingId);
-                if (error) throw error;
+                await updateQuotation(editingId, payload);
                 alert("Penawaran berhasil diperbarui!");
             } else {
-                const { error } = await supabase
-                    .from("quotations")
-                    .insert([payload]);
-                if (error) throw error;
+                await addQuotation(payload);
                 alert("Penawaran berhasil disimpan!");
             }
             
@@ -221,9 +179,7 @@ export default function PenawaranPage() {
     const handleDeleteQuote = async (id: string) => {
         if (!confirm("Hapus penawaran ini secara permanen?")) return;
         try {
-            const { error } = await supabase.from("quotations").delete().eq("id", id);
-            if (error) throw error;
-            setRiwayat(prev => prev.filter(q => q.id !== id));
+            await deleteQuotation(id);
         } catch (err) {
             alert("Gagal hapus: " + (err as any).message);
         }
@@ -241,7 +197,7 @@ export default function PenawaranPage() {
         win.document.close();
     };
 
-    const filteredRiwayat = riwayat.filter(q => 
+    const filteredRiwayat = quotations.filter(q => 
         q.customer.toLowerCase().includes(searchRiwayat.toLowerCase()) || 
         q.no_quote.toLowerCase().includes(searchRiwayat.toLowerCase())
     );
