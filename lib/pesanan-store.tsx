@@ -63,6 +63,7 @@ type Ctx = {
     addRows: (count?: number) => void;
     addRow: (data: Partial<PesananRow>) => Promise<void>;
     importRows: (data: Partial<PesananRow>[]) => void;
+    fetchFilter: (year: number, month: number | "all") => Promise<void>;
 };
 
 const PesananCtx = createContext<Ctx | null>(null);
@@ -79,76 +80,96 @@ export function PesananProvider({ children }: { children: ReactNode }) {
     // Melindungi field tersebut dari overwrite oleh Realtime
     const savingKeys = useRef<Record<number, Set<string>>>({});
 
-    // Load from Supabase on mount
-    useEffect(() => {
-        let cancelled = false;
-        (async () => {
-            try {
-                let allData: any[] = [];
-                let from = 0;
-                let to = 999;
-                let hasMore = true;
+    // Helper to fetch data with range or filter
+    const fetchRange = async (from: number, to: number, year?: number, month?: number | "all") => {
+        let query = supabase.from("pesanan_rows").select("*");
+        
+        if (year && month && month !== "all") {
+            const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+            const lastDay = new Date(year, typeof month === "number" ? month : 0, 0).getDate();
+            const endDate = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+            query = query.gte("tanggal", startDate).lte("tanggal", endDate);
+        } else if (year) {
+            query = query.gte("tanggal", `${year}-01-01`).lte("tanggal", `${year}-12-31`);
+        }
 
-                while (hasMore && !cancelled) {
-                    const { data, error } = await supabase
-                        .from("pesanan_rows")
-                        .select("*")
-                        .order("id", { ascending: true })
-                        .range(from, to);
+        const { data, error } = await query
+            .order("id", { ascending: true })
+            .range(from, to);
 
-                    if (error) throw error;
-                    if (data && data.length > 0) {
-                        allData = [...allData, ...data];
-                        if (data.length < 1000) {
-                            hasMore = false;
-                        } else {
-                            from += 1000;
-                            to += 1000;
-                        }
-                    } else {
-                        hasMore = false;
-                    }
-                }
+        if (error) throw error;
+        return data || [];
+    };
 
-                if (!cancelled && allData.length > 0) {
-                    const mapped = allData.map((r: Record<string, unknown>) => ({
-                        id: r.id as number,
-                        tanggal: (r.tanggal as string) || "",
-                        customer: (r.customer as string) || "",
-                        deskripsi: (r.deskripsi as string) || "",
-                        ukuran: (r.ukuran as string) || "",
-                        qty: (r.qty as string) || "",
-                        harga: (r.harga as string) || "",
-                        no_inv: (r.no_inv as string) || "",
-                        no_sj: (r.no_sj as string) || "",
-                        di_produksi: !!r.di_produksi,
-                        di_warna: !!r.di_warna,
-                        siap_kirim: !!r.siap_kirim,
-                        di_kirim: !!r.di_kirim,
-                        ekspedisi: (r.ekspedisi as string) || "",
-                        color_marker: (r.color_marker as string) || "",
-                        printed_at: (r.printed_at as string) || "",
-                        po_label: (r.po_label as string) || "",
-                        is_packing: !!r.is_packing,
-                        is_paid: !!r.is_paid,
-                        production_note: (r.production_note as string) || "",
-                        metode_kirim: (r.metode_kirim as string) || "",
-                        shipped_at: (r.shipped_at as string) || "",
-                        sync_id: (r.sync_id as string) || "",
-                    }));
-                    // Append empty rows buffer after data
-                    const lastResortId = mapped.length > 0 ? mapped[mapped.length - 1].id : 0;
-                    const emptyBuf = Array.from({ length: EMPTY_BUFFER }, (_, i) => makeEmptyRow(i));
-                    setRows([...mapped, ...emptyBuf]);
-                }
-            } catch (err) {
-                console.error("Fetch Error:", err);
-            } finally {
-                if (!cancelled) setLoading(false);
+    const mapRows = (data: any[]): PesananRow[] => {
+        return data.map((r: Record<string, unknown>) => ({
+            id: r.id as number,
+            tanggal: (r.tanggal as string) || "",
+            customer: (r.customer as string) || "",
+            deskripsi: (r.deskripsi as string) || "",
+            ukuran: (r.ukuran as string) || "",
+            qty: (r.qty as string) || "",
+            harga: (r.harga as string) || "",
+            no_inv: (r.no_inv as string) || "",
+            no_sj: (r.no_sj as string) || "",
+            di_produksi: !!r.di_produksi,
+            di_warna: !!r.di_warna,
+            siap_kirim: !!r.siap_kirim,
+            di_kirim: !!r.di_kirim,
+            ekspedisi: (r.ekspedisi as string) || "",
+            color_marker: (r.color_marker as string) || "",
+            printed_at: (r.printed_at as string) || "",
+            po_label: (r.po_label as string) || "",
+            is_packing: !!r.is_packing,
+            is_paid: !!r.is_paid,
+            production_note: (r.production_note as string) || "",
+            metode_kirim: (r.metode_kirim as string) || "",
+            shipped_at: (r.shipped_at as string) || "",
+            sync_id: (r.sync_id as string) || "",
+        }));
+    };
+
+    const fetchFilter = useCallback(async (year: number, month: number | "all") => {
+        setLoading(true);
+        try {
+            let allData: any[] = [];
+            let from = 0;
+            let hasMore = true;
+
+            while (hasMore) {
+                const data = await fetchRange(from, from + 999, year, month);
+                allData = [...allData, ...data];
+                if (data.length < 1000) hasMore = false;
+                else from += 1000;
             }
-        })();
-        return () => { cancelled = true; };
+
+            if (allData.length > 0) {
+                const newRows = mapRows(allData);
+                setRows(prev => {
+                    // Gabungkan dengan data yang sudah ada, hindari duplikat
+                    const existingIds = new Set(newRows.map(r => r.id));
+                    const filteredPrev = prev.filter(r => r.id >= 1000000000 || !existingIds.has(r.id));
+                    return [...filteredPrev, ...newRows].sort((a, b) => {
+                        const isTempA = a.id >= 1000000000;
+                        const isTempB = b.id >= 1000000000;
+                        if (isTempA && !isTempB) return 1;
+                        if (!isTempA && isTempB) return -1;
+                        return a.id - b.id;
+                    });
+                });
+            }
+        } catch (err) {
+            console.error("Fetch Filter Error:", err);
+        } finally {
+            setLoading(false);
+        }
     }, []);
+
+    // Load current month by default on mount
+    useEffect(() => {
+        const now = new Date();
+        fetchFilter(now.getFullYear(), now.getMonth() + 1);
+    }, [fetchFilter]);
 
     // Realtime Subscription
     useEffect(() => {
@@ -510,7 +531,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
     }, []);
 
     return (
-        <PesananCtx.Provider value={{ rows, loading, updateRow, flushRow, flushAllRows, addRows, addRow, importRows }}>
+        <PesananCtx.Provider value={{ rows, loading, updateRow, flushRow, flushAllRows, addRows, addRow, importRows, fetchFilter }}>
             {children}
         </PesananCtx.Provider>
     );

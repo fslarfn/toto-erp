@@ -112,7 +112,7 @@ const TableRow = memo(function TableRow({
    MAIN PAGE
 ================================================================ */
 export default function PesananPage() {
-    const { rows, loading, updateRow, addRows, flushAllRows, flushRow } = usePesanan();
+    const { rows, loading, updateRow, addRows, flushAllRows, flushRow, fetchFilter } = usePesanan();
     const [savedFlash, setSavedFlash] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [active, setActive] = useState<Pos | null>(null);
@@ -166,7 +166,8 @@ export default function PesananPage() {
     // Reset input start when filter changes
     useEffect(() => {
         setInputStartIdx(null);
-    }, [month, year]);
+        fetchFilter(year, month);
+    }, [month, year, fetchFilter]);
 
     // Update input start index after loading or when data grows at the tail
     useEffect(() => {

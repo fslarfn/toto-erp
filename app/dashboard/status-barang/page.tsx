@@ -265,37 +265,17 @@ function StatusTable({ filtered, viewMode, colorRowId, setColorRowId, update, up
    MAIN PAGE
 ================================================================ */
 export default function StatusBarangPage() {
-    const { rows, loading, updateRow, importRows, flushRow } = usePesanan();
+    const { rows, loading, updateRow, importRows, flushRow, fetchFilter } = usePesanan();
 
     const now = new Date();
     const [month, setMonth] = useState(now.getMonth() + 1);
     const [year, setYear] = useState(now.getFullYear());
     const [autoDetected, setAutoDetected] = useState(false);
 
-    // Auto-detect: if current month has no data but other months do, switch to latest
+    // Trigger fetch when month/year changes
     useEffect(() => {
-        if (autoDetected || loading || rows.length === 0) return;
-        const filledRows = rows.filter(r => r.tanggal && (r.customer || r.deskripsi));
-        if (filledRows.length === 0) return;
-
-        // Check if current month has data
-        const currentMonthHasData = filledRows.some(r => {
-            const y = parseInt(r.tanggal.slice(0, 4));
-            const m = parseInt(r.tanggal.slice(5, 7));
-            return y === year && m === month;
-        });
-
-        if (!currentMonthHasData) {
-            // Find the latest period in the data
-            let latestDate = "";
-            filledRows.forEach(r => { if (r.tanggal > latestDate) latestDate = r.tanggal; });
-            if (latestDate) {
-                setYear(parseInt(latestDate.slice(0, 4)));
-                setMonth(parseInt(latestDate.slice(5, 7)));
-            }
-        }
-        setAutoDetected(true);
-    }, [rows, loading, autoDetected, month, year]);
+        fetchFilter(year, month);
+    }, [year, month, fetchFilter]);
     const [search, setSearch] = useState("");
     const [viewMode, setViewMode] = useState<"detail" | "simple">("detail");
     const [colorRowId, setColorRowId] = useState<number | null>(null);
