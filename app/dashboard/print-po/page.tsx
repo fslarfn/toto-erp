@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useRef } from "react";
 import { usePesanan, PesananRow } from "@/lib/pesanan-store";
+import { FinishingTab } from "./FinishingTab";
 
 /* ================================================================
    PRINT PO — 2 Tab
@@ -492,7 +493,7 @@ function TabRiwayatPO() {
    MAIN PAGE — 2 Tab
 ================================================================ */
 export default function PrintPOPage() {
-    const [activeTab, setActiveTab] = useState<"print" | "riwayat">("print");
+    const [activeTab, setActiveTab] = useState<"print" | "riwayat" | "finishing">("print");
 
     const tabStyle = (key: typeof activeTab): React.CSSProperties => ({
         padding: "10px 22px", fontSize: 13, fontWeight: 700, border: "none",
@@ -512,12 +513,16 @@ export default function PrintPOPage() {
                 <button onClick={() => setActiveTab("riwayat")} style={tabStyle("riwayat")}>
                     📂 Riwayat Print PO
                 </button>
+                <button onClick={() => setActiveTab("finishing")} style={tabStyle("finishing")}>
+                    🎨 PO Finishing
+                </button>
             </div>
 
             {/* Tab content */}
             <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
                 {activeTab === "print" && <TabPrintPO />}
                 {activeTab === "riwayat" && <TabRiwayatPO />}
+                {activeTab === "finishing" && <FinishingTab />}
             </div>
         </div>
     );

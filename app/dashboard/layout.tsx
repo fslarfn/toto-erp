@@ -19,6 +19,7 @@ const NAV_ITEMS = [
             { href: "/dashboard", label: "Dashboard", module: "dashboard", icon: HomeIcon },
             { href: "/dashboard/pesanan", label: "Input Pesanan", module: "pesanan", icon: ClipboardIcon },
             { href: "/dashboard/status-barang", label: "Status Barang", module: "status-barang", icon: PackageIcon },
+            { href: "/dashboard/cockpit", label: "Executive Cockpit", module: "any", icon: CockpitIcon },
         ],
     },
     {
@@ -121,6 +122,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             {NAV_ITEMS.map((group) => {
                                 const allowedUsers = ["faisal", "vira", "toto", "fauzi", "yuni"];
                                 const visibleItems = group.items.filter((item) => {
+                                    if (item.href === "/dashboard/cockpit") return user?.role === 'owner' || user?.username === 'faisal';
                                     if (item.module === "admin-only") return allowedUsers.includes(user?.username || "");
                                     if (item.module === "any") return true;
                                     return hasAccess(item.module);
@@ -587,6 +589,18 @@ function BarChartIcon({ size = 18 }: { size?: number }) {
             <line x1="12" y1="20" x2="12" y2="4" />
             <line x1="6" y1="20" x2="6" y2="14" />
             <line x1="3" y1="20" x2="21" y2="20" />
+        </svg>
+    );
+}
+
+function CockpitIcon({ size = 18 }: { size?: number }) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 12L16 10" />
+            <path d="M12 12L8 10" />
+            <path d="M12 12V7" />
+            <path d="M12 17V17.01" />
         </svg>
     );
 }

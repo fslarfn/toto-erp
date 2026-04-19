@@ -6,10 +6,11 @@ import { useAuth } from "@/lib/auth";
 import {
     LayoutDashboard, ShoppingCart, Database, DollarSign,
     Package, Factory, Users, LogOut, Menu, X, ChevronRight,
-    Shirt, FileText, CreditCard, UserCircle
+    Shirt, FileText, CreditCard, UserCircle, TrendingUp
 } from "lucide-react";
 
 const navItems = [
+    { href: "/dashboard/cockpit", icon: TrendingUp, label: "Executive Cockpit", module: "owner-only" },
     { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", module: "dashboard" },
     { href: "/dashboard/pesanan", icon: ShoppingCart, label: "Pesanan (PO)", module: "pesanan" },
     { href: "/dashboard/big-data", icon: Database, label: "Big Data / Tracking", module: "big-data" },
