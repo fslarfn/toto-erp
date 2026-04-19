@@ -165,11 +165,59 @@ export function PesananProvider({ children }: { children: ReactNode }) {
         }
     }, []);
 
-    // Load current month by default on mount
+    // Load from Supabase on mount - FETCH ALL for Dashboard/Tagihan
     useEffect(() => {
-        const now = new Date();
-        fetchFilter(now.getFullYear(), now.getMonth() + 1);
-    }, [fetchFilter]);
+        let cancelled = false;
+        (async () => {
+            try {
+                let allData: any[] = [];
+                let from = 0;
+                let hasMore = true;
+
+                // Load first chunk fast
+                const firstChunk = await fetchRange(0, 999);
+                if (firstChunk && !cancelled) {
+                    allData = [...firstChunk];
+                    setRows(prev => {
+                        const mapped = mapRows(firstChunk);
+                        const existingIds = new Set(mapped.map(r => r.id));
+                        const filteredPrev = prev.filter(r => r.id >= 1000000000 || !existingIds.has(r.id));
+                        return [...mapped, ...filteredPrev].sort((a, b) => a.id - b.id);
+                    });
+                    setLoading(false);
+                    
+                    if (firstChunk.length < 1000) hasMore = false;
+                    else from = 1000;
+                } else {
+                    hasMore = false;
+                    setLoading(false);
+                }
+
+                // Load remaining data in background
+                while (hasMore && !cancelled) {
+                    const data = await fetchRange(from, from + 999);
+                    if (data && data.length > 0) {
+                        allData = [...allData, ...data];
+                        setRows(prev => {
+                            const mapped = mapRows(data);
+                            const existingIds = new Set(mapped.map(r => r.id));
+                            const filteredPrev = prev.filter(r => r.id >= 1000000000 || !existingIds.has(r.id));
+                            return [...filteredPrev, ...mapped].sort((a, b) => a.id - b.id);
+                        });
+                        if (data.length < 1000) hasMore = false;
+                        else from += 1000;
+                    } else {
+                        hasMore = false;
+                    }
+                }
+            } catch (err) {
+                console.error("Initial Fetch Error:", err);
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
 
     // Realtime Subscription
     useEffect(() => {
