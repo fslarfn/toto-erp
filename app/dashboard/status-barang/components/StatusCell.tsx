@@ -21,8 +21,15 @@ export const StatusCell = memo(function StatusCell({
     value, onSave, width, align = "left", mono = false, type = "text",
     isEditing, onEdit, onBlur
 }: Props) {
-    const displayValue = value == null ? "" : String(value);
-    const [local, setLocal] = useState(displayValue);
+    let displayValue = value == null ? "" : String(value);
+
+    // Format DD-MM-YYYY for non-editing display if it's a date
+    if (!isEditing && type === "date" && displayValue.includes("-")) {
+        const p = displayValue.split("-");
+        if (p.length === 3) displayValue = `${p[2]}-${p[1]}-${p[0]}`;
+    }
+
+    const [local, setLocal] = useState(value == null ? "" : String(value));
     const inputRef = useRef<HTMLInputElement>(null);
 
     // Sync remote change to local when not editing
