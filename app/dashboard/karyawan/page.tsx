@@ -577,7 +577,7 @@ function TabDataGaji() {
         const bTk = g?.bpjs_tk ?? k.bpjs_tk ?? 0;
         const bKes = g?.bpjs_kes ?? k.bpjs_kes ?? 0;
         const bersih = base + lembur + tunjangan - kasbon - potongan - bTk - bKes;
-        return { karyawan: k, base, lembur, tunjangan, kasbon, potongan, bersihPos: base + lembur + tunjangan, bersihNeg: kasbon + potongan + bTk + bKes, bersih };
+        return { karyawan: k, base, lembur, tunjangan, kasbon, potongan, bpjs_tk: bTk, bpjs_kes: bKes, bersihPos: base + lembur + tunjangan, bersihNeg: kasbon + potongan + bTk + bKes, bersih };
     });
     const totalBersih = gajiRows.reduce((s, r) => s + r.bersih, 0);
 
