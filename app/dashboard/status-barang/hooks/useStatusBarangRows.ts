@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import useSWR from "swr";
 import { supabase } from "@/lib/supabase-client";
 import { PesananRow } from "@/lib/pesanan-store";
@@ -5,6 +6,7 @@ import { PesananRow } from "@/lib/pesanan-store";
 /**
  * Hook khusus Status Barang (SCOPE LOCK)
  * Menggunakan SWR untuk deduplikasi fetch, caching, dan performance.
+ * Ditambah fitur Realtime agar sinkron dengan modul Input Pesanan.
  */
 export function useStatusBarangRows(year: number, month: number | "all") {
     const key = `status-barang-rows-${year}-${month}`;
@@ -28,10 +30,29 @@ export function useStatusBarangRows(year: number, month: number | "all") {
     };
 
     const { data, error, mutate, isLoading } = useSWR<PesananRow[]>(key as any, fetcher, {
-        revalidateOnFocus: false,
-        dedupingInterval: 60000, // 1 minute cache
-        revalidateIfStale: false,
+        revalidateOnFocus: true,
+        dedupingInterval: 2000, // Reduced to 2s for better reactivity
+        revalidateIfStale: true,
     });
+
+    // Realtime Listener: Trigger mutate on any change to pesanan_rows
+    useEffect(() => {
+        const channel = supabase
+            .channel(`status-barang-realtime-${year}-${month}`)
+            .on(
+                "postgres_changes",
+                { event: "*", schema: "public", table: "pesanan_rows" },
+                () => {
+                    console.log("Status Barang: Realtime update detected, re-fetching...");
+                    mutate();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [year, month, mutate]);
 
     // Helper untuk update satu baris di cache lokal & DB
     const updateLocalRow = async (id: number, patch: Partial<PesananRow>) => {
