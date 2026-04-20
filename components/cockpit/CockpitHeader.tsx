@@ -11,7 +11,7 @@ export default function CockpitHeader() {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    // Mutate all cockpit keys
+    // Mutate all SWR keys used in cockpit components
     await Promise.all([
       mutate('cockpit-balance'),
       mutate('cockpit-aging'),
@@ -21,37 +21,31 @@ export default function CockpitHeader() {
       mutate('cockpit-profit-stats'),
     ]);
     setLastUpdated(new Date());
-    setIsRefreshing(false);
+    setTimeout(() => setIsRefreshing(false), 500);
   };
 
   return (
-    <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 py-8 border-b border-amber-100/50 mb-4">
-      <div>
-        <div className="flex items-center gap-3 mb-1">
-          <div className="h-8 w-1 bg-amber-600 rounded-full" />
-          <h1 className="text-3xl md:text-4xl font-black tracking-tight text-[#3C2F2F]">
-            Executive Cockpit
-          </h1>
-        </div>
-        <p className="text-amber-800/60 text-sm font-medium ml-4">
-          Visualisasi Real-time Kesehatan Finansial & Operasional CV TOTO
+    <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
+      <div className="max-w-2xl">
+        <h1 className="text-3xl md:text-4xl font-black tracking-tighter text-[#3E2C23]">
+          Executive Cockpit
+        </h1>
+        <p className="text-sm md:text-base text-[#8B6B52] mt-2 font-medium leading-relaxed">
+          Analisis kesehatan finansial & pergerakan operasional CV TOTO secara real-time.
         </p>
       </div>
-      
-      <div className="flex items-center gap-4 bg-white/50 backdrop-blur-sm p-3 rounded-2xl border border-amber-100/30 shadow-sm">
-        <div className="text-right px-2">
-          <p className="text-[10px] uppercase font-bold text-amber-900/40 letter-spacing-1">Live Sync Status</p>
-          <p className="text-sm font-bold text-amber-900/80">
-            {format(lastUpdated, "HH:mm:ss", { locale: id })}
-          </p>
+      <div className="flex items-center gap-3 bg-white/50 p-2 pr-2.5 rounded-2xl border border-[#E8DCCF] backdrop-blur-sm self-start md:self-center">
+        <div className="px-3">
+          <div className="text-[10px] font-bold text-[#8B6B52] uppercase tracking-widest">Update Terakhir</div>
+          <div className="text-xs font-black text-[#3E2C23]">{format(lastUpdated, "HH:mm:ss")}</div>
         </div>
-        <button 
+        <button
           onClick={handleRefresh}
           disabled={isRefreshing}
-          className="group relative p-3 bg-amber-600 h-10 w-10 flex items-center justify-center rounded-xl hover:bg-amber-700 transition-all duration-300 disabled:opacity-50 shadow-lg shadow-amber-600/20"
-          title="Refresh Data"
+          className="flex items-center gap-2 rounded-xl bg-[#A67B5B] hover:bg-[#8D684C] text-white text-xs font-black uppercase tracking-widest px-5 py-2.5 shadow-md shadow-[#A67B5B]/20 transition-all active:scale-95 disabled:opacity-50"
         >
-          <RefreshCw className={`h-4 w-4 text-white ${isRefreshing ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} />
+          <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+          Refresh
         </button>
       </div>
     </div>

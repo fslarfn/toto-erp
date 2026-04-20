@@ -1,6 +1,6 @@
 "use client";
 import { useProfitStats } from "../../hooks/useCockpit";
-import { Target } from "lucide-react";
+import { Target, TrendingUp } from "lucide-react";
 import SetTargetDialog from "./SetTargetDialog";
 import { useAuth } from "../../lib/auth";
 
@@ -17,83 +17,68 @@ export default function ProfitTargetCard() {
   const { user } = useAuth();
 
   if (isLoading) return (
-    <div className="card animate-pulse" style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div className="bg-white rounded-2xl border border-[#E8DCCF] p-5 shadow-sm animate-pulse flex flex-col justify-center items-center h-[280px]">
       <div className="text-slate-400 text-sm">Memuat Statistik Laba...</div>
     </div>
   );
 
   if (error) return (
-    <div className="card" style={{ border: "1px solid #fee2e2", backgroundColor: "#fef2f2" }}>
-      <div className="p-6 text-red-600 text-sm">Gagal memuat statistik laba.</div>
+    <div className="bg-white rounded-2xl border border-[#fee2e2] p-5 shadow-sm flex items-center justify-center h-[280px]">
+      <div className="text-red-600 text-sm">Gagal memuat statistik.</div>
     </div>
   );
 
   const { profit, target, income, expense } = data!;
   const progress = Math.min(Math.max((profit / target) * 100, 0), 100);
-  
-  const getProgressColor = () => {
-    if (progress >= 90) return "#10b981"; // Emerald-500
-    if (progress >= 60) return "#f59e0b"; // Amber-500
-    return "#ef4444"; // Rose-500
-  };
 
   return (
-    <div className="relative overflow-hidden bg-white/80 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-lg shadow-amber-900/[0.02] transition-all duration-300 hover:shadow-amber-900/[0.05]">
-      <div className="p-6 pb-2">
-        <div className="flex justify-between items-center mb-4">
-          <span className="text-[10px] font-black text-amber-900/40 uppercase tracking-widest">
-            Laba Bulan Ini
+    <article className="bg-white rounded-2xl border border-[#E8DCCF] p-5 shadow-sm hover:shadow-md transition flex flex-col h-full">
+      <div className="flex items-start justify-between" style={{ marginBottom: '0.75rem' }}>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-[#EDE0D4] flex items-center justify-center flex-shrink-0">
+            <TrendingUp className="w-5 h-5 text-[#A67B5B]" />
+          </div>
+          <div>
+            <h3 className="text-[11px] font-bold tracking-wider text-[#8B6B52] uppercase leading-tight">
+              Laba Bulan Ini
+            </h3>
+            <div className="text-[11px] text-[#8B6B52] mt-0.5 font-medium">Target: {formatRp(target)}</div>
+          </div>
+        </div>
+        {user?.role === 'owner' && (
+          <SetTargetDialog currentTarget={target} />
+        )}
+      </div>
+
+      <div className={`text-3xl md:text-[32px] font-extrabold tracking-tight leading-none mb-1 ${profit >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+        {formatRp(profit)}
+      </div>
+
+      <div className="mt-4">
+        <div className="flex items-center justify-between text-[11px] mb-1.5 uppercase font-bold tracking-tight">
+          <span className="text-[#8B6B52]">Pencapaian Target</span>
+          <span className={`${progress >= 100 ? 'text-emerald-700' : 'text-amber-700'}`}>
+            {progress.toFixed(0)}%
           </span>
-          <div className="flex items-center gap-2">
-            <div className="p-2 bg-amber-50 rounded-lg border border-amber-100/50">
-              <Target size={14} className="text-amber-700" />
-            </div>
-            {user?.role === 'owner' && <SetTargetDialog currentTarget={target} />}
-          </div>
+        </div>
+        <div className="h-2 bg-[#F1E7DA] rounded-full overflow-hidden">
+          <div 
+            className={`h-full ${progress >= 100 ? 'bg-emerald-500' : 'bg-amber-500'} rounded-full transition-all duration-700`} 
+            style={{ width: `${progress}%` }} 
+          />
         </div>
       </div>
-      
-      <div className="p-6 pt-0">
-        <div className="mb-4">
-          <h2 className={`text-2xl md:text-3xl font-black tracking-tighter leading-none ${profit >= 0 ? "text-[#3C2F2F]" : "text-rose-600"}`}>
-            {formatRp(profit)}
-          </h2>
-          <div className="flex items-center gap-2 mt-2">
-            <span className="text-[9px] font-black text-amber-900/20 uppercase tracking-widest">Target</span>
-            <span className="text-[10px] font-black text-amber-800/60 tracking-tight">{formatRp(target)}</span>
-          </div>
-        </div>
 
-        <div className="mb-6">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-[9px] font-black text-amber-900/20 uppercase tracking-widest">Progress</span>
-            <span className="text-[11px] font-black" style={{ color: getProgressColor() }}>
-              {progress.toFixed(1)}%
-            </span>
-          </div>
-          <div className="h-2 w-full bg-amber-900/5 rounded-full overflow-hidden">
-            <div 
-              className="h-full rounded-full transition-all duration-1000"
-              style={{ 
-                width: `${progress}%`, 
-                backgroundColor: getProgressColor(),
-                boxShadow: `0 0 8px ${getProgressColor()}30`
-              }} 
-            />
-          </div>
+      <div className="mt-auto pt-4 border-t border-[#F1E7DA] grid grid-cols-2 gap-4 text-sm" style={{ marginTop: '1.5rem' }}>
+        <div>
+          <div className="text-[10px] text-[#8B6B52] uppercase font-bold tracking-wider mb-1">Inflow</div>
+          <div className="font-extrabold text-emerald-700 text-base">{formatRp(income)}</div>
         </div>
-
-        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-amber-100/30">
-          <div className="text-left">
-            <p className="text-[9px] font-black text-amber-900/20 uppercase tracking-widest mb-1">Inflow</p>
-            <p className="text-xs font-black text-emerald-600 tracking-tight">{formatRp(income)}</p>
-          </div>
-          <div className="text-right">
-            <p className="text-[9px] font-black text-amber-900/20 uppercase tracking-widest mb-1">Outflow</p>
-            <p className="text-xs font-black text-rose-500 tracking-tight">{formatRp(expense)}</p>
-          </div>
+        <div>
+          <div className="text-[10px] text-[#8B6B52] uppercase font-bold tracking-wider mb-1">Outflow</div>
+          <div className="font-extrabold text-rose-700 text-base">{formatRp(expense)}</div>
         </div>
       </div>
-    </div>
+    </article>
   );
 }

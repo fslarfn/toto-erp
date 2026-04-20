@@ -1,70 +1,69 @@
 "use client";
 import { useTopDebtors } from "../../hooks/useCockpit";
+import { Users } from "lucide-react";
 
-const formatRp = (val: number) => {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    minimumFractionDigits: 0,
-  }).format(val);
+const formatRpShort = (val: number) => {
+  if (val >= 1000000000) return `Rp ${(val / 1000000000).toFixed(1)}M`;
+  if (val >= 1000000) return `Rp ${(val / 1000000).toFixed(1)}jt`;
+  return `Rp ${val.toLocaleString("id-ID")}`;
 };
 
 export default function TopDebtorsCard() {
   const { data, error, isLoading } = useTopDebtors();
 
   if (isLoading) return (
-    <div className="card animate-pulse" style={{ height: 250, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div className="text-slate-400 text-sm">Memuat Daftar Penghutang...</div>
+    <div className="bg-white rounded-2xl border border-[#E8DCCF] p-5 shadow-sm animate-pulse flex flex-col justify-center items-center h-[280px]">
+      <div className="text-slate-400 text-sm">Memuat Penghutang...</div>
     </div>
   );
 
   if (error) return (
-    <div className="card" style={{ border: "1px solid #fee2e2", backgroundColor: "#fef2f2" }}>
-      <div className="p-6 text-red-600 text-sm">Gagal memuat daftar penghutang.</div>
+    <div className="bg-white rounded-2xl border border-[#fee2e2] p-5 shadow-sm flex items-center justify-center h-[280px]">
+      <div className="text-red-600 text-sm">Gagal memuat data.</div>
     </div>
   );
 
+  const debtors = data?.slice(0, 5) || [];
+
   return (
-    <div className="relative overflow-hidden bg-white/80 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-lg shadow-amber-900/[0.02] transition-all duration-300 hover:shadow-amber-900/[0.05]">
-      <div className="p-6 pb-2">
-        <div className="flex justify-between items-center">
-          <span className="text-[10px] font-black text-amber-900/40 uppercase tracking-widest">
-            Top 5 Penghutang
-          </span>
-          <span className="text-[8px] font-black text-amber-900/20 uppercase tracking-widest">
-            By Total Piutang
-          </span>
+    <article className="bg-white rounded-2xl border border-[#E8DCCF] p-5 shadow-sm hover:shadow-md transition flex flex-col h-full">
+      <div className="flex items-start justify-between" style={{ marginBottom: '0.75rem' }}>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-[#EDE0D4] flex items-center justify-center flex-shrink-0">
+            <Users className="w-5 h-5 text-[#A67B5B]" />
+          </div>
+          <div>
+            <h3 className="text-[11px] font-bold tracking-wider text-[#8B6B52] uppercase leading-tight">
+              Top 5 Penghutang
+            </h3>
+            <div className="text-[11px] text-[#8B6B52] mt-0.5 font-medium">Berdasarkan nominal piutang</div>
+          </div>
         </div>
       </div>
-      <div className="p-6 pt-3 space-y-2">
-        {data && data.length > 0 ? (
-          data.map((debtor, idx) => (
-            <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-white/40 border border-transparent hover:border-amber-100/40 hover:bg-white/80 transition-all duration-300 group">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="h-8 w-8 min-w-[32px] rounded-lg bg-amber-600/90 flex items-center justify-center text-white text-[10px] font-black shadow-md shadow-amber-600/10 group-hover:scale-105 transition-transform">
-                  {debtor.customer_name.substring(0, 2).toUpperCase()}
-                </div>
-                <div className="flex flex-col min-w-0">
-                  <span className="text-[12px] font-bold text-[#3C2F2F] truncate group-hover:text-amber-700 transition-colors tracking-tight">
-                    {debtor.customer_name}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <span className="h-1 w-1 rounded-full bg-rose-500/50" />
-                    <span className="text-[9px] text-rose-600/60 font-black uppercase tracking-widest">{debtor.oldest_days}d aging</span>
-                  </div>
+
+      <div className="mt-auto space-y-4 pt-4" style={{ borderTop: '1px solid #F1E7DA', marginTop: '1.5rem' }}>
+        {debtors.length > 0 ? (
+          debtors.map((debtor, i) => (
+            <div key={i} className="flex items-center gap-3 group">
+              <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-[11px] font-black shadow-sm transition-transform group-hover:scale-110"
+                   style={{ background: '#A67B5B' }}>
+                {debtor.customer_name.substring(0, 2).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-bold text-[#3E2C23] truncate uppercase leading-tight">{debtor.customer_name}</div>
+                <div className={`text-[10px] font-bold mt-0.5 ${debtor.oldest_days > 60 ? "text-rose-600" : (debtor.oldest_days > 30 ? "text-amber-600" : "text-emerald-600")}`}>
+                  ● {debtor.oldest_days} hari
                 </div>
               </div>
-              <div className="text-right pl-3">
-                <p className="text-xs font-black text-[#3C2F2F] tracking-tighter">{formatRp(debtor.total_outstanding)}</p>
-              </div>
+              <div className="text-sm font-black text-[#3E2C23] ml-2">{formatRpShort(debtor.total_outstanding)}</div>
             </div>
           ))
         ) : (
-          <div className="text-center py-8 text-[#8B5E3C]/30 italic text-[11px] font-bold">
+          <div className="text-center py-8 text-[#8B6B52]/30 italic text-[11px] font-bold uppercase tracking-widest">
             Semua piutang teratasi!
           </div>
         )}
       </div>
-    </div>
+    </article>
   );
 }

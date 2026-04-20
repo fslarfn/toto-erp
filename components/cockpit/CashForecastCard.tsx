@@ -11,7 +11,7 @@ import {
 } from "recharts";
 import { format } from "date-fns";
 import { id } from "date-fns/locale";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, TrendingUp } from "lucide-react";
 
 const formatRp = (val: number) => {
   return new Intl.NumberFormat("id-ID", {
@@ -23,90 +23,80 @@ const formatRp = (val: number) => {
 
 export default function CashForecastCard() {
   const { data, error, isLoading } = useCashForecast();
-  const MIN_SAFE_BALANCE = 50000000; // Default or from cockpit_settings
+  const MIN_SAFE_BALANCE = 50000000;
 
   if (isLoading) return (
-    <div className="card animate-pulse" style={{ height: 250, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div className="text-slate-400 text-sm">Memuat Proyeksi...</div>
+    <div className="bg-white rounded-2xl border border-[#E8DCCF] p-5 shadow-sm animate-pulse flex items-center justify-center h-[320px] md:col-span-2">
+      <div className="text-slate-400 text-sm">Memuat Proyeksi Kas...</div>
     </div>
   );
 
   if (error) return (
-    <div className="card" style={{ border: "1px solid #fee2e2", backgroundColor: "#fef2f2" }}>
-      <div className="p-6 text-red-600 text-sm">Gagal memuat proyeksi.</div>
+    <div className="bg-white rounded-2xl border border-[#fee2e2] p-5 shadow-sm flex items-center justify-center h-[320px] md:col-span-2">
+      <div className="text-red-600 text-sm">Gagal memuat proyeksi.</div>
     </div>
   );
 
   const lastPoint = data?.[data.length - 1];
-  const isSafe = (data?.every(p => p.saldo_proyeksi >= MIN_SAFE_BALANCE)) ?? true;
-  const isCritical = (data?.some(p => p.saldo_proyeksi < 0)) ?? false;
+  const activePoint = lastPoint?.saldo_proyeksi || 0;
+  const startPoint = data?.[0]?.saldo_proyeksi || 1;
+  const growth = ((activePoint - startPoint) / startPoint) * 100;
 
   return (
-    <div className="relative overflow-hidden bg-white/80 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-lg shadow-amber-900/[0.02] transition-all duration-300 hover:shadow-amber-900/[0.05]">
-      <div className="p-6 pb-2">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div>
-            <span className="text-[10px] font-black text-amber-900/40 uppercase tracking-widest block mb-1">
-              Proyeksi Kas 14 Hari
-            </span>
-            <div className="text-2xl md:text-3xl font-black text-[#3C2F2F] tracking-tighter leading-none">
-              {lastPoint ? formatRp(lastPoint.saldo_proyeksi) : 'Rp 0'}
-            </div>
+    <article className="bg-white rounded-2xl border border-[#E8DCCF] p-5 shadow-sm hover:shadow-md transition flex flex-col h-full md:col-span-2">
+      <div className="flex items-start justify-between" style={{ marginBottom: '0.75rem' }}>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-[#EDE0D4] flex items-center justify-center flex-shrink-0">
+            <TrendingUp className="w-5 h-5 text-[#A67B5B]" />
           </div>
-          {!isSafe && (
-            <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[8px] font-black tracking-widest uppercase border ${isCritical ? "bg-rose-50 text-rose-600 border-rose-100" : "bg-amber-50 text-amber-700 border-amber-100"}`}>
-              <AlertCircle size={10} strokeWidth={3} />
-              {isCritical ? "Critical" : "Reserve Low"}
-            </div>
-          )}
+          <div>
+            <h3 className="text-[11px] font-bold tracking-wider text-[#8B6B52] uppercase leading-tight">
+              Proyeksi Kas 14 Hari
+            </h3>
+            <div className="text-[11px] text-[#8B6B52] mt-0.5 font-medium">Estimasi saldo akhir periode</div>
+          </div>
         </div>
+        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${growth >= 0 ? 'text-emerald-700 bg-emerald-50 border-emerald-100' : 'text-rose-700 bg-rose-50 border-rose-100'}`}>
+          {growth >= 0 ? '▲' : '▼'} {Math.abs(growth).toFixed(1)}%
+        </span>
       </div>
-      <div className="p-6 pt-2" style={{ height: 180 }}>
+
+      <div className="text-3xl md:text-[32px] font-extrabold tracking-tight text-[#3E2C23] leading-none mb-6">
+        {formatRp(activePoint)}
+      </div>
+
+      <div className="mt-auto h-48 -mx-2 mb-[-8px]">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          <AreaChart data={data} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
             <defs>
-              <linearGradient id="colorSaldo" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#D97706" stopOpacity={0.1}/>
-                <stop offset="95%" stopColor="#D97706" stopOpacity={0}/>
+              <linearGradient id="colorSaldoCockpit" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#A67B5B" stopOpacity={0.15}/>
+                <stop offset="95%" stopColor="#A67B5B" stopOpacity={0}/>
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(139, 94, 60, 0.05)" />
-            <XAxis 
-              dataKey="date" 
-              fontSize={9} 
-              fontWeight={900}
-              tickLine={false} 
-              axisLine={false}
-              tick={{ fill: 'rgba(139, 94, 60, 0.3)' }}
-              tickFormatter={(str) => format(new Date(str), "dd/MM")}
-            />
-            <YAxis hide domain={['auto', 'auto']} />
             <Tooltip 
-              formatter={(value: any) => [formatRp(Number(value || 0)), "Estimasi"]}
+              formatter={(value: any) => [formatRp(Number(value || 0)), "Saldo"]}
               labelFormatter={(label) => format(new Date(label), "d MMM yyyy", { locale: id })}
               contentStyle={{ 
                 borderRadius: '12px', 
-                border: '1px solid rgba(251, 191, 36, 0.1)', 
-                boxShadow: '0 8px 16px rgba(139, 94, 60, 0.05)',
-                backgroundColor: 'rgba(255, 255, 255, 0.98)',
-                padding: '8px 12px',
+                border: '1px solid #E8DCCF', 
                 fontSize: '11px',
-                fontWeight: 'bold'
+                fontWeight: '700',
+                boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
               }}
-              labelStyle={{ color: '#8B5E3C', marginBottom: '2px', fontSize: '9px', textTransform: 'uppercase' }}
             />
             <Area 
               type="monotone" 
               dataKey="saldo_proyeksi" 
-              stroke="#D97706" 
+              stroke="#A67B5B" 
               fillOpacity={1} 
-              fill="url(#colorSaldo)" 
-              strokeWidth={2.5}
+              fill="url(#colorSaldoCockpit)" 
+              strokeWidth={3}
               animationDuration={1500}
             />
           </AreaChart>
         </ResponsiveContainer>
       </div>
-    </div>
+    </article>
   );
 }
