@@ -54,16 +54,52 @@ export const StatusRow = memo(function StatusRow({
         />
     );
 
-    const renderCheck = (key: keyof PesananRow, width: number) => (
-        <td style={{ height: 26, width, minWidth: width, textAlign: "center", verticalAlign: "middle", borderRight: "1px solid #E6D5BE", borderBottom: "1px solid #E6D5BE", boxSizing: "border-box" }}>
-            <input
-                type="checkbox"
-                checked={!!row[key]}
-                onChange={(e) => onUpdate(row.id, { [key]: e.target.checked })}
-                style={{ accentColor: "#A67B5B", width: 14, height: 14, cursor: "pointer" }}
-            />
-        </td>
-    );
+    const renderCheck = (key: keyof PesananRow, width: number) => {
+        const handleCheckUpdate = (checked: boolean) => {
+            const patch: Partial<PesananRow> = { [key]: checked };
+            
+            // Cascading logic for production pipeline
+            if (checked) {
+                if (key === "di_kirim") {
+                    patch.siap_kirim = true;
+                    patch.di_warna = true;
+                    patch.di_produksi = true;
+                } else if (key === "siap_kirim") {
+                    patch.di_warna = true;
+                    patch.di_produksi = true;
+                } else if (key === "di_warna") {
+                    patch.di_produksi = true;
+                }
+            } else {
+                if (key === "di_produksi") {
+                    patch.di_warna = false;
+                    patch.siap_kirim = false;
+                    patch.di_kirim = false;
+                } else if (key === "di_warna") {
+                    patch.siap_kirim = false;
+                    patch.di_kirim = false;
+                } else if (key === "siap_kirim") {
+                    patch.di_kirim = false;
+                }
+            }
+            onUpdate(row.id, patch);
+        };
+
+        return (
+            <td style={{ 
+                height: 26, width, minWidth: width, textAlign: "center", 
+                verticalAlign: "middle", borderRight: "1px solid #E6D5BE", 
+                borderBottom: "1px solid #E6D5BE", boxSizing: "border-box" 
+            }}>
+                <input
+                    type="checkbox"
+                    checked={!!row[key]}
+                    onChange={(e) => handleCheckUpdate(e.target.checked)}
+                    style={{ accentColor: "#A67B5B", width: 14, height: 14, cursor: "pointer" }}
+                />
+            </td>
+        );
+    };
 
     return (
         <tr style={{ background: rowBg }}>
@@ -124,10 +160,10 @@ export const StatusRow = memo(function StatusRow({
         </tr>
     );
 }, (prev, next) => {
-    // Custom equal comparison to prevent unnecessary re-renders
+    // Optimistic Update support: check the whole row reference
+    // because useStatusBarangRows creates a new object for updated row.
     return (
-        prev.row.id === next.row.id &&
-        prev.row.sync_id === next.row.sync_id &&
+        prev.row === next.row &&
         prev.viewMode === next.viewMode &&
         prev.colorRowId === next.colorRowId &&
         prev.activeCell?.id === next.activeCell?.id &&
