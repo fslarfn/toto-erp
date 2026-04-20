@@ -36,6 +36,8 @@ export type GajiRecord = {
     kasbon_potong: number;
     tunjangan: number;
     potongan_lain: number;
+    bpjs_tk?: number;
+    bpjs_kes?: number;
     catatan: string;
 };
 

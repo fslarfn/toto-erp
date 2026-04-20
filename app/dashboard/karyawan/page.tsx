@@ -64,7 +64,8 @@ function injectPrintStyle() {
 type GajiInfo = {
     karyawan: DataKaryawan;
     base: number; lembur: number; tunjangan: number;
-    kasbon: number; potongan: number; bersihPos: number; bersihNeg: number; bersih: number;
+    kasbon: number; potongan: number; bpjs_tk: number; bpjs_kes: number;
+    bersihPos: number; bersihNeg: number; bersih: number;
 };
 
 function PrintRekapModal({ rows, periode, onClose }: {
@@ -115,7 +116,7 @@ function PrintRekapModal({ rows, periode, onClose }: {
                                     <td style={{ border: "1px solid #E6D5BE", padding: "5px 7px", textAlign: "right" }}>{r.tunjangan > 0 ? r.tunjangan.toLocaleString("id-ID") : "-"}</td>
                                     <td style={{ border: "1px solid #E6D5BE", padding: "5px 7px", textAlign: "right", color: "#B91C1C" }}>{r.kasbon > 0 ? `(${r.kasbon.toLocaleString("id-ID")})` : "-"}</td>
                                     <td style={{ border: "1px solid #E6D5BE", padding: "5px 7px", textAlign: "right", color: "#B91C1C" }}>{r.potongan > 0 ? `(${r.potongan.toLocaleString("id-ID")})` : "-"}</td>
-                                    <td style={{ border: "1px solid #E6D5BE", padding: "5px 7px", textAlign: "right", color: "#B91C1C" }}>{(r.karyawan.bpjs_tk + r.karyawan.bpjs_kes) > 0 ? `(${(r.karyawan.bpjs_tk + r.karyawan.bpjs_kes).toLocaleString("id-ID")})` : "-"}</td>
+                                    <td style={{ border: "1px solid #E6D5BE", padding: "5px 7px", textAlign: "right", color: "#B91C1C" }}>{(r.bpjs_tk + r.bpjs_kes) > 0 ? `(${(r.bpjs_tk + r.bpjs_kes).toLocaleString("id-ID")})` : "-"}</td>
                                     <td style={{ border: "1px solid #E6D5BE", padding: "5px 7px", textAlign: "right", fontWeight: 800, color: "#15803D" }}>Rp {r.bersih.toLocaleString("id-ID")}</td>
                                 </tr>
                             ))}
@@ -152,7 +153,7 @@ function PrintSlipModal({ row, periode, onClose }: {
     const doPrint = () => { injectPrintStyle(); setTimeout(() => window.print(), 100); };
     const k = row.karyawan;
     const pendapatan = row.base + row.lembur + row.tunjangan;
-    const potonganTotal = row.kasbon + row.potongan + k.bpjs_tk + k.bpjs_kes;
+    const potonganTotal = row.kasbon + row.potongan + row.bpjs_tk + row.bpjs_kes;
     const today = new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" });
 
     const tdL: React.CSSProperties = { padding: "6px 10px", borderBottom: "1px solid #E6D5BE", color: "#5C4033", fontSize: 11 };
@@ -250,8 +251,8 @@ function PrintSlipModal({ row, periode, onClose }: {
                                     </tr>
                                     {row.kasbon > 0 && <tr><td style={tdL}>Potongan Kasbon / Bon</td><td style={tdRed}>({row.kasbon.toLocaleString("id-ID")})</td></tr>}
                                     {row.potongan > 0 && <tr style={{ background: "#FAFAF8" }}><td style={tdL}>Potongan Lain</td><td style={tdRed}>({row.potongan.toLocaleString("id-ID")})</td></tr>}
-                                    {k.bpjs_tk > 0 && <tr><td style={tdL}>BPJS Ketenagakerjaan</td><td style={tdRed}>({k.bpjs_tk.toLocaleString("id-ID")})</td></tr>}
-                                    {k.bpjs_kes > 0 && <tr style={{ background: "#FAFAF8" }}><td style={tdL}>BPJS Kesehatan</td><td style={tdRed}>({k.bpjs_kes.toLocaleString("id-ID")})</td></tr>}
+                                    {row.bpjs_tk > 0 && <tr><td style={tdL}>BPJS Ketenagakerjaan</td><td style={tdRed}>({row.bpjs_tk.toLocaleString("id-ID")})</td></tr>}
+                                    {row.bpjs_kes > 0 && <tr style={{ background: "#FAFAF8" }}><td style={tdL}>BPJS Kesehatan</td><td style={tdRed}>({row.bpjs_kes.toLocaleString("id-ID")})</td></tr>}
                                     <tr style={{ background: "#FEE2E2" }}>
                                         <td style={{ ...tdL, fontWeight: 800, color: "#B91C1C" }}>Total Potongan</td>
                                         <td style={{ ...tdR, fontWeight: 800, color: "#B91C1C" }}>({potonganTotal.toLocaleString("id-ID")})</td>
@@ -493,7 +494,11 @@ function TabDataGaji() {
     const [year, setYear] = useState(now.getFullYear());
     const [week, setWeek] = useState(1);
     const [selectedKId, setSelectedKId] = useState<number>(karyawan[0]?.id ?? 0);
-    const [form, setForm] = useState({ hari_kerja: 6, hari_lembur: 0, tunjangan: 0, kasbon_potong: 0, potongan_lain: 0 });
+    const [form, setForm] = useState({ 
+        hari_kerja: 6, hari_lembur: 0, tunjangan: 0, 
+        kasbon_potong: 0, potongan_lain: 0,
+        bpjs_tk: 0, bpjs_kes: 0 
+    });
     const [hasResult, setHasResult] = useState(false);
     const [printRekap, setPrintRekap] = useState(false);
     const [printSlip, setPrintSlip] = useState(false);
@@ -515,10 +520,17 @@ function TabDataGaji() {
                 tunjangan: g.tunjangan ?? 0,
                 kasbon_potong: g.kasbon_potong ?? 0,
                 potongan_lain: g.potongan_lain ?? 0,
+                bpjs_tk: g.bpjs_tk ?? selectedK?.bpjs_tk ?? 0,
+                bpjs_kes: g.bpjs_kes ?? selectedK?.bpjs_kes ?? 0,
             });
             setHasResult(true);
         } else {
-            setForm({ hari_kerja: 6, hari_lembur: 0, tunjangan: 0, kasbon_potong: 0, potongan_lain: 0 });
+            setForm({ 
+                hari_kerja: 6, hari_lembur: 0, tunjangan: 0, 
+                kasbon_potong: 0, potongan_lain: 0,
+                bpjs_tk: selectedK?.bpjs_tk ?? 0,
+                bpjs_kes: selectedK?.bpjs_kes ?? 0,
+            });
             setHasResult(false);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -531,7 +543,7 @@ function TabDataGaji() {
     const base = effectiveHarian * form.hari_kerja;
     const lemburNominal = effectiveHarian * form.hari_lembur;
     const totalPendapatan = base + lemburNominal + form.tunjangan;
-    const totalPotongan = form.kasbon_potong + form.potongan_lain;
+    const totalPotongan = form.kasbon_potong + form.potongan_lain + form.bpjs_tk + form.bpjs_kes;
     const bersih = totalPendapatan - totalPotongan;
 
     const hitungDanSimpan = () => {
@@ -545,6 +557,8 @@ function TabDataGaji() {
             tunjangan: form.tunjangan,
             kasbon_potong: form.kasbon_potong,
             potongan_lain: form.potongan_lain,
+            bpjs_tk: form.bpjs_tk,
+            bpjs_kes: form.bpjs_kes,
             catatan: "",
         });
         setHasResult(true);
@@ -560,8 +574,10 @@ function TabDataGaji() {
         const tunjangan = g?.tunjangan ?? 0;
         const kasbon = g?.kasbon_potong ?? 0;
         const potongan = g?.potongan_lain ?? 0;
-        const bersih = base + lembur + tunjangan - kasbon - potongan;
-        return { karyawan: k, base, lembur, tunjangan, kasbon, potongan, bersihPos: base + lembur + tunjangan, bersihNeg: kasbon + potongan, bersih };
+        const bTk = g?.bpjs_tk ?? k.bpjs_tk ?? 0;
+        const bKes = g?.bpjs_kes ?? k.bpjs_kes ?? 0;
+        const bersih = base + lembur + tunjangan - kasbon - potongan - bTk - bKes;
+        return { karyawan: k, base, lembur, tunjangan, kasbon, potongan, bersihPos: base + lembur + tunjangan, bersihNeg: kasbon + potongan + bTk + bKes, bersih };
     });
     const totalBersih = gajiRows.reduce((s, r) => s + r.bersih, 0);
 
@@ -570,16 +586,18 @@ function TabDataGaji() {
         karyawan: selectedK ?? karyawan[0],
         base, lembur: lemburNominal, tunjangan: form.tunjangan,
         kasbon: form.kasbon_potong, potongan: form.potongan_lain,
+        bpjs_tk: form.bpjs_tk, bpjs_kes: form.bpjs_kes,
         bersihPos: totalPendapatan, bersihNeg: totalPotongan, bersih,
     };
 
     const exportExcel = () => {
         const data = gajiRows.map(r => ({
-            "Nama": r.karyawan.nama, "Jabatan": r.karyawan.jabatan, "Divisi": r.karyawan.divisi,
             "Hari Kerja": getGaji(r.karyawan.id)?.hari_kerja ?? "-",
             "Gaji Harian/Pokok": r.base, "Hari Lembur": getGaji(r.karyawan.id)?.hari_lembur ?? 0,
             "Lembur": r.lembur, "Tunjangan": r.tunjangan,
-            "Kasbon Potong": r.kasbon, "Potongan Lain": r.potongan, "Gaji Bersih": r.bersih,
+            "Kasbon Potong": r.kasbon, "Potongan Lain": r.potongan,
+            "BPJS TK": r.bpjs_tk, "BPJS Kes": r.bpjs_kes,
+            "Gaji Bersih": r.bersih,
         }));
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), `Gaji ${periode}`);
@@ -669,10 +687,26 @@ function TabDataGaji() {
                                     onChange={e => { setForm(p => ({ ...p, kasbon_potong: +e.target.value })); setHasResult(false); }}
                                     placeholder="0" style={field} />
                             </div>
-                            <div style={{ gridColumn: "1 / -1" }}>
+                            <div>
                                 <label style={lbl}>POTONGAN LAIN (Rp)</label>
                                 <input type="number" min={0} value={form.potongan_lain || ""}
                                     onChange={e => { setForm(p => ({ ...p, potongan_lain: +e.target.value })); setHasResult(false); }}
+                                    placeholder="0" style={field} />
+                            </div>
+                            <div />
+                            <div style={{ borderTop: "1px dashed #E6D5BE", gridColumn: "1 / -1", marginTop: 4, paddingTop: 8 }}>
+                                <label style={{ ...lbl, color: "#A67B5B" }}>POTONGAN BPJS (OTOMATIS)</label>
+                            </div>
+                            <div>
+                                <label style={lbl}>BPJS TK (Rp)</label>
+                                <input type="number" min={0} value={form.bpjs_tk || ""}
+                                    onChange={e => { setForm(p => ({ ...p, bpjs_tk: +e.target.value })); setHasResult(false); }}
+                                    placeholder="0" style={field} />
+                            </div>
+                            <div>
+                                <label style={lbl}>BPJS KES (Rp)</label>
+                                <input type="number" min={0} value={form.bpjs_kes || ""}
+                                    onChange={e => { setForm(p => ({ ...p, bpjs_kes: +e.target.value })); setHasResult(false); }}
                                     placeholder="0" style={field} />
                             </div>
                         </div>
@@ -717,6 +751,8 @@ function TabDataGaji() {
                                         {[
                                             ...(form.kasbon_potong > 0 ? [{ l: "Potongan Bon / Kasbon", v: form.kasbon_potong }] : []),
                                             ...(form.potongan_lain > 0 ? [{ l: "Potongan Lain", v: form.potongan_lain }] : []),
+                                            ...(form.bpjs_tk > 0 ? [{ l: "BPJS TK", v: form.bpjs_tk }] : []),
+                                            ...(form.bpjs_kes > 0 ? [{ l: "BPJS Kes", v: form.bpjs_kes }] : []),
                                         ].map(({ l, v }) => (
                                             <div key={l} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4, color: "#5C4033" }}>
                                                 <span>{l}</span><span style={{ fontWeight: 600, color: "#B91C1C" }}>(Rp {v.toLocaleString("id-ID")})</span>
