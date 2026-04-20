@@ -12,21 +12,40 @@ export function useStatusBarangRows(year: number, month: number | "all") {
     const key = `status-barang-rows-${year}-${month}`;
 
     const fetcher = async () => {
-        let query = supabase.from("pesanan_rows").select("*");
+        let allData: PesananRow[] = [];
+        let from = 0;
+        let hasMore = true;
 
-        if (month !== "all") {
-            const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
-            const lastDay = new Date(year, typeof month === "number" ? month : 0, 0).getDate();
-            const endDate = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
-            query = query.gte("tanggal", startDate).lte("tanggal", endDate);
-        } else {
-            query = query.gte("tanggal", `${year}-01-01`).lte("tanggal", `${year}-12-31`);
+        while (hasMore) {
+            let query = supabase.from("pesanan_rows").select("*");
+
+            if (month !== "all") {
+                const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+                const lastDay = new Date(year, typeof month === "number" ? month : 0, 0).getDate();
+                const endDate = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+                query = query.gte("tanggal", startDate).lte("tanggal", endDate);
+            } else {
+                query = query.gte("tanggal", `${year}-01-01`).lte("tanggal", `${year}-12-31`);
+            }
+
+            const { data, error } = await query
+                .order("id", { ascending: true })
+                .range(from, from + 999);
+
+            if (error) throw error;
+            if (data && data.length > 0) {
+                allData = [...allData, ...(data as any[])];
+                if (data.length < 1000) hasMore = false;
+                else from += 1000;
+            } else {
+                hasMore = false;
+            }
+
+            // Safety limit to avoid infinite loops, set to 20k rows per month
+            if (from >= 20000) break;
         }
 
-        const { data, error } = await query.order("id", { ascending: true });
-
-        if (error) throw error;
-        return (data || []) as PesananRow[];
+        return allData;
     };
 
     const { data, error, mutate, isLoading } = useSWR<PesananRow[]>(key as any, fetcher, {
