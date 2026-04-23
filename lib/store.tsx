@@ -19,6 +19,7 @@ interface AppStore {
     updateMaterial: (id: string, updates: Partial<Material>) => void;
     deleteMaterial: (id: string) => void;
     addCashFlow: (c: Omit<CashFlow, "id">) => void;
+    updateCashFlow: (id: string, updates: Partial<CashFlow>) => void;
     deleteCashFlow: (id: string) => void;
     addPayment: (p: Omit<Payment, "id">) => void;
     updateBankBalance: (id: string, delta: number) => void;
@@ -395,6 +396,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
     }, [bankAccounts, updateBankBalance]);
 
+    const updateCashFlow = useCallback((id: string, updates: Partial<CashFlow>) => {
+        const oldRecord = cashFlow.find(c => c.id === id);
+        if (!oldRecord) return;
+
+        const newRecord = { ...oldRecord, ...updates };
+
+        // Optimistic local update
+        setCashFlow(prev => prev.map(c => c.id === id ? newRecord : c));
+
+        // Persist to DB
+        supabase.from("cash_flow").update(cashFlowToDb(updates)).eq("id", id).then();
+
+        // Revert the old record's bank balance effect
+        const oldBank = bankAccounts.find(b => b.name === oldRecord.bankAccount);
+        if (oldBank) {
+            const revertDelta = oldRecord.type === "income" ? -oldRecord.amount : oldRecord.amount;
+            updateBankBalance(oldBank.id, revertDelta);
+        }
+
+        // Apply the new record's bank balance effect
+        const newBank = bankAccounts.find(b => b.name === newRecord.bankAccount);
+        if (newBank) {
+            const applyDelta = newRecord.type === "income" ? newRecord.amount : -newRecord.amount;
+            updateBankBalance(newBank.id, applyDelta);
+        }
+    }, [cashFlow, bankAccounts, updateBankBalance]);
+
     const deleteCashFlow = useCallback((id: string) => {
         const target = cashFlow.find(c => c.id === id);
         if (!target) return;
@@ -461,7 +489,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             orders, materials, cashFlow, payments, bankAccounts, loading,
             addOrder, updateOrder, deleteOrder,
             addMaterial, updateMaterial, deleteMaterial,
-            addCashFlow, deleteCashFlow, addPayment, updateBankBalance,
+            addCashFlow, updateCashFlow, deleteCashFlow, addPayment, updateBankBalance,
             recalculateBalances,
         }}>
             {children}
