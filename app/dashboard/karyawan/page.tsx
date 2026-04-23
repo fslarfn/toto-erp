@@ -150,11 +150,45 @@ function PrintRekapModal({ rows, periode, onClose }: {
 function PrintSlipModal({ row, periode, onClose }: {
     row: GajiInfo; periode: string; onClose: () => void;
 }) {
+    const { kasbon: allKasbon, gaji: allGaji } = useKaryawan();
     const doPrint = () => { injectPrintStyle(); setTimeout(() => window.print(), 100); };
     const k = row.karyawan;
+    const kId = k.id;
     const pendapatan = row.base + row.lembur + row.tunjangan;
     const potonganTotal = row.kasbon + row.potongan + row.bpjs_tk + row.bpjs_kes;
     const today = new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" });
+
+    // Replikasi logika TabKasbon.kasbonWithAuto, difilter ke karyawan ini saja.
+    // auto_bayar sudah include kasbon_potong slip ini karena hitungDanSimpan()
+    // dipanggil sebelum modal terbuka — sehingga sisa yang tampil sudah akurat.
+    const kasbonInfo = useMemo(() => {
+        const myKasbon = allKasbon.filter(b => b.karyawan_id === kId);
+        if (myKasbon.length === 0) return null;
+
+        const totalGajiPotong = allGaji
+            .filter(g => g.karyawan_id === kId && g.kasbon_potong > 0)
+            .reduce((s, g) => s + g.kasbon_potong, 0);
+
+        let leftover = totalGajiPotong;
+        const withAuto = [...myKasbon]
+            .sort((a, b) => a.id - b.id)
+            .map(b => {
+                const gap = b.nominal - b.bayar;
+                let auto_bayar = 0;
+                if (gap > 0 && leftover > 0) {
+                    auto_bayar = Math.min(gap, leftover);
+                    leftover -= auto_bayar;
+                }
+                return { ...b, auto_bayar };
+            });
+
+        const active = withAuto.filter(b => b.nominal - b.bayar - b.auto_bayar > 0);
+        if (active.length === 0) return null;
+
+        const totalNominal = active.reduce((s, b) => s + b.nominal, 0);
+        const totalTerbayar = active.reduce((s, b) => s + b.bayar + b.auto_bayar, 0);
+        return { totalNominal, totalTerbayar, sisa: totalNominal - totalTerbayar };
+    }, [allKasbon, allGaji, kId]);
 
     const tdL: React.CSSProperties = { padding: "6px 10px", borderBottom: "1px solid #E6D5BE", color: "#5C4033", fontSize: 11 };
     const tdR: React.CSSProperties = { ...tdL, textAlign: "right", fontWeight: 600 };
@@ -262,10 +296,43 @@ function PrintSlipModal({ row, periode, onClose }: {
                         </table>
 
                         {/* Gaji Bersih */}
-                        <div style={{ background: "#A67B5B", borderRadius: 8, padding: "12px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+                        <div style={{ background: "#A67B5B", borderRadius: 8, padding: "12px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                             <span style={{ fontWeight: 800, fontSize: 13, color: "white", letterSpacing: 1 }}>TAKE HOME PAY</span>
                             <span style={{ fontWeight: 900, fontSize: 18, color: "white" }}>Rp {row.bersih.toLocaleString("id-ID")}</span>
                         </div>
+
+                        {/* Informasi Kasbon — hanya tampil jika karyawan punya kasbon aktif */}
+                        {kasbonInfo && (
+                            <div style={{ marginBottom: 18, border: "1.5px solid #FDE68A", borderRadius: 8, overflow: "hidden" }}>
+                                <div style={{ background: "#FEF9C3", padding: "6px 14px", borderBottom: "1px solid #FDE68A" }}>
+                                    <span style={{ fontWeight: 800, fontSize: 10, color: "#92400E", letterSpacing: 1, textTransform: "uppercase" }}>📋 Informasi Kasbon</span>
+                                </div>
+                                <div style={{ background: "#FFFBEB", padding: "10px 14px" }}>
+                                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                                        <tbody>
+                                            <tr>
+                                                <td style={{ padding: "3px 0", color: "#78350F" }}>Total Nominal Kasbon</td>
+                                                <td style={{ padding: "3px 0", textAlign: "right", color: "#78350F" }}>Rp {kasbonInfo.totalNominal.toLocaleString("id-ID")}</td>
+                                            </tr>
+                                            <tr>
+                                                <td style={{ padding: "3px 0", color: "#78350F" }}>Sudah Dibayar (termasuk slip ini)</td>
+                                                <td style={{ padding: "3px 0", textAlign: "right", color: "#78350F" }}>Rp {kasbonInfo.totalTerbayar.toLocaleString("id-ID")}</td>
+                                            </tr>
+                                            {row.kasbon > 0 && (
+                                                <tr>
+                                                    <td style={{ padding: "2px 0 2px 12px", color: "#92400E", fontSize: 10 }}>↳ Potongan Kasbon Slip Ini</td>
+                                                    <td style={{ padding: "2px 0", textAlign: "right", color: "#92400E", fontSize: 10 }}>Rp {row.kasbon.toLocaleString("id-ID")}</td>
+                                                </tr>
+                                            )}
+                                            <tr style={{ borderTop: "1px solid #FDE68A" }}>
+                                                <td style={{ padding: "7px 0 3px", fontWeight: 900, fontSize: 12, color: "#78350F" }}>SISA TAGIHAN KASBON</td>
+                                                <td style={{ padding: "7px 0 3px", textAlign: "right", fontWeight: 900, fontSize: 14, color: "#B91C1C" }}>Rp {kasbonInfo.sisa.toLocaleString("id-ID")}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Tanda tangan */}
                         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
