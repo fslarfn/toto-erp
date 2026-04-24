@@ -20,7 +20,12 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   UNIQUE (user_id, endpoint)
 );
 CREATE INDEX IF NOT EXISTS push_subscriptions_user_id_idx
-  ON push_subscriptions(user_id);`;
+  ON push_subscriptions(user_id);
+ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY IF NOT EXISTS "push_anon_insert" ON push_subscriptions FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY IF NOT EXISTS "push_anon_update" ON push_subscriptions FOR UPDATE TO anon USING (true) WITH CHECK (true);
+CREATE POLICY IF NOT EXISTS "push_anon_delete" ON push_subscriptions FOR DELETE TO anon USING (true);
+CREATE POLICY IF NOT EXISTS "push_anon_select" ON push_subscriptions FOR SELECT TO anon USING (true);`;
 
 /** Ekstrak pesan dari error Supabase (objek biasa, bukan instanceof Error) */
 function extractMessage(err: unknown): string {
