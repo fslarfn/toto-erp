@@ -10,6 +10,7 @@ import { SJBahanProvider } from "@/lib/sj-bahan-store";
 import { TagihanBahanProvider } from "@/lib/tagihan-bahan-store";
 import { QuotationProvider } from "@/lib/quotation-store";
 import ChatOrderBox from "@/components/layout/ChatOrderBox";
+import NotificationSettings from "@/components/notifications/NotificationSettings";
 
 const NAV_ITEMS = [
     {
@@ -65,6 +66,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const [collapsed, setCollapsed] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
     const [chatOpen, setChatOpen] = useState(false);
+    const [notifOpen, setNotifOpen] = useState(false);
     const [showTrialModal, setShowTrialModal] = useState(false);
     
     const isAdmin = ["faisal", "vira", "toto", "fauzi", "yuni"].includes(user?.username || "");
@@ -193,7 +195,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                     </div>
 
                                     <div className="flex items-center gap-3">
-                                        <button 
+                                        {/* Notification Bell */}
+                                        <button
+                                            onClick={() => setNotifOpen(true)}
+                                            className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-slate-100 transition-colors text-primary relative"
+                                            title="Pengaturan Notifikasi"
+                                        >
+                                            <BellIcon size={20} />
+                                        </button>
+
+                                        <button
                                             onClick={() => setChatOpen(!chatOpen)}
                                             className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-slate-100 transition-colors text-primary relative"
                                             title="Koordinasi Tim"
@@ -251,6 +262,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         </div>
                     )}
                     <ChatOrderBox isOpen={chatOpen} onClose={() => setChatOpen(false)} />
+                    <NotificationSettings isOpen={notifOpen} onClose={() => setNotifOpen(false)} />
                 </div>
                         </QuotationProvider>
                     </TagihanBahanProvider>
@@ -276,6 +288,7 @@ function ColorPaletteIcon({ size = 18 }: { size?: number }) { return ( <svg widt
 function BillingIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" /><line x1="2" y1="10" x2="22" y2="10" /><line x1="7" y1="15" x2="7.01" y2="15" /><line x1="11" y1="15" x2="11.01" y2="15" /></svg> ); }
 function UserCircleIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 00-4-4H9a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" /></svg> ); }
 function MessageSquareIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg> ); }
+function BellIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 01-3.46 0" /></svg> ); }
 function PenawaranIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /><path d="M16 13H8" /><path d="M16 17H8" /><path d="M10 9H9H8" /><path d="M12 2v6" /></svg> ); }
 function BarChartIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /><line x1="3" y1="20" x2="21" y2="20" /></svg> ); }
 function CockpitIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 12L16 10" /><path d="M12 12L8 10" /><path d="M12 12V7" /><path d="M12 17V17.01" /></svg> ); }

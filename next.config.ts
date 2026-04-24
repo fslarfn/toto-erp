@@ -23,8 +23,9 @@ const withPWA = withPWAInit({
 });
 
 const nextConfig: NextConfig = {
+  // turbopack config kept for dev (next dev uses Turbopack by default in v16)
+  // production build uses --webpack flag so next-pwa can generate the SW
   turbopack: {},
-  /* config options here */
 };
 
 export default withPWA(nextConfig);

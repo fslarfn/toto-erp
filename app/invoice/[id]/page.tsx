@@ -1,28 +1,29 @@
 "use client";
-import { useState, useEffect } from "react";
+import { use, useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase-client";
 import { formatCurrency } from "@/lib/utils";
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 import { FileText, Printer, Loader2 } from "lucide-react";
 
-export default function PublicInvoicePage({ params }: { params: { id: string } }) {
+export default function PublicInvoicePage({ params }: { params: Promise<{ id: string }> }) {
+    const { id } = use(params);
     const [invoice, setInvoice] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchInvoice = async () => {
-            const { data, error } = await supabase
+            const { data } = await supabase
                 .from("billing_history")
                 .select("*")
-                .eq("order_id", params.id)
+                .eq("order_id", id)
                 .single();
-            
+
             if (data) setInvoice(data);
             setLoading(false);
         };
         fetchInvoice();
-    }, [params.id]);
+    }, [id]);
 
     if (loading) {
         return (
