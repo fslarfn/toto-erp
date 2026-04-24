@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { useKaryawan } from "@/lib/karyawan-store";
 import { useAbsensi } from "@/lib/absensi-store";
+import { pushNotify } from "@/lib/notify";
 
 /* ================================================================
    HALAMAN ABSEN KARYAWAN — /absen/[id]
@@ -135,6 +136,16 @@ export default function AbsenPage() {
             total_jam_kerja: "",
             catatan: "",
         });
+
+        if (isTelat) {
+            pushNotify({
+                notificationType: "absensi_terlambat",
+                title: "Karyawan Terlambat Absen",
+                body: `${emp.nama} terlambat ${selisih} menit (masuk: ${jamStr} WIB)`,
+                url: "/dashboard/absensi",
+                targetRoles: ["owner"],
+            });
+        }
 
         setResult({ telat: isTelat, selisih, jam: jamStr });
         setResultType("masuk");

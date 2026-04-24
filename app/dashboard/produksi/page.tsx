@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { usePesanan, PesananRow } from "@/lib/pesanan-store";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase-client";
+import { pushNotify } from "@/lib/notify";
 
 /* ================================================================
    ALUR PESANAN — 5 Tab Workflow (Clean UI v2)
@@ -126,6 +127,13 @@ function TabProduksi() {
     const markDone = (row: PesananRow) => {
         updateRow(row.id, { di_produksi: true, di_warna: false, siap_kirim: false, di_kirim: false, metode_kirim: "" }, true);
         addLog(row.id, "status_change", "pending", "di_produksi", "", user?.name || "");
+        pushNotify({
+            notificationType: "status_produksi",
+            title: "Pesanan Masuk Produksi",
+            body: `${row.customer || "—"} — ${row.deskripsi || "—"}`,
+            url: "/dashboard/produksi",
+            targetRoles: ["owner"],
+        });
         setFlash(row.id); setTimeout(() => setFlash(null), 1200);
     };
 
@@ -207,6 +215,13 @@ function TabCekGudang() {
     const markReady = (row: PesananRow) => {
         updateRow(row.id, { siap_kirim: true, di_warna: true, di_kirim: false }, true);
         addLog(row.id, "status_change", "di_produksi", "siap_kirim", "", user?.name || "");
+        pushNotify({
+            notificationType: "status_produksi",
+            title: "Pesanan Siap Kirim",
+            body: `${row.customer || "—"} — ${row.deskripsi || "—"}`,
+            url: "/dashboard/produksi",
+            targetRoles: ["owner", "sales"],
+        });
         setFlash(row.id); setTimeout(() => setFlash(null), 1200);
     };
 
@@ -395,6 +410,13 @@ function TabPengiriman() {
         if (eks) patch.ekspedisi = eks;
         updateRow(row.id, patch, true);
         addLog(row.id, "status_change", "siap_kirim", "di_kirim", eks ? `via ${eks}` : "", user?.name || "");
+        pushNotify({
+            notificationType: "status_produksi",
+            title: "Pesanan Dikirim",
+            body: `${row.customer || "—"} — ${row.deskripsi || "—"}${eks ? ` via ${eks}` : ""}`,
+            url: "/dashboard/produksi",
+            targetRoles: ["owner", "finance", "sales"],
+        });
         setFlash(row.id); setTimeout(() => setFlash(null), 1200);
     };
 

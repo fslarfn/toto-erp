@@ -4,8 +4,10 @@ import { createClient } from "@supabase/supabase-js";
 
 // Payload yang dikirim ke endpoint ini
 export interface PushPayload {
-  /** Kirim ke user tertentu, atau ke semua subscriber jika kosong */
+  /** Kirim ke user tertentu */
   targetUserIds?: string[];
+  /** Kirim ke semua user dengan role tertentu, mis. ["owner","finance"] */
+  targetRoles?: string[];
   /** Jenis notifikasi — difilter dengan notification_prefs subscriber */
   notificationType: string;
   title: string;
@@ -45,13 +47,24 @@ export async function POST(req: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     );
 
+    // Resolve targetRoles → user IDs
+    let resolvedUserIds: string[] = payload.targetUserIds ?? [];
+    if (payload.targetRoles && payload.targetRoles.length > 0) {
+      const { data: roleUsers } = await supabase
+        .from("app_users")
+        .select("id")
+        .in("role", payload.targetRoles);
+      const roleIds = roleUsers?.map((u: { id: string }) => u.id) ?? [];
+      resolvedUserIds = [...new Set([...resolvedUserIds, ...roleIds])];
+    }
+
     // Ambil subscriber yang relevan
     let query = supabase
       .from("push_subscriptions")
       .select("id, user_id, endpoint, p256dh, auth, notification_prefs");
 
-    if (payload.targetUserIds && payload.targetUserIds.length > 0) {
-      query = query.in("user_id", payload.targetUserIds);
+    if (resolvedUserIds.length > 0) {
+      query = query.in("user_id", resolvedUserIds);
     }
 
     const { data: subscriptions, error } = await query;

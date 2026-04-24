@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { Material } from "@/types";
 import { formatDate } from "@/lib/utils";
+import { pushNotify } from "@/lib/notify";
 
 type ModalType = "masuk" | "keluar" | "baru" | null;
 
@@ -38,6 +39,15 @@ export default function StokBahanPage() {
             const delta = parseFloat(adjForm.jumlah) || 0;
             const newStock = modal === "masuk" ? m.currentStock + delta : Math.max(0, m.currentStock - delta);
             await updateMaterial(selId, { currentStock: newStock, lastUpdated: new Date().toISOString().slice(0, 10) });
+            if (newStock <= m.minimumStock && m.minimumStock > 0) {
+                pushNotify({
+                    notificationType: "stok_minimum",
+                    title: "Stok Bahan Mendekati Minimum",
+                    body: `${m.name} — stok: ${newStock} ${m.unit} (min: ${m.minimumStock} ${m.unit})`,
+                    url: "/dashboard/stok-bahan",
+                    targetRoles: ["owner", "barang"],
+                });
+            }
             setModal(null);
         } catch (err) {
             console.error(err);

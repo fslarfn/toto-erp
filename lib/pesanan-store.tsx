@@ -1,6 +1,7 @@
 "use client";
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from "react";
 import { supabase } from "@/lib/supabase-client";
+import { pushNotify } from "@/lib/notify";
 
 /* ================================================================
    PESANAN STORE — Supabase-backed with pagination support
@@ -411,6 +412,13 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                         const newRealId = data.id;
                         resolvedId = newRealId;
                         setRows(prev => prev.map(r => r.id === id ? { ...r, id: newRealId } : r));
+                        pushNotify({
+                            notificationType: "pesanan_baru",
+                            title: "Pesanan Baru Masuk",
+                            body: `${rowToInsert.customer || "Customer"} — ${rowToInsert.deskripsi || "pesanan baru"}`,
+                            url: "/dashboard/pesanan",
+                            targetRoles: ["owner", "sales"],
+                        });
 
                         // Pindahkan sisa patches yang masuk saat insert berlangsung ke ID baru
                         const leftovers = pendingPatches.current[id];

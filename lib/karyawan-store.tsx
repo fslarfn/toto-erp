@@ -1,6 +1,7 @@
 "use client";
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { supabase } from "@/lib/supabase-client";
+import { pushNotify } from "@/lib/notify";
 
 /* ================================================================
    KARYAWAN STORE — Supabase-backed
@@ -163,7 +164,17 @@ export function KaryawanProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const addKasbon = useCallback((k: Omit<KasbonRecord, "id">) => {
-        supabase.from("kasbon").insert(k as any).then();
+        supabase.from("kasbon").insert(k as any).then((res) => {
+            if (!res.error) {
+                pushNotify({
+                    notificationType: "kasbon",
+                    title: "Pengajuan Kasbon Baru",
+                    body: `Kasbon Rp${Number(k.nominal || 0).toLocaleString("id-ID")} diajukan`,
+                    url: "/dashboard/karyawan",
+                    targetRoles: ["owner", "finance"],
+                });
+            }
+        });
     }, []);
 
     const updateKasbon = useCallback((id: number, patch: Partial<KasbonRecord>) => {

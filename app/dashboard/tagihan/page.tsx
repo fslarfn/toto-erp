@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useMemo } from "react";
 import { usePesanan } from "@/lib/pesanan-store";
+import { pushNotify } from "@/lib/notify";
 
 /* ================================================================
    MENU TAGIHAN
@@ -116,6 +117,15 @@ export default function TagihanPage() {
         const inv = invoiceMap.get(noInv);
         if (!inv) return;
         inv.ids.forEach((id) => updateRow(id, { is_paid: newVal }, true));
+        if (newVal) {
+            pushNotify({
+                notificationType: "status_bayar",
+                title: "Tagihan Ditandai Lunas",
+                body: `Invoice ${noInv} — ${inv.customer} (${fmtRp(inv.total)})`,
+                url: "/dashboard/tagihan",
+                targetRoles: ["owner", "finance"],
+            });
+        }
     };
 
     const cardSt = (accent: string): React.CSSProperties => ({
