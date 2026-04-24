@@ -11,6 +11,7 @@ import { TagihanBahanProvider } from "@/lib/tagihan-bahan-store";
 import { QuotationProvider } from "@/lib/quotation-store";
 import ChatOrderBox from "@/components/layout/ChatOrderBox";
 import NotificationSettings from "@/components/notifications/NotificationSettings";
+import { useNotificationHistory } from "@/hooks/useNotificationHistory";
 
 const NAV_ITEMS = [
     {
@@ -68,6 +69,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const [chatOpen, setChatOpen] = useState(false);
     const [notifOpen, setNotifOpen] = useState(false);
     const [showTrialModal, setShowTrialModal] = useState(false);
+    const { unreadCount } = useNotificationHistory();
     
     const isAdmin = ["faisal", "vira", "toto", "fauzi", "yuni"].includes(user?.username || "");
 
@@ -199,9 +201,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                         <button
                                             onClick={() => setNotifOpen(true)}
                                             className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-slate-100 transition-colors text-primary relative"
-                                            title="Pengaturan Notifikasi"
+                                            title="Notifikasi"
                                         >
                                             <BellIcon size={20} />
+                                            {unreadCount > 0 && (
+                                                <span style={{
+                                                    position: "absolute", top: 4, right: 4,
+                                                    background: "#EF4444", color: "white",
+                                                    borderRadius: 99, fontSize: 9, fontWeight: 700,
+                                                    minWidth: 16, height: 16, lineHeight: "16px",
+                                                    textAlign: "center", padding: "0 3px",
+                                                    border: "1.5px solid white",
+                                                }}>
+                                                    {unreadCount > 99 ? "99+" : unreadCount}
+                                                </span>
+                                            )}
                                         </button>
 
                                         <button
