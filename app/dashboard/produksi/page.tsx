@@ -132,7 +132,6 @@ function TabProduksi() {
             title: "Pesanan Masuk Produksi",
             body: `${row.customer || "—"} — ${row.deskripsi || "—"}`,
             url: "/dashboard/produksi",
-            targetRoles: ["owner"],
         });
         setFlash(row.id); setTimeout(() => setFlash(null), 1200);
     };
@@ -220,7 +219,6 @@ function TabCekGudang() {
             title: "Pesanan Siap Kirim",
             body: `${row.customer || "—"} — ${row.deskripsi || "—"}`,
             url: "/dashboard/produksi",
-            targetRoles: ["owner", "sales"],
         });
         setFlash(row.id); setTimeout(() => setFlash(null), 1200);
     };
@@ -415,7 +413,6 @@ function TabPengiriman() {
             title: "Pesanan Dikirim",
             body: `${row.customer || "—"} — ${row.deskripsi || "—"}${eks ? ` via ${eks}` : ""}`,
             url: "/dashboard/produksi",
-            targetRoles: ["owner", "finance", "sales"],
         });
         setFlash(row.id); setTimeout(() => setFlash(null), 1200);
     };

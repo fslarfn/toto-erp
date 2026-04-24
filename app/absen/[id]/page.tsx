@@ -143,7 +143,6 @@ export default function AbsenPage() {
                 title: "Karyawan Terlambat Absen",
                 body: `${emp.nama} terlambat ${selisih} menit (masuk: ${jamStr} WIB)`,
                 url: "/dashboard/absensi",
-                targetRoles: ["owner"],
             });
         }
 

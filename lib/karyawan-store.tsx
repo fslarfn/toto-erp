@@ -171,7 +171,6 @@ export function KaryawanProvider({ children }: { children: ReactNode }) {
                     title: "Pengajuan Kasbon Baru",
                     body: `Kasbon Rp${Number(k.nominal || 0).toLocaleString("id-ID")} diajukan`,
                     url: "/dashboard/karyawan",
-                    targetRoles: ["owner", "finance"],
                 });
             }
         });

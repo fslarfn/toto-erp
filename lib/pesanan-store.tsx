@@ -417,7 +417,6 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                             title: "Pesanan Baru Masuk",
                             body: `${rowToInsert.customer || "Customer"} — ${rowToInsert.deskripsi || "pesanan baru"}`,
                             url: "/dashboard/pesanan",
-                            targetRoles: ["owner", "sales"],
                         });
 
                         // Pindahkan sisa patches yang masuk saat insert berlangsung ke ID baru

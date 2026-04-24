@@ -123,7 +123,6 @@ export default function TagihanPage() {
                 title: "Tagihan Ditandai Lunas",
                 body: `Invoice ${noInv} — ${inv.customer} (${fmtRp(inv.total)})`,
                 url: "/dashboard/tagihan",
-                targetRoles: ["owner", "finance"],
             });
         }
     };

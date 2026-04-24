@@ -45,7 +45,6 @@ export default function StokBahanPage() {
                     title: "Stok Bahan Mendekati Minimum",
                     body: `${m.name} — stok: ${newStock} ${m.unit} (min: ${m.minimumStock} ${m.unit})`,
                     url: "/dashboard/stok-bahan",
-                    targetRoles: ["owner", "barang"],
                 });
             }
             setModal(null);
