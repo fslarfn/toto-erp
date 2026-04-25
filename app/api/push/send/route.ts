@@ -69,6 +69,15 @@ export async function POST(req: Request) {
 
     const { data: subscriptions, error } = await query;
     if (error) throw error;
+
+    // Selalu simpan ke riwayat notifikasi terlebih dahulu
+    supabase.from("notifications").insert({
+      title: payload.title,
+      body: payload.body,
+      url: payload.url ?? "/dashboard",
+      notification_type: payload.notificationType,
+    }).then(() => {});
+
     if (!subscriptions || subscriptions.length === 0) {
       return NextResponse.json({ ok: true, sent: 0, message: "Tidak ada subscriber" });
     }
@@ -122,14 +131,6 @@ export async function POST(req: Request) {
 
     const sent = results.filter((r) => r.status === "fulfilled").length;
     const failed = results.filter((r) => r.status === "rejected").length;
-
-    // Simpan ke riwayat notifikasi (selalu, terlepas dari jumlah delivery)
-    supabase.from("notifications").insert({
-      title: payload.title,
-      body: payload.body,
-      url: payload.url ?? "/dashboard",
-      notification_type: payload.notificationType,
-    }).then(() => {});
 
     return NextResponse.json({ ok: true, sent, failed });
   } catch (err: unknown) {
