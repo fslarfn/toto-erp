@@ -16,7 +16,8 @@ export type NotificationPrefKey =
   | "pesanan_stuck"
   | "tagihan_jatuh_tempo"
   | "kasbon"
-  | "absensi_terlambat";
+  | "absensi_terlambat"
+  | "chat";
 
 export type NotificationPrefs = Record<NotificationPrefKey, boolean>;
 
@@ -29,6 +30,7 @@ export const DEFAULT_PREFS: NotificationPrefs = {
   tagihan_jatuh_tempo: true,
   kasbon: true,
   absensi_terlambat: false,
+  chat: true,
 };
 
 export const PREF_LABELS: Record<NotificationPrefKey, string> = {
@@ -40,6 +42,7 @@ export const PREF_LABELS: Record<NotificationPrefKey, string> = {
   tagihan_jatuh_tempo: "Tagihan mendekati jatuh tempo",
   kasbon: "Pengajuan kasbon baru",
   absensi_terlambat: "Karyawan terlambat absen",
+  chat: "Pesan chat tim baru",
 };
 
 /** Convert a base64url VAPID public key to Uint8Array */

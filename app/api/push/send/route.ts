@@ -123,15 +123,13 @@ export async function POST(req: Request) {
     const sent = results.filter((r) => r.status === "fulfilled").length;
     const failed = results.filter((r) => r.status === "rejected").length;
 
-    // Simpan ke riwayat notifikasi (broadcast — satu baris per event)
-    if (sent > 0) {
-      await supabase.from("notifications").insert({
-        title: payload.title,
-        body: payload.body,
-        url: payload.url ?? "/dashboard",
-        notification_type: payload.notificationType,
-      }).then(() => {});
-    }
+    // Simpan ke riwayat notifikasi (selalu, terlepas dari jumlah delivery)
+    supabase.from("notifications").insert({
+      title: payload.title,
+      body: payload.body,
+      url: payload.url ?? "/dashboard",
+      notification_type: payload.notificationType,
+    }).then(() => {});
 
     return NextResponse.json({ ok: true, sent, failed });
   } catch (err: unknown) {

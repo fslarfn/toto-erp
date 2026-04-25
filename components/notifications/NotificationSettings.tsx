@@ -35,6 +35,7 @@ const CATEGORIES: {
     color: "#6A1B9A",
     items: [
       { key: "absensi_terlambat", label: "Absensi Terlambat", desc: "Karyawan absen melebihi jam masuk", icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><circle cx="18" cy="5" r="2"/><path d="M18 7v2l1.5 1.5"/></svg> },
+      { key: "chat", label: "Pesan Chat Tim", desc: "Saat ada pesan baru di chat internal", icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg> },
     ],
   },
 ];
@@ -43,7 +44,7 @@ const TYPE_COLOR: Record<string, string> = {
   pesanan_baru: "#1565C0", status_bayar: "#1565C0",
   tagihan_jatuh_tempo: "#1565C0", kasbon: "#1565C0",
   status_produksi: "#E65100", pesanan_stuck: "#E65100", stok_minimum: "#E65100",
-  absensi_terlambat: "#6A1B9A",
+  absensi_terlambat: "#6A1B9A", chat: "#6A1B9A",
 };
 
 function timeAgo(dateStr: string): string {

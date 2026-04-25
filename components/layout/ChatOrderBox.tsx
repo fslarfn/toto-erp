@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabase-client";
 import { useAuth } from "@/lib/auth";
+import { pushNotify } from "@/lib/notify";
 import {
     Send, MessageSquare, X, Minus, Maximize2,
     AtSign, Bell, User as UserIcon, Search, Smile, Paperclip
@@ -146,7 +147,12 @@ export default function ChatOrderBox({ isOpen, onClose }: { isOpen: boolean, onC
                 alert("Gagal mengirim pesan: " + error.message);
             } else {
                 setInput("");
-                // Reliance on Realtime for UI update
+                pushNotify({
+                    notificationType: "chat",
+                    title: `💬 ${user.name}`,
+                    body: msgContent.length > 100 ? msgContent.slice(0, 97) + "…" : msgContent,
+                    url: "/dashboard",
+                });
             }
         } catch (err) {
             console.error("Error dlm pengiriman:", err);
