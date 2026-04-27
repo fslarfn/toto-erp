@@ -470,7 +470,7 @@ export default function TabFinishing() {
     const [year, setYear]   = useState(now.getFullYear());
     const [search, setSearch] = useState("");
     const [selectedKey, setSelectedKey] = useState<string | null>(null);
-    const [operatorMode, setOperatorMode] = useState(isFinishingRole);
+    const [operatorMode, setOperatorMode] = useState(false);
     const [confirmPayload, setConfirmPayload] = useState<ConfirmPayload | null>(null);
     const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
     const { toasts, show: showToast } = useToast();
@@ -727,18 +727,20 @@ export default function TabFinishing() {
                                     {stats.operators.length > 0 && ` · Operator: ${stats.operators.join(", ")}`}
                                 </div>
                             </div>
-                            <button
-                                onClick={() => setOperatorMode(true)}
-                                style={{
-                                    padding: "8px 18px", borderRadius: 8, border: "none",
-                                    background: "linear-gradient(135deg, #5C4033, #7C5A3C)",
-                                    color: "white", fontSize: 12, fontWeight: 700,
-                                    cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
-                                    boxShadow: "0 2px 8px rgba(92,64,51,0.25)",
-                                }}
-                            >
-                                Mode Operator ▶
-                            </button>
+                            {!isFinishingRole && (
+                                <button
+                                    onClick={() => setOperatorMode(true)}
+                                    style={{
+                                        padding: "8px 18px", borderRadius: 8, border: "none",
+                                        background: "linear-gradient(135deg, #5C4033, #7C5A3C)",
+                                        color: "white", fontSize: 12, fontWeight: 700,
+                                        cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+                                        boxShadow: "0 2px 8px rgba(92,64,51,0.25)",
+                                    }}
+                                >
+                                    Mode Operator ▶
+                                </button>
+                            )}
                         </div>
 
                         {/* Stats cards */}
