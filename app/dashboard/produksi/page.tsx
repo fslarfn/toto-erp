@@ -4,6 +4,7 @@ import { usePesanan, PesananRow } from "@/lib/pesanan-store";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase-client";
 import { pushNotify } from "@/lib/notify";
+import TabFinishing from "./components/TabFinishing";
 
 /* ================================================================
    ALUR PESANAN — 5 Tab Workflow (Clean UI v2)
@@ -734,29 +735,40 @@ function TabRiwayatPO() {
 /* ================================================================
    MAIN — 5 Tab (compact horizontal tabs)
 ================================================================ */
+function IconFinishing({ size = 16, color = "currentColor" }: { size?: number; color?: string }) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 11l3 3L22 4" />
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+        </svg>
+    );
+}
+
 export default function AlurPesananPage() {
-    const [activeTab, setActiveTab] = useState<"produksi" | "gudang" | "followup" | "pengiriman" | "riwayat">("produksi");
+    const [activeTab, setActiveTab] = useState<"produksi" | "finishing" | "gudang" | "followup" | "pengiriman" | "riwayat">("produksi");
     const { rows } = usePesanan();
 
-    const countProduksi = rows.filter(r => (r.customer || r.deskripsi) && r.printed_at && !r.di_produksi).length;
-    const countGudang = rows.filter(r => (r.customer || r.deskripsi) && r.di_produksi && !r.siap_kirim && !r.di_kirim).length;
-    const countFollowUp = rows.filter(r => (r.customer || r.deskripsi) && r.siap_kirim === true && !r.metode_kirim && r.di_kirim === false).length;
+    const countProduksi   = rows.filter(r => (r.customer || r.deskripsi) && r.printed_at && !r.di_produksi).length;
+    const countFinishing  = rows.filter(r => (r.customer || r.deskripsi) && r.printed_at && !r.di_kirim && r.finishing_status === "belum").length;
+    const countGudang     = rows.filter(r => (r.customer || r.deskripsi) && r.di_produksi && !r.siap_kirim && !r.di_kirim).length;
+    const countFollowUp   = rows.filter(r => (r.customer || r.deskripsi) && r.siap_kirim === true && !r.metode_kirim && r.di_kirim === false).length;
     const countPengiriman = rows.filter(r => (r.customer || r.deskripsi) && r.siap_kirim === true && !!r.metode_kirim && r.di_kirim === false).length;
 
     type TabKey = typeof activeTab;
     const tabs: { key: TabKey; label: string; Icon: React.FC<{ size?: number; color?: string }>; count: number; activeColor: string }[] = [
-        { key: "produksi", label: "Produksi", Icon: IconProduksi, count: countProduksi, activeColor: "#7C5A3C" },
-        { key: "gudang", label: "Gudang", Icon: IconGudang, count: countGudang, activeColor: "#2563EB" },
-        { key: "followup", label: "Follow Up", Icon: IconFollowUp, count: countFollowUp, activeColor: "#D97706" },
-        { key: "pengiriman", label: "Kirim", Icon: IconKirim, count: countPengiriman, activeColor: "#15803D" },
-        { key: "riwayat", label: "Riwayat", Icon: IconRiwayat, count: 0, activeColor: "#6B7280" },
+        { key: "produksi",  label: "Produksi",  Icon: IconProduksi,  count: countProduksi,   activeColor: "#7C5A3C" },
+        { key: "finishing", label: "Finishing",  Icon: IconFinishing, count: countFinishing,  activeColor: "#9333EA" },
+        { key: "gudang",    label: "Gudang",     Icon: IconGudang,    count: countGudang,     activeColor: "#2563EB" },
+        { key: "followup",  label: "Follow Up",  Icon: IconFollowUp,  count: countFollowUp,   activeColor: "#D97706" },
+        { key: "pengiriman",label: "Kirim",      Icon: IconKirim,     count: countPengiriman, activeColor: "#15803D" },
+        { key: "riwayat",   label: "Riwayat",    Icon: IconRiwayat,   count: 0,               activeColor: "#6B7280" },
     ];
 
     return (
         <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", background: "#F8F4EF" }}>
             {/* ── Compact Tab Bar ── */}
             <div style={{ display: "flex", background: "white", borderBottom: "1px solid #E8DDD0", flexShrink: 0, position: "relative" }}>
-                {tabs.map((tab, idx) => {
+                {tabs.map((tab) => {
                     const isActive = activeTab === tab.key;
                     return (
                         <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
@@ -784,11 +796,12 @@ export default function AlurPesananPage() {
             </div>
             {/* ── Tab Content ── */}
             <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-                {activeTab === "produksi" && <TabProduksi />}
-                {activeTab === "gudang" && <TabCekGudang />}
-                {activeTab === "followup" && <TabFollowUp />}
-                {activeTab === "pengiriman" && <TabPengiriman />}
-                {activeTab === "riwayat" && <TabRiwayatPO />}
+                {activeTab === "produksi"  && <TabProduksi />}
+                {activeTab === "finishing" && <TabFinishing />}
+                {activeTab === "gudang"    && <TabCekGudang />}
+                {activeTab === "followup"  && <TabFollowUp />}
+                {activeTab === "pengiriman"&& <TabPengiriman />}
+                {activeTab === "riwayat"   && <TabRiwayatPO />}
             </div>
         </div>
     );
