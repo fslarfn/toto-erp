@@ -78,12 +78,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         if (!user) router.replace("/login");
         else if (isFinishing && pathname !== "/dashboard/produksi") {
             router.replace("/dashboard/produksi");
-        } else if (license && !license.is_setup_completed) {
+        } else if (!isFinishing && license && !license.is_setup_completed) {
             setShowTrialModal(true);
         }
     }, [user, router, license, isFinishing, pathname]);
 
     if (!user) return null;
+    // Tahan render sampai redirect selesai agar tidak crash di provider
+    if (isFinishing && pathname !== "/dashboard/produksi") return null;
 
     /* ── Layout khusus Operator Finishing: tanpa sidebar, tanpa header lengkap ── */
     if (isFinishing) {

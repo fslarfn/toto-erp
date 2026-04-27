@@ -22,7 +22,14 @@ export default function LoginPage() {
         const ok = await login(username, password);
         setLoading(false);
         if (ok) {
-            router.push("/dashboard");
+            // Redirect finishing role langsung ke alur pesanan
+            const stored = localStorage.getItem("totobaru_user");
+            const role = stored ? JSON.parse(stored).role : null;
+            if (role === "finishing") {
+                router.push("/dashboard/produksi");
+            } else {
+                router.push("/dashboard");
+            }
         } else {
             setError("Username atau password salah.");
         }
