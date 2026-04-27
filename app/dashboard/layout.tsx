@@ -70,17 +70,68 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const [notifOpen, setNotifOpen] = useState(false);
     const [showTrialModal, setShowTrialModal] = useState(false);
     const { unreadCount } = useNotificationHistory();
-    
+
     const isAdmin = ["faisal", "vira", "toto", "fauzi", "yuni"].includes(user?.username || "");
+    const isFinishing = user?.role === "finishing";
 
     useEffect(() => {
         if (!user) router.replace("/login");
-        else if (license && !license.is_setup_completed) {
+        else if (isFinishing && pathname !== "/dashboard/produksi") {
+            router.replace("/dashboard/produksi");
+        } else if (license && !license.is_setup_completed) {
             setShowTrialModal(true);
         }
-    }, [user, router, license]);
+    }, [user, router, license, isFinishing, pathname]);
 
     if (!user) return null;
+
+    /* ── Layout khusus Operator Finishing: tanpa sidebar, tanpa header lengkap ── */
+    if (isFinishing) {
+        const handleLogout = () => { logout(); router.replace("/login"); };
+        return (
+            <PesananProvider>
+                <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#F8F4EF" }}>
+                    {/* Mini header */}
+                    <div style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        padding: "10px 20px", background: "white",
+                        borderBottom: "1px solid #E8DDD0", flexShrink: 0,
+                    }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div style={{
+                                width: 32, height: 32, borderRadius: 8,
+                                background: "#6B4423", display: "flex", alignItems: "center", justifyContent: "center",
+                            }}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                                    <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
+                                </svg>
+                            </div>
+                            <div>
+                                <div style={{ fontSize: 13, fontWeight: 800, color: "#3C2F2F" }}>Finishing</div>
+                                <div style={{ fontSize: 11, color: "#B89678" }}>{user.name} · Operator Finishing</div>
+                            </div>
+                        </div>
+                        <button onClick={handleLogout} style={{
+                            display: "flex", alignItems: "center", gap: 6,
+                            padding: "6px 14px", borderRadius: 8,
+                            border: "1.5px solid #E8DDD0", background: "white",
+                            fontSize: 12, color: "#8A7B6E", fontWeight: 600, cursor: "pointer",
+                        }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+                                <polyline points="16 17 21 12 16 7" />
+                                <line x1="21" y1="12" x2="9" y2="12" />
+                            </svg>
+                            Logout
+                        </button>
+                    </div>
+                    <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                        {children}
+                    </main>
+                </div>
+            </PesananProvider>
+        );
+    }
 
     const handleLogout = () => {
         logout();

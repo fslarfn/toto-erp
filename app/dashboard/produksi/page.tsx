@@ -747,6 +747,13 @@ function IconFinishing({ size = 16, color = "currentColor" }: { size?: number; c
 export default function AlurPesananPage() {
     const [activeTab, setActiveTab] = useState<"produksi" | "finishing" | "gudang" | "followup" | "pengiriman" | "riwayat">("produksi");
     const { rows } = usePesanan();
+    const { user } = useAuth();
+    const isFinishing = user?.role === "finishing";
+
+    /* Operator finishing langsung lihat tab Finishing saja */
+    if (isFinishing) {
+        return <TabFinishing />;
+    }
 
     const countProduksi   = rows.filter(r => (r.customer || r.deskripsi) && r.printed_at && !r.di_produksi).length;
     const countFinishing  = rows.filter(r => (r.customer || r.deskripsi) && r.printed_at && !r.di_kirim && r.finishing_status === "belum").length;

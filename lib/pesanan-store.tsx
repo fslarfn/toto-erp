@@ -36,7 +36,7 @@ export type PesananRow = {
     // Finishing
     finishing_status: FinishingStatus;
     finishing_operator: string;
-    finishing_at: string;
+    finishing_at: string | null;
     is_repair: boolean;
 };
 
@@ -55,7 +55,7 @@ export function makeEmptyRow(index: number = 0): PesananRow {
         printed_at: "", po_label: "", is_packing: false, is_paid: false,
         production_note: "", metode_kirim: "", shipped_at: "",
         sync_id: String(tempId),
-        finishing_status: "belum", finishing_operator: "", finishing_at: "", is_repair: false,
+        finishing_status: "belum", finishing_operator: "", finishing_at: null, is_repair: false,
     };
 }
 
@@ -137,7 +137,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
             sync_id: (r.sync_id as string) || "",
             finishing_status: ((r.finishing_status as string) || "belum") as FinishingStatus,
             finishing_operator: (r.finishing_operator as string) || "",
-            finishing_at: (r.finishing_at as string) || "",
+            finishing_at: (r.finishing_at as string) || null,
             is_repair: !!r.is_repair,
         }));
     };

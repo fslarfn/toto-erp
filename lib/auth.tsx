@@ -24,6 +24,7 @@ const roleAccess: Record<UserRole, string[]> = {
     sales: ["pesanan", "status-barang"],
     produksi: ["dashboard", "pesanan", "status-barang", "stok-bahan", "produksi"],
     barang: ["dashboard", "pesanan", "status-barang", "stok-bahan", "produksi"],
+    finishing: ["produksi"],
 };
 
 const roleLabels: Record<UserRole, string> = {
@@ -32,6 +33,7 @@ const roleLabels: Record<UserRole, string> = {
     sales: "Admin Sales",
     produksi: "PIC Produksi",
     barang: "PIC Barang",
+    finishing: "Operator Finishing",
 };
 
 export function getRoleDisplay(user: User | null) {

@@ -176,7 +176,7 @@ function OperatorMode({
     onExit,
 }: {
     sesi: Sesi;
-    onExit: () => void;
+    onExit?: () => void;
 }) {
     const { updateRow } = usePesanan();
     const [operator, setOperator] = useState("");
@@ -240,7 +240,7 @@ function OperatorMode({
         if (cur === status) {
             // uncheck: reset ke belum
             const reset: Partial<PesananRow> = {
-                finishing_status: "belum", finishing_operator: "", finishing_at: "",
+                finishing_status: "belum", finishing_operator: "", finishing_at: null,
             };
             if (cur === "repair") { reset.di_produksi = true; reset.is_repair = false; }
             if (cur === "warna")  { reset.di_warna = false; }
@@ -292,16 +292,18 @@ function OperatorMode({
                         <option value="">— Pilih Nama —</option>
                         {users.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
                     </select>
-                    <button
-                        onClick={() => setExitConfirm(true)}
-                        style={{
-                            padding: "8px 18px", borderRadius: 8, border: "1.5px solid #57534E",
-                            background: "transparent", color: "#F87171", fontSize: 12, fontWeight: 700,
-                            cursor: "pointer",
-                        }}
-                    >
-                        Keluar ✕
-                    </button>
+                    {onExit && (
+                        <button
+                            onClick={() => setExitConfirm(true)}
+                            style={{
+                                padding: "8px 18px", borderRadius: 8, border: "1.5px solid #57534E",
+                                background: "transparent", color: "#F87171", fontSize: 12, fontWeight: 700,
+                                cursor: "pointer",
+                            }}
+                        >
+                            Keluar ✕
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -387,7 +389,7 @@ function OperatorMode({
 
                             {cur !== "belum" && item.finishing_operator && (
                                 <div style={{ fontSize: 11, color: "#78716C", marginTop: 8, marginLeft: 2 }}>
-                                    oleh {item.finishing_operator} · {fmtTimestamp(item.finishing_at)}
+                                    oleh {item.finishing_operator} · {fmtTimestamp(item.finishing_at ?? "")}
                                 </div>
                             )}
                         </div>
@@ -433,7 +435,7 @@ function OperatorMode({
                         <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 20 }}>Semua progress tersimpan otomatis.</div>
                         <div style={{ display: "flex", gap: 10 }}>
                             <button onClick={() => setExitConfirm(false)} style={{ flex: 1, padding: "10px", borderRadius: 10, border: "1.5px solid #E8DDD0", background: "white", fontSize: 13, fontWeight: 700, color: "#6B7280", cursor: "pointer" }}>Batal</button>
-                            <button onClick={onExit} style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: "#DC2626", color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Keluar</button>
+                            <button onClick={() => onExit?.()} style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: "#DC2626", color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Keluar</button>
                         </div>
                     </div>
                 </div>
@@ -462,12 +464,13 @@ export default function TabFinishing() {
     const { rows, updateRow } = usePesanan();
     const { user } = useAuth();
     const now = new Date();
+    const isFinishingRole = user?.role === "finishing";
 
     const [month, setMonth] = useState(now.getMonth() + 1);
     const [year, setYear]   = useState(now.getFullYear());
     const [search, setSearch] = useState("");
     const [selectedKey, setSelectedKey] = useState<string | null>(null);
-    const [operatorMode, setOperatorMode] = useState(false);
+    const [operatorMode, setOperatorMode] = useState(isFinishingRole);
     const [confirmPayload, setConfirmPayload] = useState<ConfirmPayload | null>(null);
     const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
     const { toasts, show: showToast } = useToast();
@@ -568,7 +571,7 @@ export default function TabFinishing() {
     const executeUncheck = useCallback(async (item: PesananRow) => {
         const cur = (item.finishing_status || "belum") as FinishingStatus;
         const reset: Partial<PesananRow> = {
-            finishing_status: "belum", finishing_operator: "", finishing_at: "",
+            finishing_status: "belum", finishing_operator: "", finishing_at: null,
         };
         if (cur === "repair") { reset.di_produksi = true; reset.is_repair = false; }
         if (cur === "warna")  { reset.di_warna = false; }
@@ -610,7 +613,12 @@ export default function TabFinishing() {
 
     /* ── Render ── */
     if (operatorMode && selectedSesi) {
-        return <OperatorMode sesi={selectedSesi} onExit={() => setOperatorMode(false)} />;
+        return (
+            <OperatorMode
+                sesi={selectedSesi}
+                onExit={isFinishingRole ? undefined : () => setOperatorMode(false)}
+            />
+        );
     }
 
     return (
