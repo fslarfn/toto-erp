@@ -74,9 +74,14 @@ export default function CashForecastCard() {
                 <stop offset="95%" stopColor="#A67B5B" stopOpacity={0}/>
               </linearGradient>
             </defs>
-            <Tooltip 
-              formatter={(value: any) => [formatRp(Number(value || 0)), "Saldo"]}
-              labelFormatter={(label) => format(new Date(label), "d MMM yyyy", { locale: id })}
+            <Tooltip
+              formatter={(value: unknown) => [formatRp(Number(value || 0)), "Saldo"]}
+              labelFormatter={(_label, payload) => {
+                const dateStr = (payload?.[0] as { payload?: { date?: string } } | undefined)?.payload?.date;
+                if (!dateStr) return '';
+                try { return format(new Date(dateStr + 'T12:00:00'), "d MMM yyyy", { locale: id }); }
+                catch { return dateStr; }
+              }}
               contentStyle={{ 
                 borderRadius: '12px', 
                 border: '1px solid #E8DCCF', 

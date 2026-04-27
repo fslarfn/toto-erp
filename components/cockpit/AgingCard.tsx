@@ -42,7 +42,6 @@ export default function AgingCard() {
   );
 
   const totalOutstanding = data?.reduce((sum, item) => sum + item.outstanding, 0) || 0;
-  const totalInvoice = 4217; // Placeholder or sync with real count if available
 
   // Prepare data for chart - ensure all buckets exist
   const buckets: ('0-30' | '31-60' | '61-90' | '>90')[] = ['0-30', '31-60', '61-90', '>90'];
@@ -69,7 +68,7 @@ export default function AgingCard() {
           </div>
         </div>
         <span className="text-[10px] font-bold text-[#8B6B52] bg-[#F5EBDD] px-2 py-0.5 rounded-md border border-[#E8DCCF]">
-          {totalInvoice} inv
+          {data?.filter(d => d.outstanding > 0).length ?? 0} bucket
         </span>
       </div>
 
