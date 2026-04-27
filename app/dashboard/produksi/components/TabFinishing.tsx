@@ -203,11 +203,6 @@ function OperatorMode({
         if (status === "repair") {
             patch.di_produksi = false;
             patch.is_repair = true;
-        } else if (status === "warna") {
-            patch.di_warna = true;
-        } else if (status === "gudang") {
-            patch.siap_kirim = true;
-            patch.di_warna = true;
         }
 
         updateRow(item.id, patch, true);
@@ -243,8 +238,6 @@ function OperatorMode({
                 finishing_status: "belum", finishing_operator: "", finishing_at: null,
             };
             if (cur === "repair") { reset.di_produksi = true; reset.is_repair = false; }
-            if (cur === "warna")  { reset.di_warna = false; }
-            if (cur === "gudang") { reset.siap_kirim = false; reset.di_warna = false; }
             updateRow(item.id, reset, true);
             showToast("Status direset", "#6B7280");
             return;
@@ -539,11 +532,6 @@ export default function TabFinishing() {
         if (status === "repair") {
             patch.di_produksi = false;
             patch.is_repair   = true;
-        } else if (status === "warna") {
-            patch.di_warna = true;
-        } else if (status === "gudang") {
-            patch.siap_kirim = true;
-            patch.di_warna   = true;
         }
 
         updateRow(item.id, patch, true);
@@ -574,8 +562,6 @@ export default function TabFinishing() {
             finishing_status: "belum", finishing_operator: "", finishing_at: null,
         };
         if (cur === "repair") { reset.di_produksi = true; reset.is_repair = false; }
-        if (cur === "warna")  { reset.di_warna = false; }
-        if (cur === "gudang") { reset.siap_kirim = false; reset.di_warna = false; }
 
         updateRow(item.id, reset, true);
         await supabase.from("finishing_checks")

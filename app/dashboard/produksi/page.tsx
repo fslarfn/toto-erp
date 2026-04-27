@@ -203,7 +203,7 @@ function TabCekGudang() {
     const [noteText, setNoteText] = useState("");
     const [flash, setFlash] = useState<number | null>(null);
 
-    const items = rows.filter(r => (r.customer || r.deskripsi) && r.di_produksi && !r.siap_kirim && !r.di_kirim);
+    const items = rows.filter(r => (r.customer || r.deskripsi) && r.di_produksi && !r.siap_kirim && !r.di_kirim && r.finishing_status === "gudang");
     const filtered = items.filter(r => {
         if (!search) return true;
         return [r.customer, r.deskripsi, r.po_label, r.production_note].join(" ").toLowerCase().includes(search.toLowerCase());
@@ -757,7 +757,7 @@ export default function AlurPesananPage() {
 
     const countProduksi   = rows.filter(r => (r.customer || r.deskripsi) && r.printed_at && !r.di_produksi).length;
     const countFinishing  = rows.filter(r => (r.customer || r.deskripsi) && r.printed_at && !r.di_kirim && r.finishing_status === "belum").length;
-    const countGudang     = rows.filter(r => (r.customer || r.deskripsi) && r.di_produksi && !r.siap_kirim && !r.di_kirim).length;
+    const countGudang     = rows.filter(r => (r.customer || r.deskripsi) && r.di_produksi && !r.siap_kirim && !r.di_kirim && r.finishing_status === "gudang").length;
     const countFollowUp   = rows.filter(r => (r.customer || r.deskripsi) && r.siap_kirim === true && !r.metode_kirim && r.di_kirim === false).length;
     const countPengiriman = rows.filter(r => (r.customer || r.deskripsi) && r.siap_kirim === true && !!r.metode_kirim && r.di_kirim === false).length;
 
