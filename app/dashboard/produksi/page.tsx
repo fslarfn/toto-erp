@@ -203,7 +203,7 @@ function TabCekGudang() {
     const [noteText, setNoteText] = useState("");
     const [flash, setFlash] = useState<number | null>(null);
 
-    const items = rows.filter(r => (r.customer || r.deskripsi) && r.di_produksi && !r.siap_kirim && !r.di_kirim && r.finishing_status === "gudang");
+    const items = rows.filter(r => (r.customer || r.deskripsi) && r.di_produksi && !r.siap_kirim && !r.di_kirim);
     const filtered = items.filter(r => {
         if (!search) return true;
         return [r.customer, r.deskripsi, r.po_label, r.production_note].join(" ").toLowerCase().includes(search.toLowerCase());
@@ -745,7 +745,7 @@ function IconFinishing({ size = 16, color = "currentColor" }: { size?: number; c
 }
 
 export default function AlurPesananPage() {
-    const [activeTab, setActiveTab] = useState<"produksi" | "finishing" | "gudang" | "followup" | "pengiriman" | "riwayat">("produksi");
+    const [activeTab, setActiveTab] = useState<"finishing" | "gudang" | "followup" | "pengiriman" | "riwayat">("finishing");
     const { rows } = usePesanan();
     const { user } = useAuth();
     const isFinishing = user?.role === "finishing";
@@ -755,15 +755,13 @@ export default function AlurPesananPage() {
         return <TabFinishing />;
     }
 
-    const countProduksi   = rows.filter(r => (r.customer || r.deskripsi) && r.printed_at && !r.di_produksi).length;
     const countFinishing  = rows.filter(r => (r.customer || r.deskripsi) && r.printed_at && !r.di_kirim && r.finishing_status === "belum").length;
-    const countGudang     = rows.filter(r => (r.customer || r.deskripsi) && r.di_produksi && !r.siap_kirim && !r.di_kirim && r.finishing_status === "gudang").length;
+    const countGudang     = rows.filter(r => (r.customer || r.deskripsi) && r.di_produksi && !r.siap_kirim && !r.di_kirim).length;
     const countFollowUp   = rows.filter(r => (r.customer || r.deskripsi) && r.siap_kirim === true && !r.metode_kirim && r.di_kirim === false).length;
     const countPengiriman = rows.filter(r => (r.customer || r.deskripsi) && r.siap_kirim === true && !!r.metode_kirim && r.di_kirim === false).length;
 
     type TabKey = typeof activeTab;
     const tabs: { key: TabKey; label: string; Icon: React.FC<{ size?: number; color?: string }>; count: number; activeColor: string }[] = [
-        { key: "produksi",  label: "Produksi",  Icon: IconProduksi,  count: countProduksi,   activeColor: "#7C5A3C" },
         { key: "finishing", label: "Finishing",  Icon: IconFinishing, count: countFinishing,  activeColor: "#9333EA" },
         { key: "gudang",    label: "Gudang",     Icon: IconGudang,    count: countGudang,     activeColor: "#2563EB" },
         { key: "followup",  label: "Follow Up",  Icon: IconFollowUp,  count: countFollowUp,   activeColor: "#D97706" },
@@ -803,7 +801,6 @@ export default function AlurPesananPage() {
             </div>
             {/* ── Tab Content ── */}
             <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-                {activeTab === "produksi"  && <TabProduksi />}
                 {activeTab === "finishing" && <TabFinishing />}
                 {activeTab === "gudang"    && <TabCekGudang />}
                 {activeTab === "followup"  && <TabFollowUp />}
