@@ -258,13 +258,14 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                         const mapped: Partial<PesananRow> = {};
                         if ("id" in row) mapped.id = row.id;
 
-                        const boolFields = new Set(["di_produksi", "di_warna", "siap_kirim", "di_kirim", "is_packing", "is_paid"]);
+                        const boolFields = new Set(["di_produksi", "di_warna", "siap_kirim", "di_kirim", "is_packing", "is_paid", "is_repair"]);
                         const allFields: (keyof PesananRow)[] = [
                             "tanggal", "customer", "deskripsi", "ukuran", "qty", "harga",
                             "no_inv", "no_sj", "di_produksi", "di_warna", "siap_kirim",
                             "di_kirim", "ekspedisi", "color_marker", "printed_at",
                             "po_label", "is_packing", "is_paid", "production_note",
-                            "metode_kirim", "shipped_at", "sync_id"
+                            "metode_kirim", "shipped_at", "sync_id",
+                            "finishing_status", "finishing_operator", "finishing_at", "is_repair",
                         ];
 
                         allFields.forEach(f => {

@@ -9,11 +9,13 @@ import ProfitTargetCard from "../../../components/cockpit/ProfitTargetCard";
 import CashForecastCard from "../../../components/cockpit/CashForecastCard";
 import TopDebtorsCard from "../../../components/cockpit/TopDebtorsCard";
 import StuckOrdersCard from "../../../components/cockpit/StuckOrdersCard";
+import { useCockpitRealtime } from "../../../hooks/useCockpit";
 
 export default function CockpitPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [authorized, setAuthorized] = useState(false);
+  useCockpitRealtime();
 
   // Auth protection
   useEffect(() => {
