@@ -279,7 +279,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                     setCashFlow(prev => prev.map(x => x.id === (n as any).id ? { ...x, ...mapped } : x));
                 }
                 else if (eventType === "DELETE") setCashFlow(prev => prev.filter(x => x.id !== (o as any).id));
-                recalculateBalances();
+                // recalculate handled by useEffect when cashFlow state settles
             })
             // 4. Payments
             .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, (payload) => {
@@ -299,7 +299,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                     setPayments(prev => prev.map(x => x.id === (n as any).id ? { ...x, ...mapped } : x));
                 }
                 else if (eventType === "DELETE") setPayments(prev => prev.filter(x => x.id !== (o as any).id));
-                recalculateBalances();
+                // recalculate handled by useEffect when payments state settles
             })
             // 5. Bank Accounts
             .on("postgres_changes", { event: "*", schema: "public", table: "bank_accounts" }, (payload) => {
@@ -463,11 +463,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setBankAccounts(prev => {
             const next = [...prev];
             next.forEach(bank => {
-                const cfIncome = cashFlow.filter(c => c.bankAccount === bank.name && c.type === "income").reduce((s, c) => s + c.amount, 0);
+                const cfIncome  = cashFlow.filter(c => c.bankAccount === bank.name && c.type === "income").reduce((s, c) => s + c.amount, 0);
                 const cfExpense = cashFlow.filter(c => c.bankAccount === bank.name && c.type === "expense").reduce((s, c) => s + c.amount, 0);
-                const paymentsTotal = payments.filter(p => p.bankAccount === bank.name).reduce((s, p) => s + p.amountPaid, 0);
-                
-                const newBalance = cfIncome - cfExpense + paymentsTotal;
+                // cash_flow is the single source of truth — payments table is for invoice tracking only
+                const newBalance = cfIncome - cfExpense;
                 if (Math.abs(bank.balance - newBalance) > 0.01) {
                     bank.balance = newBalance;
                     supabase.from("bank_accounts").update({ balance: newBalance }).eq("id", bank.id).then();
@@ -475,14 +474,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             });
             return next;
         });
-    }, [cashFlow, payments]); // Removed bankAccounts from deps to avoid loop
+    }, [cashFlow]);
 
-    // Auto-sync balances on changes
+    // Auto-sync balances whenever cash_flow data changes (length or amounts)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const cashFlowFingerprint = cashFlow.reduce((s, c) => s + c.amount * (c.type === "income" ? 1 : -1), 0);
     useEffect(() => {
-        if (!loading && (cashFlow.length > 0 || payments.length > 0)) {
+        if (!loading && cashFlow.length > 0) {
             recalculateBalances();
         }
-    }, [loading, cashFlow.length, payments.length, recalculateBalances]);
+    // cashFlowFingerprint captures both length and amount changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [loading, cashFlowFingerprint]);
 
     return (
         <StoreContext.Provider value={{
