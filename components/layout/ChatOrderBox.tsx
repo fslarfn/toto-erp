@@ -20,7 +20,11 @@ type Message = {
     };
 };
 
-export default function ChatOrderBox({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
+export default function ChatOrderBox({ isOpen, onClose, onNewMessage }: {
+    isOpen: boolean;
+    onClose: () => void;
+    onNewMessage?: (senderName: string, message: string) => void;
+}) {
     const { user } = useAuth();
     const [isMinimized, setIsMinimized] = useState(false);
     const [messages, setMessages] = useState<Message[]>([]);
@@ -101,13 +105,23 @@ export default function ChatOrderBox({ isOpen, onClose }: { isOpen: boolean, onC
                             return [...prev, newMessage];
                         });
 
+                        const isFromOtherUser = newMessage.user_id !== user?.id;
+
                         // Audio & Unread if not open
                         if (!isOpen || isMinimized) {
-                            setUnreadCount((c) => c + 1);
+                            if (isFromOtherUser) setUnreadCount((c) => c + 1);
                         }
-                        
-                        // Play sound on ANY new message insert, whether open or closed
-                        playNotificationSound();
+
+                        // Play sound for messages from others
+                        if (isFromOtherUser) playNotificationSound();
+
+                        // Trigger pop-up toast in layout
+                        if (isFromOtherUser && (!isOpen || isMinimized) && onNewMessage) {
+                            onNewMessage(
+                                newMessage.user?.name || "Tim",
+                                newMessage.content,
+                            );
+                        }
                     }
                 }
             )

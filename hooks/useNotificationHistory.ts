@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase-client";
+import type { RealtimePostgresInsertPayload } from "@supabase/supabase-js";
 
 export type NotifRecord = {
   id: number;
@@ -46,6 +47,26 @@ export function useNotificationHistory() {
     } catch { /* tabel belum ada → tampilkan kosong */ }
     finally { setLoading(false); }
   }, []);
+
+  // Fetch on mount + realtime subscription for instant updates
+  useEffect(() => {
+    refetch();
+    const channel = supabase
+      .channel("notif_history_live")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "notifications" },
+        (payload: RealtimePostgresInsertPayload<NotifRecord>) => {
+          const n = payload.new as NotifRecord;
+          setItems(prev => {
+            if (prev.find(x => x.id === n.id)) return prev;
+            return [n, ...prev].slice(0, 50);
+          });
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [refetch]);
 
   const markRead = useCallback((id: number) => {
     setReadIds(prev => {
