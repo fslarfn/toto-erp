@@ -2,6 +2,7 @@
 import React, { useState, useMemo } from "react";
 import * as XLSX from "xlsx";
 import { useKaryawan, DataKaryawan, StatusKaryawan } from "@/lib/karyawan-store";
+import { useAbsensi } from "@/lib/absensi-store";
 
 /* ================================================================
    MENU KARYAWAN - 3 Tab
@@ -551,11 +552,21 @@ function TabDataKaryawan() {
     );
 }
 
+/* Returns the day-of-month range for a given week (1-5) */
+function weekRange(year: number, month: number, week: number): { start: number; end: number } {
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const starts = [1, 8, 15, 22, 29];
+    const ends   = [7, 14, 21, 28, daysInMonth];
+    const idx = week - 1;
+    return { start: starts[idx] ?? 29, end: ends[idx] ?? daysInMonth };
+}
+
 /* ================================================================
    TAB 2: DATA GAJI - mekanisme mirip payroll.html
 ================================================================ */
 function TabDataGaji() {
     const { karyawan, gaji, upsertGaji, kasbon, updateKasbon } = useKaryawan();
+    const { absensi } = useAbsensi();
     const now = new Date();
     const [month, setMonth] = useState(now.getMonth() + 1);
     const [year, setYear] = useState(now.getFullYear());
@@ -567,6 +578,7 @@ function TabDataGaji() {
         bpjs_tk: 0, bpjs_kes: 0 
     });
     const [hasResult, setHasResult] = useState(false);
+    const [autoFilled, setAutoFilled] = useState(false);
     const [printRekap, setPrintRekap] = useState(false);
     const [printSlip, setPrintSlip] = useState(false);
 
@@ -591,17 +603,35 @@ function TabDataGaji() {
                 bpjs_kes: g.bpjs_kes ?? selectedK?.bpjs_kes ?? 0,
             });
             setHasResult(true);
+            setAutoFilled(false);
         } else {
-            setForm({ 
-                hari_kerja: 6, hari_lembur: 0, tunjangan: 0, 
+            // Try to auto-fill from absensi records for this employee + week
+            const { start, end } = weekRange(year, month, week);
+            const monthStr = `${year}-${String(month).padStart(2, "0")}`;
+            const weekAbsensi = absensi.filter(a => {
+                if (a.karyawan_id !== selectedKId) return false;
+                if (!a.tanggal.startsWith(monthStr)) return false;
+                const day = parseInt(a.tanggal.slice(8, 10), 10);
+                return day >= start && day <= end;
+            });
+            const hariKerja = weekAbsensi.length;
+            const totalOT = weekAbsensi.reduce((s, a) => s + (a.overtime_hours ?? 0), 0);
+            // Convert overtime hours → days (8h/day), rounded to nearest 0.5
+            const hariLembur = Math.round((totalOT / 8) * 2) / 2;
+
+            setForm({
+                hari_kerja: hariKerja > 0 ? hariKerja : 6,
+                hari_lembur: hariLembur,
+                tunjangan: 0,
                 kasbon_potong: 0, potongan_lain: 0,
                 bpjs_tk: selectedK?.bpjs_tk ?? 0,
                 bpjs_kes: selectedK?.bpjs_kes ?? 0,
             });
             setHasResult(false);
+            setAutoFilled(hariKerja > 0);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedKId, periode]);
+    }, [selectedKId, periode, absensi]);
 
     /* Hitung - effective daily rate: pakai gaji_harian, kalau 0 ambil dari gaji_pokok/26 */
     const effectiveHarian = selectedK
@@ -728,18 +758,27 @@ function TabDataGaji() {
                             )}
                         </div>
 
+                        {/* Auto-fill badge */}
+                        {autoFilled && (
+                            <div style={{ marginBottom: 10, padding: "6px 10px", background: "#ECFDF5", border: "1px solid #6EE7B7", borderRadius: 7, fontSize: 11, color: "#065F46", display: "flex", alignItems: "center", gap: 6 }}>
+                                <span>📱</span>
+                                <span style={{ fontWeight: 700 }}>Auto dari absensi</span>
+                                <span style={{ color: "#059669" }}>— {form.hari_kerja} hari kerja{form.hari_lembur > 0 ? `, ${form.hari_lembur} hari lembur` : ""} terdeteksi minggu ini</span>
+                            </div>
+                        )}
+
                         {/* Input 2-column grid */}
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
                             <div>
                                 <label style={lbl}>HARI KERJA</label>
                                 <input type="number" min={0} max={7} step={1} value={form.hari_kerja}
-                                    onChange={e => { setForm(p => ({ ...p, hari_kerja: +e.target.value })); setHasResult(false); }}
+                                    onChange={e => { setForm(p => ({ ...p, hari_kerja: +e.target.value })); setHasResult(false); setAutoFilled(false); }}
                                     style={field} />
                             </div>
                             <div>
                                 <label style={lbl}>HARI LEMBUR</label>
                                 <input type="number" min={0} max={7} step={0.5} value={form.hari_lembur}
-                                    onChange={e => { setForm(p => ({ ...p, hari_lembur: +e.target.value })); setHasResult(false); }}
+                                    onChange={e => { setForm(p => ({ ...p, hari_lembur: +e.target.value })); setHasResult(false); setAutoFilled(false); }}
                                     placeholder="0 (bisa 0.5)" style={field} />
                             </div>
                             <div>
