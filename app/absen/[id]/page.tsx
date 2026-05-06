@@ -282,7 +282,7 @@ export default function AbsenPage() {
                     <h1 style={{ fontSize: 20, fontWeight: 700, color: "#1E293B", margin: "8px 0 4px" }}>
                         {isMasuk ? "Absen Masuk" : "Absen Pulang"}
                     </h1>
-                    <p style={{ color: "#64748B", fontSize: 14, margin: 0 }}>PT Totobaru</p>
+                    <p style={{ color: "#64748B", fontSize: 13, margin: 0, fontWeight: 600 }}>CV TOTO ALUMINIUM MANUFACTURE</p>
                 </div>
 
                 {/* Employee info */}
@@ -386,44 +386,45 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 /* ──────── STYLES ──────── */
 const styles: Record<string, React.CSSProperties> = {
     container: {
-        minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
-        background: "linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #334155 100%)",
-        padding: 16, fontFamily: "'Inter', sans-serif",
+        minHeight: "100dvh", display: "flex", alignItems: "flex-start", justifyContent: "center",
+        background: "linear-gradient(160deg, #1a2744 0%, #0f172a 60%, #0c1523 100%)",
+        padding: "16px 12px 32px", fontFamily: "'Inter', -apple-system, sans-serif",
     },
     card: {
-        width: "100%", maxWidth: 420, background: "white", borderRadius: 20, padding: 28,
-        boxShadow: "0 25px 50px rgba(0,0,0,0.25)", display: "flex", flexDirection: "column", alignItems: "center",
+        width: "100%", maxWidth: 460, background: "white", borderRadius: 24, padding: "24px 20px",
+        boxShadow: "0 25px 60px rgba(0,0,0,0.4)", display: "flex", flexDirection: "column", alignItems: "center",
+        marginTop: 12,
     },
     logo: {
-        width: 56, height: 56, borderRadius: 16,
-        display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 28,
+        width: 60, height: 60, borderRadius: 18,
+        display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 30,
     },
-    infoBox: { width: "100%", background: "#F8FAFC", borderRadius: 12, padding: "12px 16px", marginBottom: 16 },
-    clockBox: { width: "100%", textAlign: "center" as const, padding: "12px 0", marginBottom: 16 },
-    cameraBox: { width: "100%", borderRadius: 16, overflow: "hidden", background: "#000", position: "relative" },
+    infoBox: { width: "100%", background: "#F8FAFC", borderRadius: 14, padding: "14px 16px", marginBottom: 16 },
+    clockBox: { width: "100%", textAlign: "center" as const, padding: "10px 0", marginBottom: 14 },
+    cameraBox: { width: "100%", borderRadius: 18, overflow: "hidden", background: "#000", position: "relative" },
     video: { width: "100%", display: "block", transform: "scaleX(-1)" },
     cameraLoading: {
         position: "absolute", inset: 0, display: "flex", flexDirection: "column",
         alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.7)",
-        color: "white", gap: 12, fontSize: 14,
+        color: "white", gap: 12, fontSize: 15,
     },
     captureBtn: {
-        width: "100%", padding: "14px 0", color: "white", border: "none",
-        fontSize: 16, fontWeight: 700, cursor: "pointer",
+        width: "100%", padding: "16px 0", color: "white", border: "none",
+        fontSize: 17, fontWeight: 700, cursor: "pointer", letterSpacing: "0.2px",
     },
     submitBtn: {
-        flex: 1, padding: "12px 20px", color: "white", border: "none",
-        borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer",
+        flex: 1, padding: "14px 20px", color: "white", border: "none",
+        borderRadius: 14, fontSize: 15, fontWeight: 700, cursor: "pointer",
     },
     retakeBtn: {
-        flex: 1, padding: "12px 20px", background: "#F1F5F9", color: "#475569",
-        border: "none", borderRadius: 12, fontSize: 15, fontWeight: 600, cursor: "pointer",
+        flex: 1, padding: "14px 20px", background: "#F1F5F9", color: "#475569",
+        border: "none", borderRadius: 14, fontSize: 15, fontWeight: 600, cursor: "pointer",
     },
     previewImgFull: { width: "100%", display: "block" },
-    previewImg: { width: "100%", maxWidth: 280, borderRadius: 12, marginTop: 16, border: "3px solid #E2E8F0" },
+    previewImg: { width: "100%", maxWidth: 300, borderRadius: 14, marginTop: 16, border: "3px solid #E2E8F0" },
     alertTelat: {
-        background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 12,
-        padding: "12px 16px", color: "#991B1B", fontSize: 14, width: "100%",
+        background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 14,
+        padding: "14px 16px", color: "#991B1B", fontSize: 14, width: "100%",
         textAlign: "center" as const, marginTop: 8,
     },
 };
