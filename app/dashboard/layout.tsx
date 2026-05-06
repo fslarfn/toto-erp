@@ -187,6 +187,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                 const allowedUsers = ["faisal", "vira", "toto", "fauzi", "yuni"];
                                 const visibleItems = group.items.filter((item) => {
                                     if (item.href === "/dashboard/cockpit") return user?.role === 'owner' || user?.username === 'faisal';
+                                    if (item.href === "/dashboard/absensi") return user?.username === 'faisal';
                                     if (item.module === "admin-only") return allowedUsers.includes(user?.username || "");
                                     if (item.module === "any") return true;
                                     return hasAccess(item.module);
