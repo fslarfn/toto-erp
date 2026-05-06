@@ -24,6 +24,8 @@ export type DataKaryawan = {
     bpjs_tk: number;
     bpjs_kes: number;
     catatan: string;
+    periode_gaji?: string; // 'bulanan' | 'mingguan'
+    tarif_lembur?: number;
 };
 
 export type GajiRecord = {

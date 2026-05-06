@@ -48,7 +48,7 @@ export default function AbsenPage() {
     const [captured, setCaptured] = useState<string | null>(null);
     const [submitted, setSubmitted] = useState(false);
     const [resultType, setResultType] = useState<"masuk" | "pulang">("masuk");
-    const [result, setResult] = useState<{ telat: boolean; selisih: number; jam: string; totalKerja?: string } | null>(null);
+    const [result, setResult] = useState<{ telat: boolean; selisih: number; jam: string; totalKerja?: string; overtimeHours?: number } | null>(null);
 
     const emp = karyawan.find(k => k.id === karyawanId);
     const today = toISODate(clock);
@@ -113,6 +113,8 @@ export default function AbsenPage() {
         streamRef.current?.getTracks().forEach(t => t.stop());
     };
 
+    const LATE_EXEMPT = ["yuni", "faisal"];
+
     // Submit Masuk
     const submitMasuk = () => {
         if (!captured || !emp) return;
@@ -120,7 +122,8 @@ export default function AbsenPage() {
         const jamStr = `${padZero(now.getHours())}:${padZero(now.getMinutes())}:${padZero(now.getSeconds())}`;
         const totalMinNow = now.getHours() * 60 + now.getMinutes();
         const totalMinBatas = JAM_MASUK_BATAS * 60 + MENIT_MASUK_BATAS;
-        const isTelat = totalMinNow > totalMinBatas;
+        const isLateExempt = LATE_EXEMPT.some(name => emp.nama.toLowerCase().includes(name));
+        const isTelat = !isLateExempt && totalMinNow > totalMinBatas;
         const selisih = isTelat ? totalMinNow - totalMinBatas : 0;
 
         addAbsensi({
@@ -135,6 +138,8 @@ export default function AbsenPage() {
             selisih_menit: selisih,
             total_jam_kerja: "",
             catatan: "",
+            overtime_hours: 0,
+            status_kehadiran: "hadir",
         });
 
         if (isTelat) {
@@ -157,7 +162,13 @@ export default function AbsenPage() {
         const now = getWIBNow();
         const jamStr = `${padZero(now.getHours())}:${padZero(now.getMinutes())}:${padZero(now.getSeconds())}`;
 
-        updateAbsensiPulang(karyawanId, today, jamStr, captured);
+        // Overtime: ≥20:00 = 4h, ≥18:00 = 2h
+        const keluarHour = now.getHours();
+        let overtimeHours = 0;
+        if (keluarHour >= 20) overtimeHours = 4;
+        else if (keluarHour >= 18) overtimeHours = 2;
+
+        updateAbsensiPulang(karyawanId, today, jamStr, captured, overtimeHours);
 
         // Calculate total
         if (recordHariIni) {
@@ -167,9 +178,9 @@ export default function AbsenPage() {
             const diffMin = Math.max(0, totalMinKeluar - totalMinMasuk);
             const jam = Math.floor(diffMin / 60);
             const min = diffMin % 60;
-            setResult({ telat: false, selisih: 0, jam: jamStr, totalKerja: `${jam} jam ${min} menit` });
+            setResult({ telat: false, selisih: 0, jam: jamStr, totalKerja: `${jam} jam ${min} menit`, overtimeHours });
         } else {
-            setResult({ telat: false, selisih: 0, jam: jamStr });
+            setResult({ telat: false, selisih: 0, jam: jamStr, overtimeHours });
         }
         setResultType("pulang");
         setSubmitted(true);
@@ -246,6 +257,9 @@ export default function AbsenPage() {
                         {resultType === "pulang" && result.totalKerja && (
                             <InfoRow label="Total Jam Kerja" value={`⏱️ ${result.totalKerja}`} />
                         )}
+                        {resultType === "pulang" && result.overtimeHours != null && result.overtimeHours > 0 && (
+                            <InfoRow label="Lembur" value={`🌙 ${result.overtimeHours} jam`} />
+                        )}
                     </div>
                     {captured && <img src={captured} alt="Selfie" style={styles.previewImg} />}
                 </div>
@@ -286,19 +300,25 @@ export default function AbsenPage() {
                     <div style={{ fontSize: 13, color: "#64748B", marginBottom: 4 }}>
                         Jam Saat Ini (WIB)
                     </div>
-                    <div style={{
-                        fontSize: 36, fontWeight: 800, fontVariantNumeric: "tabular-nums",
-                        color: isMasuk
-                            ? ((clock.getHours() * 60 + clock.getMinutes()) > (JAM_MASUK_BATAS * 60 + MENIT_MASUK_BATAS) ? "#DC2626" : "#15803D")
-                            : themeColor.dark,
-                    }}>
-                        {padZero(clock.getHours())}:{padZero(clock.getMinutes())}:{padZero(clock.getSeconds())}
-                    </div>
-                    {isMasuk && (clock.getHours() * 60 + clock.getMinutes()) > (JAM_MASUK_BATAS * 60 + MENIT_MASUK_BATAS) && (
-                        <div style={{ color: "#DC2626", fontSize: 13, fontWeight: 600, marginTop: 4 }}>
-                            ⚠️ Sudah melewati batas jam 08:00 WIB
-                        </div>
-                    )}
+                    {(() => {
+                        const isLateExemptClock = LATE_EXEMPT.some(n => emp.nama.toLowerCase().includes(n));
+                        const isLateNow = !isLateExemptClock && (clock.getHours() * 60 + clock.getMinutes()) > (JAM_MASUK_BATAS * 60 + MENIT_MASUK_BATAS);
+                        return (
+                            <>
+                                <div style={{
+                                    fontSize: 36, fontWeight: 800, fontVariantNumeric: "tabular-nums",
+                                    color: isMasuk ? (isLateNow ? "#DC2626" : "#15803D") : themeColor.dark,
+                                }}>
+                                    {padZero(clock.getHours())}:{padZero(clock.getMinutes())}:{padZero(clock.getSeconds())}
+                                </div>
+                                {isMasuk && isLateNow && (
+                                    <div style={{ color: "#DC2626", fontSize: 13, fontWeight: 600, marginTop: 4 }}>
+                                        ⚠️ Sudah melewati batas jam 08:00 WIB
+                                    </div>
+                                )}
+                            </>
+                        );
+                    })()}
                 </div>
 
                 {/* Camera */}
