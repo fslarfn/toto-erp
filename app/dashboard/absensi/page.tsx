@@ -84,9 +84,10 @@ export default function AbsensiPage() {
     });
     const [izinSubmitting, setIzinSubmitting] = useState(false);
 
-    // Guard: hanya Faisal yang boleh akses
+    // Guard: hanya Faisal, Vira, dan Yuni yang boleh akses
+    const ABSENSI_ALLOWED = ['faisal', 'vira', 'yuni'];
     useEffect(() => {
-        if (user && user.username !== 'faisal') {
+        if (user && !ABSENSI_ALLOWED.includes(user.username)) {
             router.replace('/dashboard');
         }
     }, [user, router]);
@@ -231,7 +232,7 @@ export default function AbsensiPage() {
         setTimeout(() => setIzinSubmitting(false), 800);
     }, [izinForm, karyawan, addIzin]);
 
-    if (!user || user.username !== 'faisal') return null;
+    if (!user || !ABSENSI_ALLOWED.includes(user.username)) return null;
 
     const absenLink = typeof window !== "undefined" ? `${window.location.origin}/absen` : "/absen";
 
