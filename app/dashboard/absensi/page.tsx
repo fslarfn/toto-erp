@@ -1,7 +1,5 @@
 "use client";
 import React, { useState, useMemo, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import { useAuth } from "@/lib/auth";
 import { useKaryawan, DataKaryawan } from "@/lib/karyawan-store";
 import { useAbsensi, AbsensiRecord, IzinRecord } from "@/lib/absensi-store";
 
@@ -35,6 +33,13 @@ function formatTanggalDisplay(d: string) {
 const DAY_NAMES = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
 const MONTH_NAMES_SHORT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 
+function formatLembur(hari: number): string {
+    if (hari === 0.5) return "½ hari";
+    if (hari === 1) return "1 hari";
+    if (hari === 1.5) return "1½ hari";
+    return `${hari} hari`;
+}
+
 function dateToStr(d: Date): string {
     return `${d.getFullYear()}-${padZero(d.getMonth() + 1)}-${padZero(d.getDate())}`;
 }
@@ -63,8 +68,6 @@ function shiftWeek(dateStr: string, direction: -1 | 1): string {
 type ActiveTab = "rekap" | "mingguan" | "bulanan" | "izin" | "link";
 
 export default function AbsensiPage() {
-    const { user } = useAuth();
-    const router = useRouter();
     const { karyawan } = useKaryawan();
     const { absensi, izin, deleteAbsensi, refreshFromLS, addIzin, deleteIzin } = useAbsensi();
 
@@ -83,14 +86,6 @@ export default function AbsensiPage() {
         keterangan: "",
     });
     const [izinSubmitting, setIzinSubmitting] = useState(false);
-
-    // Guard: hanya Faisal, Vira, dan Yuni yang boleh akses
-    const ABSENSI_ALLOWED = ['faisal', 'vira', 'yuni'];
-    useEffect(() => {
-        if (user && !ABSENSI_ALLOWED.includes(user.username)) {
-            router.replace('/dashboard');
-        }
-    }, [user, router]);
 
     // Refresh periodik
     useEffect(() => {
@@ -232,8 +227,6 @@ export default function AbsensiPage() {
         setTimeout(() => setIzinSubmitting(false), 800);
     }, [izinForm, karyawan, addIzin]);
 
-    if (!user || !ABSENSI_ALLOWED.includes(user.username)) return null;
-
     const absenLink = typeof window !== "undefined" ? `${window.location.origin}/absen` : "/absen";
 
     const tabs: { key: ActiveTab; label: string }[] = [
@@ -331,7 +324,7 @@ export default function AbsensiPage() {
                                         </td>
                                         <td style={{ ...td, textAlign: "center" }}>
                                             {row.absensi && (row.absensi.overtime_hours ?? 0) > 0
-                                                ? <StatusBadge label={`🌙 ${row.absensi.overtime_hours} hari`} bg="#EFF6FF" color="#1D4ED8" />
+                                                ? <StatusBadge label={`🌙 ${formatLembur(row.absensi.overtime_hours ?? 0)}`} bg="#EFF6FF" color="#1D4ED8" />
                                                 : <span style={{ color: "#CBD5E1" }}>-</span>}
                                         </td>
                                         <td style={{ ...td, textAlign: "center" }}>
@@ -430,7 +423,7 @@ export default function AbsensiPage() {
                                                         </span>
                                                         {(cell.abs.overtime_hours ?? 0) > 0 && (
                                                             <span style={{ fontSize: 10, color: "#6366F1", fontWeight: 700 }}>
-                                                                +{cell.abs.overtime_hours}hr
+                                                                +{formatLembur(cell.abs.overtime_hours ?? 0)}
                                                             </span>
                                                         )}
                                                     </div>
@@ -452,7 +445,7 @@ export default function AbsensiPage() {
                                         </td>
                                         <td style={{ ...td, textAlign: "center" }}>
                                             {row.lembur > 0
-                                                ? <StatusBadge label={`${row.lembur} hari`} bg="#EEF2FF" color="#6366F1" />
+                                                ? <StatusBadge label={formatLembur(row.lembur)} bg="#EEF2FF" color="#6366F1" />
                                                 : <span style={{ color: "#CBD5E1" }}>—</span>}
                                         </td>
                                     </tr>
@@ -532,7 +525,7 @@ export default function AbsensiPage() {
                                         </td>
                                         <td style={{ ...td, textAlign: "center" }}>
                                             {row.totalLembur > 0
-                                                ? <StatusBadge label={`${row.totalLembur} hari`} bg="#EEF2FF" color="#6366F1" />
+                                                ? <StatusBadge label={formatLembur(row.totalLembur)} bg="#EEF2FF" color="#6366F1" />
                                                 : <span style={{ color: "#CBD5E1" }}>-</span>}
                                         </td>
                                         <td style={{ ...td, textAlign: "center" }}>{row.izin > 0 ? row.izin : <span style={{ color: "#CBD5E1" }}>-</span>}</td>
