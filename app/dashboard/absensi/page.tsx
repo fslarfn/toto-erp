@@ -239,6 +239,104 @@ export default function AbsensiPage() {
 
     return (
         <div style={{ padding: "24px 28px", maxWidth: 1200, margin: "0 auto" }}>
+
+            {/* ══ BANNER PEMBERITAHUAN BIAYA ══════════════════════ */}
+            <div style={{
+                background: "linear-gradient(135deg, #1E3A5F 0%, #1D4ED8 100%)",
+                borderRadius: 18, padding: "24px 28px", marginBottom: 28,
+                boxShadow: "0 8px 32px rgba(29,78,216,0.25)",
+                border: "1px solid rgba(255,255,255,0.1)",
+            }}>
+                {/* Header banner */}
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 14, marginBottom: 20 }}>
+                    <div style={{
+                        width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+                        background: "rgba(255,255,255,0.15)",
+                        display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22,
+                    }}>📢</div>
+                    <div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.6)", letterSpacing: "0.1em", marginBottom: 4 }}>
+                            PEMBERITAHUAN
+                        </div>
+                        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "white", lineHeight: 1.4 }}>
+                            Penggunaan Fitur Absensi
+                        </h3>
+                        <p style={{ margin: "4px 0 0", fontSize: 13, color: "rgba(255,255,255,0.75)", lineHeight: 1.5 }}>
+                            Jika bersedia memakai fitur absensi ini, kami akan kirimkan link pembayaran kepada administrator <b style={{ color: "white" }}>(Faisal)</b>.
+                        </p>
+                    </div>
+                </div>
+
+                {/* Rincian biaya */}
+                <div style={{
+                    background: "rgba(255,255,255,0.08)", borderRadius: 12,
+                    padding: "16px 20px", marginBottom: 16,
+                }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.6)", letterSpacing: "0.08em", marginBottom: 12 }}>
+                        RINCIAN BIAYA
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column" as const, gap: 10 }}>
+                        <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                            <span style={{ color: "rgba(255,255,255,0.5)", fontSize: 13, fontWeight: 700, minWidth: 20 }}>1.</span>
+                            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", lineHeight: 1.6 }}>
+                                Biaya pembuatan menu{" "}
+                                <span style={{ textDecoration: "line-through", color: "rgba(255,255,255,0.45)" }}>Rp 6.000.000</span>
+                                {" "}→ diskon 40% pakai paket <em>5 fitur tambahan gratis</em> ={" "}
+                                <span style={{ color: "#86EFAC", fontWeight: 700 }}>Rp 3.600.000</span>
+                            </div>
+                        </div>
+                        <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                            <span style={{ color: "rgba(255,255,255,0.5)", fontSize: 13, fontWeight: 700, minWidth: 20 }}>2.</span>
+                            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", lineHeight: 1.6 }}>
+                                Biaya tambah server = <span style={{ color: "#FCD34D", fontWeight: 700 }}>Rp 2.500.000 / tahun</span>
+                            </div>
+                        </div>
+                        <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                            <span style={{ color: "rgba(255,255,255,0.5)", fontSize: 13, fontWeight: 700, minWidth: 20 }}>3.</span>
+                            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", lineHeight: 1.6 }}>
+                                Tidak ada biaya bulanan — hanya biaya server per tahun Rp 2.500.000
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Opsi pembayaran */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
+                    <div style={{
+                        background: "rgba(255,255,255,0.1)", borderRadius: 12, padding: "16px 18px",
+                        border: "1.5px solid rgba(255,255,255,0.2)",
+                    }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.55)", letterSpacing: "0.08em", marginBottom: 6 }}>
+                            TANPA DISKON
+                        </div>
+                        <div style={{ fontSize: 22, fontWeight: 900, color: "white", marginBottom: 4 }}>
+                            Rp 8.500.000
+                        </div>
+                        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)" }}>
+                            Rp 6.000.000 pembuatan + Rp 2.500.000 server
+                        </div>
+                    </div>
+                    <div style={{
+                        background: "linear-gradient(135deg, rgba(134,239,172,0.15), rgba(52,211,153,0.1))",
+                        borderRadius: 12, padding: "16px 18px",
+                        border: "1.5px solid rgba(134,239,172,0.4)",
+                    }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "#86EFAC", letterSpacing: "0.08em", marginBottom: 6 }}>
+                            PAKAI DISKON 40% ✦ HEMAT Rp 2.400.000
+                        </div>
+                        <div style={{ fontSize: 22, fontWeight: 900, color: "white", marginBottom: 4 }}>
+                            Rp 6.100.000
+                        </div>
+                        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>
+                            Rp 3.600.000 pembuatan + Rp 2.500.000 server
+                            <br />
+                            <span style={{ color: "rgba(255,255,255,0.45)" }}>*5 slot fitur tambahan gratis digunakan untuk diskon ini</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {/* ════════════════════════════════════════════════════ */}
+
             {/* Header */}
             <div style={{ marginBottom: 24 }}>
                 <h1 style={{ fontSize: 22, fontWeight: 700, color: "#1E293B", margin: 0 }}>📋 Absensi Karyawan</h1>
