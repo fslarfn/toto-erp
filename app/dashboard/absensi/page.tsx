@@ -1,7 +1,11 @@
 "use client";
 import React, { useState, useMemo, useEffect, useCallback } from "react";
-import { useKaryawan, DataKaryawan, GajiRecord } from "@/lib/karyawan-store";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth";
+import { useKaryawan, DataKaryawan } from "@/lib/karyawan-store";
 import { useAbsensi, AbsensiRecord, IzinRecord } from "@/lib/absensi-store";
+
+/* ── Helpers umum ─────────────────────────────────────────────── */
 
 function padZero(n: number) { return n.toString().padStart(2, "0"); }
 
@@ -26,94 +30,52 @@ function formatTanggalDisplay(d: string) {
     return `${parseInt(day)} ${months[parseInt(m) - 1]} ${y}`;
 }
 
-function formatRupiah(n: number) {
-    if (!n) return "Rp 0";
-    return `Rp ${n.toLocaleString("id-ID")}`;
+/* ── Helpers minggu ───────────────────────────────────────────── */
+
+const DAY_NAMES = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
+const MONTH_NAMES_SHORT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+
+function dateToStr(d: Date): string {
+    return `${d.getFullYear()}-${padZero(d.getMonth() + 1)}-${padZero(d.getDate())}`;
 }
 
-function isKaryawanHarian(k: DataKaryawan): boolean {
-    if (k.periode_gaji === "mingguan") return true;
-    if (k.periode_gaji === "bulanan") return false;
-    return (k.gaji_harian ?? 0) > 0 && (k.gaji_pokok ?? 0) === 0;
+function getWeekDays(dateStr: string): Date[] {
+    const d = new Date(dateStr + "T00:00:00");
+    const day = d.getDay();
+    const diff = day === 0 ? 6 : day - 1; // senin = 0 offset
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - diff);
+    return Array.from({ length: 6 }, (_, i) => {
+        const dd = new Date(monday);
+        dd.setDate(monday.getDate() + i);
+        return dd;
+    });
 }
 
-type ActiveTab = "rekap" | "bulanan" | "izin" | "gaji" | "link";
+function shiftWeek(dateStr: string, direction: -1 | 1): string {
+    const d = new Date(dateStr + "T00:00:00");
+    d.setDate(d.getDate() + direction * 7);
+    return dateToStr(d);
+}
+
+/* ── Komponen ─────────────────────────────────────────────────── */
+
+type ActiveTab = "rekap" | "mingguan" | "bulanan" | "izin" | "link";
 
 export default function AbsensiPage() {
-    const { karyawan, gaji, kasbon, upsertGaji } = useKaryawan();
+    const { user } = useAuth();
+    const router = useRouter();
+    const { karyawan } = useKaryawan();
     const { absensi, izin, deleteAbsensi, refreshFromLS, addIzin, deleteIzin } = useAbsensi();
 
     const [activeTab, setActiveTab] = useState<ActiveTab>("rekap");
     const [selectedDate, setSelectedDate] = useState(getWIBToday());
     const [selectedMonth, setSelectedMonth] = useState(getWIBThisMonth());
+    const [selectedWeekDate, setSelectedWeekDate] = useState(getWIBToday());
     const [fotoModal, setFotoModal] = useState<{ record: AbsensiRecord; type: "masuk" | "keluar" } | null>(null);
     const [linkCopied, setLinkCopied] = useState(false);
 
-    // Slip gaji modal state
-    type SlipModal = {
-        karyawan: DataKaryawan;
-        hariHadir: number;
-        totalOT: number;
-        gajiDasar: number;
-        gajiLembur: number;
-        harian: boolean;
-        outstandingKasbon: number;
-        existing?: GajiRecord;
-    };
-    const [slipModal, setSlipModal] = useState<SlipModal | null>(null);
-    const [slipForm, setSlipForm] = useState({
-        tunjangan: 0,
-        kasbon_potong: 0,
-        potongan_lain: 0,
-        catatan: "",
-    });
-    const [slipSaving, setSlipSaving] = useState(false);
-
-    const openSlip = (row: typeof gajiRows[0]) => {
-        const existing = gaji.find(g => g.karyawan_id === row.karyawan.id && g.periode === selectedMonth);
-        const outstanding = kasbon
-            .filter(k => k.karyawan_id === row.karyawan.id)
-            .reduce((s, k) => s + Math.max(0, (k.nominal ?? 0) - (k.bayar ?? 0)), 0);
-        setSlipModal({
-            karyawan: row.karyawan,
-            hariHadir: row.hariHadir,
-            totalOT: row.totalOT,
-            gajiDasar: row.gajiDasar,
-            gajiLembur: row.gajiLembur,
-            harian: row.harian,
-            outstandingKasbon: outstanding,
-            existing,
-        });
-        setSlipForm({
-            tunjangan: existing?.tunjangan ?? 0,
-            kasbon_potong: existing?.kasbon_potong ?? 0,
-            potongan_lain: existing?.potongan_lain ?? 0,
-            catatan: existing?.catatan ?? "",
-        });
-    };
-
-    const saveSlip = async () => {
-        if (!slipModal) return;
-        setSlipSaving(true);
-        await upsertGaji({
-            karyawan_id: slipModal.karyawan.id,
-            periode: selectedMonth,
-            gaji_pokok: slipModal.gajiDasar,
-            hari_kerja: slipModal.hariHadir,
-            hari_lembur: slipModal.totalOT,
-            lembur: slipModal.gajiLembur,
-            tunjangan: slipForm.tunjangan,
-            kasbon_potong: slipForm.kasbon_potong,
-            potongan_lain: slipForm.potongan_lain,
-            bpjs_tk: slipModal.karyawan.bpjs_tk ?? 0,
-            bpjs_kes: slipModal.karyawan.bpjs_kes ?? 0,
-            catatan: slipForm.catatan,
-        });
-        setSlipSaving(false);
-        setSlipModal(null);
-    };
-
-    // Izin form state
+    // Izin form
     const [izinForm, setIzinForm] = useState({
         karyawan_id: "",
         tanggal: getWIBToday(),
@@ -122,6 +84,14 @@ export default function AbsensiPage() {
     });
     const [izinSubmitting, setIzinSubmitting] = useState(false);
 
+    // Guard: hanya Faisal yang boleh akses
+    useEffect(() => {
+        if (user && user.username !== 'faisal') {
+            router.replace('/dashboard');
+        }
+    }, [user, router]);
+
+    // Refresh periodik
     useEffect(() => {
         const interval = setInterval(() => refreshFromLS(), 10000);
         return () => clearInterval(interval);
@@ -133,7 +103,8 @@ export default function AbsensiPage() {
         return () => window.removeEventListener("focus", handler);
     }, [refreshFromLS]);
 
-    // ── Rekap Harian data ──────────────────────────────────────────
+    /* ── Rekap Harian ─────────────────────────────────────────── */
+
     const absensiHariIni = useMemo(() =>
         absensi.filter(a => a.tanggal === selectedDate),
         [absensi, selectedDate]
@@ -152,7 +123,61 @@ export default function AbsensiPage() {
     const totalBelum = rekapRows.filter(r => !r.absensi).length;
     const totalPulang = rekapRows.filter(r => r.absensi?.jam_keluar).length;
 
-    // ── Rekap Bulanan data ─────────────────────────────────────────
+    /* ── Rekap Mingguan ───────────────────────────────────────── */
+
+    const weekDays = useMemo(() => getWeekDays(selectedWeekDate), [selectedWeekDate]);
+    const weekStartStr = useMemo(() => dateToStr(weekDays[0]), [weekDays]);
+    const weekEndStr = useMemo(() => dateToStr(weekDays[5]), [weekDays]);
+
+    const weekAbsensi = useMemo(() =>
+        absensi.filter(a => a.tanggal >= weekStartStr && a.tanggal <= weekEndStr),
+        [absensi, weekStartStr, weekEndStr]
+    );
+
+    const weekIzin = useMemo(() =>
+        izin.filter(i => i.tanggal >= weekStartStr && i.tanggal <= weekEndStr),
+        [izin, weekStartStr, weekEndStr]
+    );
+
+    const weekRows = useMemo(() =>
+        karyawan.map(k => {
+            const cells = weekDays.map(d => {
+                const ds = dateToStr(d);
+                return {
+                    dateStr: ds,
+                    abs: weekAbsensi.find(a => a.karyawan_id === k.id && a.tanggal === ds) ?? null,
+                    iz: weekIzin.find(i => i.karyawan_id === k.id && i.tanggal === ds) ?? null,
+                };
+            });
+            return {
+                karyawan: k,
+                cells,
+                hadir: cells.filter(c => c.abs).length,
+                lembur: cells.reduce((s, c) => s + (c.abs?.overtime_hours || 0), 0),
+                telat: cells.filter(c => c.abs?.is_telat).length,
+            };
+        }),
+        [karyawan, weekDays, weekAbsensi, weekIzin]
+    );
+
+    const weekLabel = useMemo(() => {
+        const s = weekDays[0];
+        const e = weekDays[5];
+        if (s.getMonth() === e.getMonth()) {
+            return `${s.getDate()} – ${e.getDate()} ${MONTH_NAMES_SHORT[s.getMonth()]} ${s.getFullYear()}`;
+        }
+        return `${s.getDate()} ${MONTH_NAMES_SHORT[s.getMonth()]} – ${e.getDate()} ${MONTH_NAMES_SHORT[e.getMonth()]} ${s.getFullYear()}`;
+    }, [weekDays]);
+
+    const weekSummary = useMemo(() => ({
+        hadir: weekRows.reduce((s, r) => s + r.hadir, 0),
+        telat: weekRows.reduce((s, r) => s + r.telat, 0),
+        lembur: weekRows.reduce((s, r) => s + r.lembur, 0),
+        izinSakit: weekIzin.length,
+    }), [weekRows, weekIzin]);
+
+    /* ── Rekap Bulanan ────────────────────────────────────────── */
+
     const absensiForMonth = useMemo(() =>
         absensi.filter(a => a.tanggal.startsWith(selectedMonth)),
         [absensi, selectedMonth]
@@ -180,40 +205,8 @@ export default function AbsensiPage() {
         [karyawan, absensiForMonth, izinForMonth]
     );
 
-    // ── Rekap Gaji data ────────────────────────────────────────────
-    const gajiRows = useMemo(() =>
-        karyawan.map(k => {
-            const abs = absensiForMonth.filter(a => a.karyawan_id === k.id);
-            const hariHadir = abs.length;
-            const totalOT = abs.reduce((s, a) => s + (a.overtime_hours || 0), 0);
-            const harian = isKaryawanHarian(k);
-            const gajiDasar = harian
-                ? (k.gaji_harian ?? 0) * hariHadir
-                : (k.gaji_pokok ?? 0);
-            const gajiLembur = (k.tarif_lembur ?? 0) * totalOT;
-            const slipRecord = gaji.find(g => g.karyawan_id === k.id && g.periode === selectedMonth);
-            // Net gaji from saved slip if exists, otherwise gross estimate
-            const totalBersih = slipRecord
-                ? (slipRecord.gaji_pokok + slipRecord.lembur + slipRecord.tunjangan)
-                  - (slipRecord.bpjs_tk ?? 0) - (slipRecord.bpjs_kes ?? 0)
-                  - slipRecord.kasbon_potong - slipRecord.potongan_lain
-                : gajiDasar + gajiLembur;
-            return {
-                karyawan: k,
-                hariHadir,
-                totalOT,
-                harian,
-                gajiDasar,
-                gajiLembur,
-                totalGaji: gajiDasar + gajiLembur,
-                totalBersih,
-                slipRecord: slipRecord ?? null,
-            };
-        }),
-        [karyawan, absensiForMonth, gaji, selectedMonth]
-    );
+    /* ── Handlers ─────────────────────────────────────────────── */
 
-    // ── Handlers ───────────────────────────────────────────────────
     const copyLink = () => {
         const base = typeof window !== "undefined" ? window.location.origin : "";
         navigator.clipboard.writeText(`${base}/absen`);
@@ -238,13 +231,15 @@ export default function AbsensiPage() {
         setTimeout(() => setIzinSubmitting(false), 800);
     }, [izinForm, karyawan, addIzin]);
 
+    if (!user || user.username !== 'faisal') return null;
+
     const absenLink = typeof window !== "undefined" ? `${window.location.origin}/absen` : "/absen";
 
     const tabs: { key: ActiveTab; label: string }[] = [
         { key: "rekap", label: "📊 Harian" },
-        { key: "bulanan", label: "📅 Bulanan" },
+        { key: "mingguan", label: "📅 Mingguan" },
+        { key: "bulanan", label: "🗓️ Bulanan" },
         { key: "izin", label: "🏖️ Izin/Cuti" },
-        { key: "gaji", label: "💰 Rekap Gaji" },
         { key: "link", label: "🔗 Link Absen" },
     ];
 
@@ -253,7 +248,7 @@ export default function AbsensiPage() {
             {/* Header */}
             <div style={{ marginBottom: 24 }}>
                 <h1 style={{ fontSize: 22, fontWeight: 700, color: "#1E293B", margin: 0 }}>📋 Absensi Karyawan</h1>
-                <p style={{ color: "#64748B", fontSize: 14, margin: "4px 0 0" }}>Rekap kehadiran, izin, dan gaji karyawan</p>
+                <p style={{ color: "#64748B", fontSize: 14, margin: "4px 0 0" }}>Rekap kehadiran dan lembur karyawan</p>
             </div>
 
             {/* Tabs */}
@@ -373,6 +368,118 @@ export default function AbsensiPage() {
             )}
 
             {/* ══════════════════════════════════════════════════════
+                TAB: REKAP MINGGUAN
+            ══════════════════════════════════════════════════════ */}
+            {activeTab === "mingguan" && (
+                <>
+                    {/* Navigasi minggu */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
+                        <button onClick={() => setSelectedWeekDate(s => shiftWeek(s, -1))} style={navBtn}>◀ Minggu Lalu</button>
+                        <div style={{ flex: 1, textAlign: "center", fontWeight: 700, fontSize: 15, color: "#1E293B", minWidth: 180 }}>
+                            Senin–Sabtu, {weekLabel}
+                        </div>
+                        <button onClick={() => setSelectedWeekDate(getWIBToday())} style={todayBtn}>Minggu Ini</button>
+                        <button onClick={() => setSelectedWeekDate(s => shiftWeek(s, 1))} style={navBtn}>Minggu Berikut ▶</button>
+                    </div>
+
+                    {/* Summary */}
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginBottom: 20 }}>
+                        <SummaryCard icon="✅" label="Total Hadir" value={weekSummary.hadir} color="#15803D" bg="#DCFCE7" />
+                        <SummaryCard icon="⏰" label="Total Telat" value={weekSummary.telat} color="#DC2626" bg="#FEF2F2" />
+                        <SummaryCard icon="🌙" label="Total Lembur (jam)" value={weekSummary.lembur} color="#6366F1" bg="#EEF2FF" />
+                        <SummaryCard icon="🏖️" label="Izin/Sakit/Cuti" value={weekSummary.izinSakit} color="#D97706" bg="#FEF3C7" />
+                    </div>
+
+                    {/* Matrix tabel */}
+                    <div style={{ background: "white", borderRadius: 16, overflow: "auto", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
+                        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 820 }}>
+                            <thead>
+                                <tr style={{ background: "#F8FAFC" }}>
+                                    <th style={th}>No</th>
+                                    <th style={{ ...th, textAlign: "left", minWidth: 140 }}>Nama</th>
+                                    {weekDays.map((d, i) => (
+                                        <th key={i} style={{ ...th, minWidth: 72 }}>
+                                            <div style={{ fontSize: 11, color: "#94A3B8", fontWeight: 500 }}>{DAY_NAMES[i]}</div>
+                                            <div style={{ fontSize: 15, fontWeight: 700, color: "#1E293B" }}>{d.getDate()}</div>
+                                        </th>
+                                    ))}
+                                    <th style={{ ...th, minWidth: 60 }}>Hadir</th>
+                                    <th style={{ ...th, minWidth: 70 }}>Lembur</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {weekRows.map((row, i) => (
+                                    <tr key={row.karyawan.id} style={{ borderBottom: "1px solid #F1F5F9" }}>
+                                        <td style={{ ...td, textAlign: "center", color: "#94A3B8" }}>{i + 1}</td>
+                                        <td style={{ ...td, fontWeight: 600, color: "#1E293B" }}>
+                                            <div>{row.karyawan.nama}</div>
+                                            <div style={{ fontSize: 11, color: "#94A3B8", fontWeight: 400 }}>{row.karyawan.jabatan}</div>
+                                        </td>
+                                        {row.cells.map((cell, j) => (
+                                            <td key={j} style={{ ...td, textAlign: "center", padding: "8px 4px" }}>
+                                                {cell.abs ? (
+                                                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                                                        <StatusBadge
+                                                            label={cell.abs.is_telat ? "⏰" : "✓"}
+                                                            bg={cell.abs.is_telat ? "#FEF2F2" : "#DCFCE7"}
+                                                            color={cell.abs.is_telat ? "#DC2626" : "#15803D"}
+                                                        />
+                                                        <span style={{ fontSize: 10, color: "#64748B", fontVariantNumeric: "tabular-nums" }}>
+                                                            {cell.abs.jam_masuk.slice(0, 5)}
+                                                        </span>
+                                                        {(cell.abs.overtime_hours ?? 0) > 0 && (
+                                                            <span style={{ fontSize: 10, color: "#6366F1", fontWeight: 700 }}>
+                                                                +{cell.abs.overtime_hours}j
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                ) : cell.iz ? (
+                                                    <StatusBadge
+                                                        label={cell.iz.jenis === "sakit" ? "🤒" : cell.iz.jenis === "cuti" ? "✈️" : "🏖️"}
+                                                        bg={cell.iz.jenis === "sakit" ? "#FEF2F2" : cell.iz.jenis === "cuti" ? "#F5F3FF" : "#FEF3C7"}
+                                                        color={cell.iz.jenis === "sakit" ? "#DC2626" : cell.iz.jenis === "cuti" ? "#7C3AED" : "#D97706"}
+                                                    />
+                                                ) : (
+                                                    <span style={{ color: "#CBD5E1", fontSize: 16 }}>—</span>
+                                                )}
+                                            </td>
+                                        ))}
+                                        <td style={{ ...td, textAlign: "center" }}>
+                                            <span style={{ fontWeight: 700, fontSize: 15, color: row.hadir > 0 ? "#15803D" : "#CBD5E1" }}>
+                                                {row.hadir}
+                                            </span>
+                                        </td>
+                                        <td style={{ ...td, textAlign: "center" }}>
+                                            {row.lembur > 0
+                                                ? <StatusBadge label={`${row.lembur}j`} bg="#EEF2FF" color="#6366F1" />
+                                                : <span style={{ color: "#CBD5E1" }}>—</span>}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Legend */}
+                    <div style={{ display: "flex", gap: 16, marginTop: 12, flexWrap: "wrap" }}>
+                        {[
+                            { symbol: "✓", bg: "#DCFCE7", color: "#15803D", label: "Tepat waktu" },
+                            { symbol: "⏰", bg: "#FEF2F2", color: "#DC2626", label: "Telat" },
+                            { symbol: "🏖️", bg: "#FEF3C7", color: "#D97706", label: "Izin" },
+                            { symbol: "🤒", bg: "#FEF2F2", color: "#DC2626", label: "Sakit" },
+                            { symbol: "✈️", bg: "#F5F3FF", color: "#7C3AED", label: "Cuti" },
+                        ].map(l => (
+                            <div key={l.symbol} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#64748B" }}>
+                                <span style={{ background: l.bg, color: l.color, padding: "2px 8px", borderRadius: 20, fontSize: 11, fontWeight: 700 }}>{l.symbol}</span>
+                                {l.label}
+                            </div>
+                        ))}
+                        <div style={{ fontSize: 12, color: "#94A3B8" }}>— = tidak hadir</div>
+                    </div>
+                </>
+            )}
+
+            {/* ══════════════════════════════════════════════════════
                 TAB: REKAP BULANAN
             ══════════════════════════════════════════════════════ */}
             {activeTab === "bulanan" && (
@@ -386,7 +493,6 @@ export default function AbsensiPage() {
                         />
                     </div>
 
-                    {/* Summary */}
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginBottom: 20 }}>
                         <SummaryCard icon="📆" label="Total Hadir" value={bulananRows.reduce((s, r) => s + r.hadir, 0)} color="#15803D" bg="#DCFCE7" />
                         <SummaryCard icon="⏰" label="Total Telat" value={bulananRows.reduce((s, r) => s + r.telat, 0)} color="#DC2626" bg="#FEF2F2" />
@@ -444,7 +550,6 @@ export default function AbsensiPage() {
             ══════════════════════════════════════════════════════ */}
             {activeTab === "izin" && (
                 <>
-                    {/* Add Izin Form */}
                     <div style={{ background: "white", borderRadius: 16, padding: "20px 24px", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", marginBottom: 20 }}>
                         <h3 style={{ margin: "0 0 16px", fontSize: 15, color: "#1E293B", fontWeight: 700 }}>➕ Tambah Izin / Sakit / Cuti</h3>
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
@@ -508,7 +613,6 @@ export default function AbsensiPage() {
                         </div>
                     </div>
 
-                    {/* Month filter */}
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
                         <label style={{ fontSize: 14, color: "#64748B", fontWeight: 500 }}>Filter Bulan:</label>
                         <input
@@ -518,7 +622,6 @@ export default function AbsensiPage() {
                         />
                     </div>
 
-                    {/* Izin table */}
                     <div style={{ background: "white", borderRadius: 16, overflow: "auto", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
                         <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 600 }}>
                             <thead>
@@ -564,118 +667,6 @@ export default function AbsensiPage() {
             )}
 
             {/* ══════════════════════════════════════════════════════
-                TAB: REKAP GAJI
-            ══════════════════════════════════════════════════════ */}
-            {activeTab === "gaji" && (
-                <>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-                        <label style={{ fontSize: 14, color: "#64748B", fontWeight: 500 }}>Bulan:</label>
-                        <input
-                            type="month" value={selectedMonth}
-                            onChange={e => setSelectedMonth(e.target.value)}
-                            style={{ padding: "8px 14px", borderRadius: 10, border: "1.5px solid #E2E8F0", fontSize: 14, color: "#1E293B" }}
-                        />
-                        <span style={{ fontSize: 12, color: "#94A3B8" }}>
-                            {gajiRows.filter(r => r.slipRecord).length}/{gajiRows.length} slip tersimpan
-                        </span>
-                    </div>
-
-                    {/* Summary cards */}
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 20 }}>
-                        <div style={{ background: "white", borderRadius: 14, padding: "16px 20px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-                            <div style={{ fontSize: 12, color: "#64748B", marginBottom: 4 }}>Total Gaji Kotor</div>
-                            <div style={{ fontSize: 17, fontWeight: 800, color: "#1E293B" }}>
-                                {formatRupiah(gajiRows.reduce((s, r) => s + r.totalGaji, 0))}
-                            </div>
-                        </div>
-                        <div style={{ background: "white", borderRadius: 14, padding: "16px 20px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-                            <div style={{ fontSize: 12, color: "#64748B", marginBottom: 4 }}>Total BPJS</div>
-                            <div style={{ fontSize: 17, fontWeight: 800, color: "#DC2626" }}>
-                                {formatRupiah(karyawan.reduce((s, k) => s + (k.bpjs_tk ?? 0) + (k.bpjs_kes ?? 0), 0))}
-                            </div>
-                        </div>
-                        <div style={{ background: "linear-gradient(135deg, #15803D, #166534)", borderRadius: 14, padding: "16px 20px", boxShadow: "0 4px 12px rgba(21,128,61,0.25)" }}>
-                            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", marginBottom: 4 }}>Total Gaji Bersih</div>
-                            <div style={{ fontSize: 17, fontWeight: 800, color: "white" }}>
-                                {formatRupiah(gajiRows.reduce((s, r) => s + r.totalBersih, 0))}
-                            </div>
-                        </div>
-                    </div>
-
-                    <div style={{ background: "white", borderRadius: 16, overflow: "auto", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
-                        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 860 }}>
-                            <thead>
-                                <tr style={{ background: "#F8FAFC" }}>
-                                    <th style={th}>No</th>
-                                    <th style={{ ...th, textAlign: "left" }}>Nama</th>
-                                    <th style={th}>Hadir</th>
-                                    <th style={th}>Lembur</th>
-                                    <th style={th}>Gaji Kotor</th>
-                                    <th style={th}>BPJS</th>
-                                    <th style={th}>Bon Potong</th>
-                                    <th style={th}>Gaji Bersih</th>
-                                    <th style={th}>Slip</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {gajiRows.map((row, i) => {
-                                    const bpjsTotal = (row.karyawan.bpjs_tk ?? 0) + (row.karyawan.bpjs_kes ?? 0);
-                                    const bonPotong = row.slipRecord?.kasbon_potong ?? 0;
-                                    return (
-                                        <tr key={row.karyawan.id} style={{ borderBottom: "1px solid #F1F5F9" }}>
-                                            <td style={{ ...td, textAlign: "center", color: "#94A3B8" }}>{i + 1}</td>
-                                            <td style={{ ...td, fontWeight: 600, color: "#1E293B" }}>
-                                                <div>{row.karyawan.nama}</div>
-                                                <div style={{ fontSize: 11, color: "#94A3B8", fontWeight: 400 }}>{row.karyawan.jabatan}</div>
-                                            </td>
-                                            <td style={{ ...td, textAlign: "center", fontWeight: 700 }}>{row.hariHadir}</td>
-                                            <td style={{ ...td, textAlign: "center" }}>
-                                                {row.totalOT > 0
-                                                    ? <span style={{ color: "#6366F1", fontWeight: 600 }}>{row.totalOT}j</span>
-                                                    : <span style={{ color: "#CBD5E1" }}>-</span>}
-                                            </td>
-                                            <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums", color: "#1E293B" }}>
-                                                {formatRupiah(row.totalGaji)}
-                                            </td>
-                                            <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums", color: "#DC2626", fontSize: 13 }}>
-                                                {bpjsTotal > 0 ? formatRupiah(bpjsTotal) : <span style={{ color: "#CBD5E1" }}>-</span>}
-                                            </td>
-                                            <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums", color: "#D97706", fontSize: 13 }}>
-                                                {bonPotong > 0 ? formatRupiah(bonPotong) : <span style={{ color: "#CBD5E1" }}>-</span>}
-                                            </td>
-                                            <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                                                <span style={{ fontWeight: 800, fontSize: 14, color: "#15803D" }}>
-                                                    {formatRupiah(row.totalBersih)}
-                                                </span>
-                                            </td>
-                                            <td style={{ ...td, textAlign: "center" }}>
-                                                <button
-                                                    onClick={() => openSlip(row)}
-                                                    style={{
-                                                        padding: "6px 14px", borderRadius: 8, border: "none",
-                                                        cursor: "pointer", fontSize: 12, fontWeight: 700,
-                                                        background: row.slipRecord
-                                                            ? "#DCFCE7" : "linear-gradient(135deg, #3B82F6, #1D4ED8)",
-                                                        color: row.slipRecord ? "#15803D" : "white",
-                                                        whiteSpace: "nowrap",
-                                                    }}
-                                                >
-                                                    {row.slipRecord ? "✅ Edit Slip" : "📄 Buat Slip"}
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
-                    <p style={{ marginTop: 12, fontSize: 12, color: "#94A3B8" }}>
-                        * Klik "Buat Slip" untuk input potongan bon & finalkan gaji bersih
-                    </p>
-                </>
-            )}
-
-            {/* ══════════════════════════════════════════════════════
                 TAB: LINK ABSEN
             ══════════════════════════════════════════════════════ */}
             {activeTab === "link" && (
@@ -714,7 +705,6 @@ export default function AbsensiPage() {
                             </button>
                         </div>
 
-                        {/* Per-employee links */}
                         <h4 style={{ margin: "0 0 12px", fontSize: 14, color: "#475569" }}>Link Langsung per Karyawan</h4>
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
                             {karyawan.map(k => {
@@ -767,147 +757,6 @@ export default function AbsensiPage() {
                     </div>
                 </div>
             )}
-
-            {/* ══ SLIP GAJI MODAL ════════════════════════════════ */}
-            {slipModal && (() => {
-                const bpjsTK = slipModal.karyawan.bpjs_tk ?? 0;
-                const bpjsKes = slipModal.karyawan.bpjs_kes ?? 0;
-                const totalPendapatan = slipModal.gajiDasar + slipModal.gajiLembur + slipForm.tunjangan;
-                const totalPotongan = bpjsTK + bpjsKes + slipForm.kasbon_potong + slipForm.potongan_lain;
-                const gajiBersih = totalPendapatan - totalPotongan;
-                return (
-                    <div
-                        onClick={() => setSlipModal(null)}
-                        style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: 16 }}
-                    >
-                        <div
-                            onClick={e => e.stopPropagation()}
-                            style={{ background: "white", borderRadius: 20, maxWidth: 520, width: "100%", overflow: "hidden", boxShadow: "0 30px 60px rgba(0,0,0,0.3)", maxHeight: "90vh", overflowY: "auto" }}
-                        >
-                            {/* Modal Header */}
-                            <div style={{ background: "linear-gradient(135deg, #1E293B, #334155)", padding: "20px 24px" }}>
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                                    <div>
-                                        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", fontWeight: 600, marginBottom: 4, letterSpacing: "0.1em" }}>SLIP GAJI</div>
-                                        <h3 style={{ margin: 0, fontSize: 18, color: "white", fontWeight: 800 }}>{slipModal.karyawan.nama}</h3>
-                                        <p style={{ margin: "4px 0 0", fontSize: 13, color: "rgba(255,255,255,0.55)" }}>
-                                            {slipModal.karyawan.jabatan} • {selectedMonth}
-                                        </p>
-                                    </div>
-                                    <StatusBadge
-                                        label={slipModal.harian ? "Harian" : "Bulanan"}
-                                        bg="rgba(255,255,255,0.15)"
-                                        color="white"
-                                    />
-                                </div>
-                            </div>
-
-                            <div style={{ padding: "20px 24px" }}>
-                                {/* PENDAPATAN */}
-                                <div style={{ marginBottom: 16 }}>
-                                    <div style={{ fontSize: 11, fontWeight: 700, color: "#15803D", letterSpacing: "0.1em", marginBottom: 10 }}>+ PENDAPATAN</div>
-                                    <SlipRow label={slipModal.harian ? `Gaji Harian (${slipModal.hariHadir} hari)` : "Gaji Pokok"} value={slipModal.gajiDasar} />
-                                    {slipModal.gajiLembur > 0 && <SlipRow label={`Gaji Lembur (${slipModal.totalOT} jam)`} value={slipModal.gajiLembur} />}
-                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0" }}>
-                                        <span style={{ fontSize: 13, color: "#475569" }}>Tunjangan</span>
-                                        <input
-                                            type="number" min={0}
-                                            value={slipForm.tunjangan || ""}
-                                            onChange={e => setSlipForm(f => ({ ...f, tunjangan: Number(e.target.value) || 0 }))}
-                                            placeholder="0"
-                                            style={{ width: 140, textAlign: "right", padding: "4px 8px", borderRadius: 6, border: "1.5px solid #E2E8F0", fontSize: 13, fontVariantNumeric: "tabular-nums" }}
-                                        />
-                                    </div>
-                                    <div style={{ borderTop: "1px solid #E2E8F0", paddingTop: 8, marginTop: 6, display: "flex", justifyContent: "space-between" }}>
-                                        <span style={{ fontSize: 13, fontWeight: 700, color: "#15803D" }}>Total Pendapatan</span>
-                                        <span style={{ fontSize: 14, fontWeight: 800, color: "#15803D" }}>{formatRupiah(totalPendapatan)}</span>
-                                    </div>
-                                </div>
-
-                                {/* POTONGAN */}
-                                <div style={{ marginBottom: 16 }}>
-                                    <div style={{ fontSize: 11, fontWeight: 700, color: "#DC2626", letterSpacing: "0.1em", marginBottom: 10 }}>− POTONGAN</div>
-                                    <SlipRow label="BPJS Ketenagakerjaan" value={bpjsTK} red />
-                                    <SlipRow label="BPJS Kesehatan" value={bpjsKes} red />
-                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0" }}>
-                                        <div>
-                                            <span style={{ fontSize: 13, color: "#475569" }}>Potongan Bon</span>
-                                            {slipModal.outstandingKasbon > 0 && (
-                                                <span style={{ fontSize: 11, color: "#D97706", marginLeft: 6 }}>
-                                                    (outstanding: {formatRupiah(slipModal.outstandingKasbon)})
-                                                </span>
-                                            )}
-                                        </div>
-                                        <input
-                                            type="number" min={0} max={slipModal.outstandingKasbon || undefined}
-                                            value={slipForm.kasbon_potong || ""}
-                                            onChange={e => setSlipForm(f => ({ ...f, kasbon_potong: Number(e.target.value) || 0 }))}
-                                            placeholder="0"
-                                            style={{ width: 140, textAlign: "right", padding: "4px 8px", borderRadius: 6, border: "1.5px solid #E2E8F0", fontSize: 13, fontVariantNumeric: "tabular-nums" }}
-                                        />
-                                    </div>
-                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0" }}>
-                                        <span style={{ fontSize: 13, color: "#475569" }}>Potongan Lain</span>
-                                        <input
-                                            type="number" min={0}
-                                            value={slipForm.potongan_lain || ""}
-                                            onChange={e => setSlipForm(f => ({ ...f, potongan_lain: Number(e.target.value) || 0 }))}
-                                            placeholder="0"
-                                            style={{ width: 140, textAlign: "right", padding: "4px 8px", borderRadius: 6, border: "1.5px solid #E2E8F0", fontSize: 13, fontVariantNumeric: "tabular-nums" }}
-                                        />
-                                    </div>
-                                    <div style={{ borderTop: "1px solid #E2E8F0", paddingTop: 8, marginTop: 6, display: "flex", justifyContent: "space-between" }}>
-                                        <span style={{ fontSize: 13, fontWeight: 700, color: "#DC2626" }}>Total Potongan</span>
-                                        <span style={{ fontSize: 14, fontWeight: 800, color: "#DC2626" }}>{formatRupiah(totalPotongan)}</span>
-                                    </div>
-                                </div>
-
-                                {/* GAJI BERSIH */}
-                                <div style={{ background: "linear-gradient(135deg, #15803D, #166534)", borderRadius: 14, padding: "16px 20px", marginBottom: 16 }}>
-                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                        <span style={{ fontSize: 14, fontWeight: 700, color: "rgba(255,255,255,0.85)" }}>💰 GAJI BERSIH</span>
-                                        <span style={{ fontSize: 22, fontWeight: 900, color: "white", fontVariantNumeric: "tabular-nums" }}>
-                                            {formatRupiah(gajiBersih)}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                {/* Catatan */}
-                                <div style={{ marginBottom: 20 }}>
-                                    <label style={{ fontSize: 12, fontWeight: 600, color: "#64748B", display: "block", marginBottom: 6 }}>Catatan (opsional)</label>
-                                    <input
-                                        type="text"
-                                        value={slipForm.catatan}
-                                        onChange={e => setSlipForm(f => ({ ...f, catatan: e.target.value }))}
-                                        placeholder="mis. bonus, keterangan khusus..."
-                                        style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #E2E8F0", fontSize: 13, boxSizing: "border-box" as const }}
-                                    />
-                                </div>
-
-                                {/* Actions */}
-                                <div style={{ display: "flex", gap: 10 }}>
-                                    <button
-                                        onClick={() => setSlipModal(null)}
-                                        style={{ flex: 1, padding: "12px", borderRadius: 10, border: "1.5px solid #E2E8F0", background: "white", color: "#475569", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
-                                    >Batal</button>
-                                    <button
-                                        onClick={saveSlip}
-                                        disabled={slipSaving}
-                                        style={{
-                                            flex: 2, padding: "12px", borderRadius: 10, border: "none",
-                                            background: slipSaving ? "#DCFCE7" : "linear-gradient(135deg, #15803D, #166534)",
-                                            color: slipSaving ? "#15803D" : "white",
-                                            fontSize: 14, fontWeight: 700, cursor: "pointer",
-                                        }}
-                                    >
-                                        {slipSaving ? "✅ Tersimpan!" : "💾 Simpan Slip Gaji"}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                );
-            })()}
 
             {/* ══ FOTO MODAL ══════════════════════════════════════ */}
             {fotoModal && (
@@ -975,18 +824,6 @@ function StatusBadge({ label, bg, color }: { label: string; bg: string; color: s
     );
 }
 
-function SlipRow({ label, value, red }: { label: string; value: number; red?: boolean }) {
-    if (!value) return null;
-    return (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0" }}>
-            <span style={{ fontSize: 13, color: "#475569" }}>{label}</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: red ? "#DC2626" : "#1E293B", fontVariantNumeric: "tabular-nums" }}>
-                {red ? "−" : "+"} {new Intl.NumberFormat("id-ID").format(value)}
-            </span>
-        </div>
-    );
-}
-
 /* ──────── STYLES ──────── */
 
 const th: React.CSSProperties = {
@@ -1007,4 +844,15 @@ const formInput: React.CSSProperties = {
 
 const fotoBtn: React.CSSProperties = {
     background: "none", border: "none", cursor: "pointer", fontSize: 16, padding: 2,
+};
+
+const navBtn: React.CSSProperties = {
+    padding: "8px 16px", borderRadius: 10, border: "1.5px solid #E2E8F0",
+    background: "white", color: "#475569", fontSize: 13, fontWeight: 600, cursor: "pointer",
+};
+
+const todayBtn: React.CSSProperties = {
+    padding: "8px 16px", borderRadius: 10, border: "none",
+    background: "linear-gradient(135deg, #3B82F6, #1D4ED8)", color: "white",
+    fontSize: 13, fontWeight: 600, cursor: "pointer",
 };

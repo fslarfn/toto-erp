@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import { useKaryawan } from "@/lib/karyawan-store";
 import { useAbsensi } from "@/lib/absensi-store";
 import { pushNotify } from "@/lib/notify";
+import { supabase } from "@/lib/supabase-client";
 
 /* ================================================================
    HALAMAN ABSEN KARYAWAN — /absen/[id]
@@ -46,6 +47,7 @@ export default function AbsenPage() {
     const [cameraReady, setCameraReady] = useState(false);
     const [cameraError, setCameraError] = useState("");
     const [captured, setCaptured] = useState<string | null>(null);
+    const [uploading, setUploading] = useState(false);
     const [submitted, setSubmitted] = useState(false);
     const [resultType, setResultType] = useState<"masuk" | "pulang">("masuk");
     const [result, setResult] = useState<{ telat: boolean; selisih: number; jam: string; totalKerja?: string; overtimeHours?: number } | null>(null);
@@ -56,7 +58,6 @@ export default function AbsenPage() {
     const hasPulang = sudahAbsenPulang(karyawanId, today);
     const recordHariIni = getAbsensiHariIni(karyawanId, today);
 
-    // Determine mode: "masuk" or "pulang"
     const mode: "masuk" | "pulang" | "done" =
         !hasMasuk ? "masuk" :
             !hasPulang ? "pulang" :
@@ -96,29 +97,51 @@ export default function AbsenPage() {
         };
     }, [mode, submitted, emp, startCamera]);
 
-    // Capture
+    // Capture + resize ke max 720px, quality 0.75
     const capturePhoto = () => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
         if (!video || !canvas) return;
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        const MAX = 720;
+        const ratio = Math.min(MAX / video.videoWidth, MAX / video.videoHeight, 1);
+        canvas.width = Math.round(video.videoWidth * ratio);
+        canvas.height = Math.round(video.videoHeight * ratio);
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
         ctx.translate(canvas.width, 0);
         ctx.scale(-1, 1);
-        ctx.drawImage(video, 0, 0);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
         setCaptured(dataUrl);
         streamRef.current?.getTracks().forEach(t => t.stop());
+    };
+
+    // Upload canvas ke Supabase Storage, fallback ke base64 jika gagal
+    const uploadFoto = async (tanggal: string, type: "masuk" | "keluar"): Promise<string> => {
+        const canvas = canvasRef.current;
+        if (!canvas) return captured ?? "";
+        return new Promise<string>((resolve) => {
+            canvas.toBlob(async (blob) => {
+                if (!blob) { resolve(captured ?? ""); return; }
+                const path = `${karyawanId}/${tanggal}_${type}.jpg`;
+                const { error } = await supabase.storage
+                    .from("absensi-foto")
+                    .upload(path, blob, { contentType: "image/jpeg", upsert: true });
+                if (error) { resolve(captured ?? ""); return; }
+                const { data } = supabase.storage.from("absensi-foto").getPublicUrl(path);
+                resolve(data.publicUrl);
+            }, "image/jpeg", 0.75);
+        });
     };
 
     const LATE_EXEMPT = ["yuni", "faisal"];
 
     // Submit Masuk
-    const submitMasuk = () => {
+    const submitMasuk = async () => {
         if (!captured || !emp) return;
+        setUploading(true);
         const now = getWIBNow();
+        const tanggal = toISODate(now);
         const jamStr = `${padZero(now.getHours())}:${padZero(now.getMinutes())}:${padZero(now.getSeconds())}`;
         const totalMinNow = now.getHours() * 60 + now.getMinutes();
         const totalMinBatas = JAM_MASUK_BATAS * 60 + MENIT_MASUK_BATAS;
@@ -126,13 +149,16 @@ export default function AbsenPage() {
         const isTelat = !isLateExempt && totalMinNow > totalMinBatas;
         const selisih = isTelat ? totalMinNow - totalMinBatas : 0;
 
+        const fotoUrl = await uploadFoto(tanggal, "masuk");
+        setUploading(false);
+
         addAbsensi({
             karyawan_id: karyawanId,
             nama_karyawan: emp.nama,
-            tanggal: toISODate(now),
+            tanggal,
             jam_masuk: jamStr,
             jam_keluar: "",
-            foto_masuk_base64: captured,
+            foto_masuk_base64: fotoUrl,
             foto_keluar_base64: "",
             is_telat: isTelat,
             selisih_menit: selisih,
@@ -157,20 +183,22 @@ export default function AbsenPage() {
     };
 
     // Submit Pulang
-    const submitPulang = () => {
+    const submitPulang = async () => {
         if (!captured || !emp) return;
+        setUploading(true);
         const now = getWIBNow();
         const jamStr = `${padZero(now.getHours())}:${padZero(now.getMinutes())}:${padZero(now.getSeconds())}`;
 
-        // Overtime: ≥20:00 = 4h, ≥18:00 = 2h
         const keluarHour = now.getHours();
         let overtimeHours = 0;
         if (keluarHour >= 20) overtimeHours = 4;
         else if (keluarHour >= 18) overtimeHours = 2;
 
-        updateAbsensiPulang(karyawanId, today, jamStr, captured, overtimeHours);
+        const fotoUrl = await uploadFoto(today, "keluar");
+        setUploading(false);
 
-        // Calculate total
+        updateAbsensiPulang(karyawanId, today, jamStr, fotoUrl, overtimeHours);
+
         if (recordHariIni) {
             const [hm, mm] = recordHariIni.jam_masuk.split(":").map(Number);
             const totalMinMasuk = hm * 60 + mm;
@@ -354,17 +382,23 @@ export default function AbsenPage() {
                     <div style={styles.cameraBox}>
                         <img src={captured} alt="Preview" style={styles.previewImgFull} />
                         <div style={{ display: "flex", gap: 12, padding: 16, justifyContent: "center" }}>
-                            <button onClick={retake} style={styles.retakeBtn}>🔄 Ulangi</button>
+                            <button onClick={retake} disabled={uploading} style={{ ...styles.retakeBtn, opacity: uploading ? 0.5 : 1 }}>
+                                🔄 Ulangi
+                            </button>
                             <button
                                 onClick={isMasuk ? submitMasuk : submitPulang}
+                                disabled={uploading}
                                 style={{
                                     ...styles.submitBtn,
-                                    background: isMasuk
-                                        ? "linear-gradient(135deg, #22C55E, #15803D)"
-                                        : "linear-gradient(135deg, #F59E0B, #D97706)",
+                                    background: uploading
+                                        ? "#94A3B8"
+                                        : isMasuk
+                                            ? "linear-gradient(135deg, #22C55E, #15803D)"
+                                            : "linear-gradient(135deg, #F59E0B, #D97706)",
+                                    cursor: uploading ? "wait" : "pointer",
                                 }}
                             >
-                                {isMasuk ? "✅ Absen Masuk" : "🏠 Absen Pulang"}
+                                {uploading ? "⏳ Menyimpan..." : isMasuk ? "✅ Absen Masuk" : "🏠 Absen Pulang"}
                             </button>
                         </div>
                     </div>
@@ -414,7 +448,7 @@ const styles: Record<string, React.CSSProperties> = {
     },
     submitBtn: {
         flex: 1, padding: "14px 20px", color: "white", border: "none",
-        borderRadius: 14, fontSize: 15, fontWeight: 700, cursor: "pointer",
+        borderRadius: 14, fontSize: 15, fontWeight: 700,
     },
     retakeBtn: {
         flex: 1, padding: "14px 20px", background: "#F1F5F9", color: "#475569",
