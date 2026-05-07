@@ -134,7 +134,7 @@ export default function AbsenPage() {
         });
     };
 
-    const LATE_EXEMPT = ["yuni", "faisal"];
+    const LATE_EXEMPT = ["yuni", "faisal", "vira"];
 
     // Submit Masuk
     const submitMasuk = async () => {
@@ -190,9 +190,7 @@ export default function AbsenPage() {
         const jamStr = `${padZero(now.getHours())}:${padZero(now.getMinutes())}:${padZero(now.getSeconds())}`;
 
         const keluarHour = now.getHours();
-        let overtimeHours = 0;
-        if (keluarHour >= 20) overtimeHours = 4;
-        else if (keluarHour >= 18) overtimeHours = 2;
+        const overtimeHours = keluarHour >= 20 ? 1 : 0;
 
         const fotoUrl = await uploadFoto(today, "keluar");
         setUploading(false);
@@ -286,7 +284,7 @@ export default function AbsenPage() {
                             <InfoRow label="Total Jam Kerja" value={`⏱️ ${result.totalKerja}`} />
                         )}
                         {resultType === "pulang" && result.overtimeHours != null && result.overtimeHours > 0 && (
-                            <InfoRow label="Lembur" value={`🌙 ${result.overtimeHours} jam`} />
+                            <InfoRow label="Lembur" value={`🌙 ${result.overtimeHours} hari kerja`} />
                         )}
                     </div>
                     {captured && <img src={captured} alt="Selfie" style={styles.previewImg} />}

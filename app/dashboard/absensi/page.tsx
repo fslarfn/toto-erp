@@ -331,7 +331,7 @@ export default function AbsensiPage() {
                                         </td>
                                         <td style={{ ...td, textAlign: "center" }}>
                                             {row.absensi && (row.absensi.overtime_hours ?? 0) > 0
-                                                ? <StatusBadge label={`🌙 ${row.absensi.overtime_hours}j`} bg="#EFF6FF" color="#1D4ED8" />
+                                                ? <StatusBadge label={`🌙 ${row.absensi.overtime_hours} hari`} bg="#EFF6FF" color="#1D4ED8" />
                                                 : <span style={{ color: "#CBD5E1" }}>-</span>}
                                         </td>
                                         <td style={{ ...td, textAlign: "center" }}>
@@ -387,7 +387,7 @@ export default function AbsensiPage() {
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginBottom: 20 }}>
                         <SummaryCard icon="✅" label="Total Hadir" value={weekSummary.hadir} color="#15803D" bg="#DCFCE7" />
                         <SummaryCard icon="⏰" label="Total Telat" value={weekSummary.telat} color="#DC2626" bg="#FEF2F2" />
-                        <SummaryCard icon="🌙" label="Total Lembur (jam)" value={weekSummary.lembur} color="#6366F1" bg="#EEF2FF" />
+                        <SummaryCard icon="🌙" label="Total Lembur (hari)" value={weekSummary.lembur} color="#6366F1" bg="#EEF2FF" />
                         <SummaryCard icon="🏖️" label="Izin/Sakit/Cuti" value={weekSummary.izinSakit} color="#D97706" bg="#FEF3C7" />
                     </div>
 
@@ -430,7 +430,7 @@ export default function AbsensiPage() {
                                                         </span>
                                                         {(cell.abs.overtime_hours ?? 0) > 0 && (
                                                             <span style={{ fontSize: 10, color: "#6366F1", fontWeight: 700 }}>
-                                                                +{cell.abs.overtime_hours}j
+                                                                +{cell.abs.overtime_hours}hr
                                                             </span>
                                                         )}
                                                     </div>
@@ -452,7 +452,7 @@ export default function AbsensiPage() {
                                         </td>
                                         <td style={{ ...td, textAlign: "center" }}>
                                             {row.lembur > 0
-                                                ? <StatusBadge label={`${row.lembur}j`} bg="#EEF2FF" color="#6366F1" />
+                                                ? <StatusBadge label={`${row.lembur} hari`} bg="#EEF2FF" color="#6366F1" />
                                                 : <span style={{ color: "#CBD5E1" }}>—</span>}
                                         </td>
                                     </tr>
@@ -497,7 +497,7 @@ export default function AbsensiPage() {
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginBottom: 20 }}>
                         <SummaryCard icon="📆" label="Total Hadir" value={bulananRows.reduce((s, r) => s + r.hadir, 0)} color="#15803D" bg="#DCFCE7" />
                         <SummaryCard icon="⏰" label="Total Telat" value={bulananRows.reduce((s, r) => s + r.telat, 0)} color="#DC2626" bg="#FEF2F2" />
-                        <SummaryCard icon="🌙" label="Total Lembur (jam)" value={bulananRows.reduce((s, r) => s + r.totalLembur, 0)} color="#6366F1" bg="#EEF2FF" />
+                        <SummaryCard icon="🌙" label="Total Lembur (hari)" value={bulananRows.reduce((s, r) => s + r.totalLembur, 0)} color="#6366F1" bg="#EEF2FF" />
                         <SummaryCard icon="🏖️" label="Total Izin/Sakit" value={bulananRows.reduce((s, r) => s + r.izin + r.sakit, 0)} color="#D97706" bg="#FEF3C7" />
                     </div>
 
@@ -532,7 +532,7 @@ export default function AbsensiPage() {
                                         </td>
                                         <td style={{ ...td, textAlign: "center" }}>
                                             {row.totalLembur > 0
-                                                ? <StatusBadge label={`${row.totalLembur}j`} bg="#EEF2FF" color="#6366F1" />
+                                                ? <StatusBadge label={`${row.totalLembur} hari`} bg="#EEF2FF" color="#6366F1" />
                                                 : <span style={{ color: "#CBD5E1" }}>-</span>}
                                         </td>
                                         <td style={{ ...td, textAlign: "center" }}>{row.izin > 0 ? row.izin : <span style={{ color: "#CBD5E1" }}>-</span>}</td>
