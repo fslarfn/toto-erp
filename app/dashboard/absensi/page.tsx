@@ -30,7 +30,7 @@ function formatTanggalDisplay(d: string) {
 
 /* ── Helpers minggu ───────────────────────────────────────────── */
 
-const DAY_NAMES = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
+const DAY_NAMES = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
 const MONTH_NAMES_SHORT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 
 function formatLembur(hari: number): string {
@@ -50,7 +50,7 @@ function getWeekDays(dateStr: string): Date[] {
     const diff = day === 0 ? 6 : day - 1; // senin = 0 offset
     const monday = new Date(d);
     monday.setDate(d.getDate() - diff);
-    return Array.from({ length: 6 }, (_, i) => {
+    return Array.from({ length: 7 }, (_, i) => {
         const dd = new Date(monday);
         dd.setDate(monday.getDate() + i);
         return dd;
@@ -123,7 +123,7 @@ export default function AbsensiPage() {
 
     const weekDays = useMemo(() => getWeekDays(selectedWeekDate), [selectedWeekDate]);
     const weekStartStr = useMemo(() => dateToStr(weekDays[0]), [weekDays]);
-    const weekEndStr = useMemo(() => dateToStr(weekDays[5]), [weekDays]);
+    const weekEndStr = useMemo(() => dateToStr(weekDays[6]), [weekDays]);
 
     const weekAbsensi = useMemo(() =>
         absensi.filter(a => a.tanggal >= weekStartStr && a.tanggal <= weekEndStr),
@@ -148,7 +148,10 @@ export default function AbsensiPage() {
             return {
                 karyawan: k,
                 cells,
-                hadir: cells.filter(c => c.abs).length,
+                hadir: cells.reduce((s, c) => {
+                    if (!c.abs) return s;
+                    return s + (new Date(c.dateStr + "T00:00:00").getDay() === 0 ? 2 : 1);
+                }, 0),
                 lembur: cells.reduce((s, c) => s + (c.abs?.overtime_hours || 0), 0),
                 telat: cells.filter(c => c.abs?.is_telat).length,
             };
@@ -158,7 +161,7 @@ export default function AbsensiPage() {
 
     const weekLabel = useMemo(() => {
         const s = weekDays[0];
-        const e = weekDays[5];
+        const e = weekDays[6];
         if (s.getMonth() === e.getMonth()) {
             return `${s.getDate()} – ${e.getDate()} ${MONTH_NAMES_SHORT[s.getMonth()]} ${s.getFullYear()}`;
         }
@@ -190,7 +193,7 @@ export default function AbsensiPage() {
             const iz = izinForMonth.filter(i => i.karyawan_id === k.id);
             return {
                 karyawan: k,
-                hadir: abs.length,
+                hadir: abs.reduce((s, a) => s + (new Date(a.tanggal + "T00:00:00").getDay() === 0 ? 2 : 1), 0),
                 telat: abs.filter(a => a.is_telat).length,
                 totalLembur: abs.reduce((s, a) => s + (a.overtime_hours || 0), 0),
                 izin: iz.filter(i => i.jenis === "izin").length,
@@ -468,7 +471,7 @@ export default function AbsensiPage() {
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
                         <button onClick={() => setSelectedWeekDate(s => shiftWeek(s, -1))} style={navBtn}>◀ Minggu Lalu</button>
                         <div style={{ flex: 1, textAlign: "center", fontWeight: 700, fontSize: 15, color: "#1E293B", minWidth: 180 }}>
-                            Senin–Sabtu, {weekLabel}
+                            Senin–Minggu, {weekLabel}
                         </div>
                         <button onClick={() => setSelectedWeekDate(getWIBToday())} style={todayBtn}>Minggu Ini</button>
                         <button onClick={() => setSelectedWeekDate(s => shiftWeek(s, 1))} style={navBtn}>Minggu Berikut ▶</button>
@@ -489,12 +492,16 @@ export default function AbsensiPage() {
                                 <tr style={{ background: "#F8FAFC" }}>
                                     <th style={th}>No</th>
                                     <th style={{ ...th, textAlign: "left", minWidth: 140 }}>Nama</th>
-                                    {weekDays.map((d, i) => (
-                                        <th key={i} style={{ ...th, minWidth: 72 }}>
-                                            <div style={{ fontSize: 11, color: "#94A3B8", fontWeight: 500 }}>{DAY_NAMES[i]}</div>
-                                            <div style={{ fontSize: 15, fontWeight: 700, color: "#1E293B" }}>{d.getDate()}</div>
-                                        </th>
-                                    ))}
+                                    {weekDays.map((d, i) => {
+                                        const isSunday = i === 6;
+                                        return (
+                                            <th key={i} style={{ ...th, minWidth: 72, background: isSunday ? "#FFF7ED" : undefined }}>
+                                                <div style={{ fontSize: 11, color: isSunday ? "#D97706" : "#94A3B8", fontWeight: 600 }}>{DAY_NAMES[i]}</div>
+                                                <div style={{ fontSize: 15, fontWeight: 700, color: isSunday ? "#D97706" : "#1E293B" }}>{d.getDate()}</div>
+                                                {isSunday && <div style={{ fontSize: 9, color: "#D97706", fontWeight: 700 }}>×2 hari</div>}
+                                            </th>
+                                        );
+                                    })}
                                     <th style={{ ...th, minWidth: 60 }}>Hadir</th>
                                     <th style={{ ...th, minWidth: 70 }}>Lembur</th>
                                 </tr>
@@ -508,7 +515,7 @@ export default function AbsensiPage() {
                                             <div style={{ fontSize: 11, color: "#94A3B8", fontWeight: 400 }}>{row.karyawan.jabatan}</div>
                                         </td>
                                         {row.cells.map((cell, j) => (
-                                            <td key={j} style={{ ...td, textAlign: "center", padding: "8px 4px" }}>
+                                            <td key={j} style={{ ...td, textAlign: "center", padding: "8px 4px", background: j === 6 ? "#FFFBF5" : undefined }}>
                                                 {cell.abs ? (
                                                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
                                                         <StatusBadge

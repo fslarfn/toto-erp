@@ -289,6 +289,9 @@ export default function AbsenPage() {
                         {resultType === "pulang" && result.overtimeHours != null && result.overtimeHours > 0 && (
                             <InfoRow label="Lembur" value={`🌙 ${result.overtimeHours === 0.5 ? "½" : result.overtimeHours === 1.5 ? "1½" : result.overtimeHours} hari kerja`} />
                         )}
+                        {clock.getDay() === 0 && (
+                            <InfoRow label="Bonus Minggu" value="🌟 Dihitung 2 hari kerja" />
+                        )}
                     </div>
                     {captured && <img src={captured} alt="Selfie" style={styles.previewImg} />}
                 </div>
@@ -323,6 +326,22 @@ export default function AbsenPage() {
                         <InfoRow label="Jam Masuk" value={recordHariIni.jam_masuk + " WIB"} />
                     )}
                 </div>
+
+                {/* Sunday notice */}
+                {clock.getDay() === 0 && (
+                    <div style={{
+                        background: "linear-gradient(135deg, #FEF3C7, #FDE68A)",
+                        border: "1.5px solid #F59E0B",
+                        borderRadius: 12,
+                        padding: "12px 16px",
+                        marginBottom: 12,
+                        textAlign: "center" as const,
+                    }}>
+                        <div style={{ fontSize: 18, marginBottom: 4 }}>🌟</div>
+                        <div style={{ fontWeight: 700, color: "#92400E", fontSize: 14 }}>Hari Minggu – Dihitung 2 Hari Kerja</div>
+                        <div style={{ color: "#B45309", fontSize: 12, marginTop: 2 }}>Kehadiran hari ini bernilai 2× hari kerja</div>
+                    </div>
+                )}
 
                 {/* Live clock */}
                 <div style={styles.clockBox}>
