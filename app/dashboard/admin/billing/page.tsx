@@ -3,16 +3,15 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/auth";
 import { useLicense } from "@/lib/license-store";
 import { supabase } from "@/lib/supabase-client";
-import { 
-    CreditCard, Calendar, Users, 
-    FileText, CheckCircle2, Loader2, 
-    ExternalLink, Zap, History, Printer, Download
+import {
+    CreditCard, Calendar, Users,
+    FileText, CheckCircle2, Loader2,
+    X, Zap, History, Printer, Download, QrCode
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 
-const LYNKID_URL = "https://billing-erp-toto.com/"; 
 
 export default function BillingPage() {
     const { user } = useAuth();
@@ -23,13 +22,17 @@ export default function BillingPage() {
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<"overview" | "history" | "admin">("overview");
     const [submitting, setSubmitting] = useState(false);
-    
-    const [refNumber, setRefNumber] = useState("");
+    const [uploading, setUploading] = useState(false);
+
+    const [buktiFile, setBuktiFile] = useState<File | null>(null);
+    const [buktiPreview, setBuktiPreview] = useState<string>("");
     const [notes, setNotes] = useState("");
     const [showInvoice, setShowInvoice] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showApproveSuccess, setShowApproveSuccess] = useState(false);
     const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
+    const [showQrisModal, setShowQrisModal] = useState(false);
+    const [showAbsensiConfirmSuccess, setShowAbsensiConfirmSuccess] = useState(false);
 
     const isOwner = user?.username === "faisal";
     const isAdminFinance = ["vira", "toto", "fauzi", "yuni"].includes(user?.username || "");
@@ -68,27 +71,51 @@ export default function BillingPage() {
         return () => clearInterval(interval);
     }, [refreshLicense, fetchData]);
 
-    const submitManualReport = async (e: React.FormEvent) => {
+    const handleBuktiFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0] ?? null;
+        setBuktiFile(file);
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = ev => setBuktiPreview(ev.target?.result as string);
+            reader.readAsDataURL(file);
+        } else {
+            setBuktiPreview("");
+        }
+    };
+
+    const submitBuktiTransfer = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!refNumber) return alert("Nomor Referensi wajib diisi.");
-        setSubmitting(true);
+        if (!buktiFile) return alert("Bukti transfer wajib diunggah.");
+        setUploading(true);
         try {
+            const ext = buktiFile.name.split(".").pop();
+            const fileName = `${Date.now()}-${user?.username}.${ext}`;
+            const { error: uploadError } = await supabase.storage
+                .from("bukti-transfer")
+                .upload(fileName, buktiFile, { upsert: true });
+            if (uploadError) throw new Error("Gagal upload: " + uploadError.message);
+
+            const { data: { publicUrl } } = supabase.storage.from("bukti-transfer").getPublicUrl(fileName);
+
             const { error } = await supabase.from("billing_manual_confirmations").insert({
                 username: user?.username,
                 amount: license?.is_setup_completed ? 6200000 : 20800000,
-                reference_number: refNumber, 
-                status: "pending"
+                reference_number: `BUKTI-${Date.now()}`,
+                bukti_url: publicUrl,
+                notes: notes || null,
+                status: "pending",
             });
             if (!error) {
                 setShowSuccessModal(true);
-                setRefNumber(""); setNotes(""); 
+                setBuktiFile(null);
+                setBuktiPreview("");
+                setNotes("");
                 fetchData();
                 refreshBanner();
             } else {
-                console.error(error);
-                alert("Gagal mengirim laporan: " + error.message);
+                alert("Gagal mengirim: " + error.message);
             }
-        } catch (err) { alert("Sistem error."); } finally { setSubmitting(false); }
+        } catch (err: any) { alert(err.message ?? "Sistem error."); } finally { setUploading(false); }
     };
 
     const approveManual = async (reportId: string) => {
@@ -170,6 +197,37 @@ export default function BillingPage() {
     const openInvoice = (item: any) => {
         setSelectedInvoice(item);
         setShowInvoice(true);
+    };
+
+    const activateAbsensi = async (reportId?: string) => {
+        if (!confirm("Konfirmasi pembayaran fitur absensi sudah diterima?\nBanner di menu absensi akan hilang dan invoice akan dibuat.")) return;
+        setLoading(true);
+        try {
+            const [configRes, invoiceRes] = await Promise.all([
+                supabase.from("app_config").update({ is_absensi_aktif: true }).eq("id", 1),
+                supabase.from("billing_history").insert({
+                    order_id: `ABSENSI-${Date.now()}`,
+                    amount: 6100000,
+                    payment_type: "absensi_activation",
+                    status: "settlement",
+                    payment_method: "QRIS",
+                    created_at: new Date().toISOString(),
+                }),
+            ]);
+            if (configRes.error) throw new Error(configRes.error.message);
+            if (invoiceRes.error) throw new Error(invoiceRes.error.message);
+
+            if (reportId) {
+                await supabase.from("billing_manual_confirmations")
+                    .update({ status: "approved" })
+                    .eq("id", reportId);
+            }
+
+            setShowAbsensiConfirmSuccess(true);
+            refreshLicense();
+            fetchData();
+            refreshBanner();
+        } catch (err: any) { alert("Gagal: " + (err.message ?? "Sistem error.")); } finally { setLoading(false); }
     };
 
     if (!hasAccess) return <div className="page-content text-center py-20 opacity-50">AKSES DITOLAK</div>;
@@ -262,11 +320,11 @@ export default function BillingPage() {
                             </div>
                             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                                 {[
-                                    'Klik tombol "BUKA LINK PEMBAYARAN" di bawah.',
-                                    'Selesaikan pembayaran melalui QRIS/Transfer di link tersebut.',
-                                    'Simpan Nomor Referensi (ID Transaksi) dari lynk.id.',
-                                    'Masukkan Nomor Referensi ke form konfirmasi di bawah.',
-                                    'Klik tombol "KIRIM KONFIRMASI".'
+                                    'Klik tombol "LIHAT QRIS PEMBAYARAN" di sebelah kanan.',
+                                    'Scan QRIS menggunakan aplikasi bank / dompet digital Anda.',
+                                    'Ambil screenshot / foto notifikasi bukti transfer yang diterima.',
+                                    'Upload foto bukti transfer di form sebelah kanan.',
+                                    'Klik "KIRIM BUKTI TRANSFER" — Faisal akan verifikasi & konfirmasi.',
                                 ].map((step, idx) => (
                                     <div key={idx} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
                                         <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#f5f0ea", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#8a7e72", flexShrink: 0, marginTop: 1 }}>{idx+1}</div>
@@ -314,30 +372,82 @@ export default function BillingPage() {
                     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
                         <div style={{ background: "#fff", borderRadius: 14, padding: "24px 28px", border: "1px solid #ebe5dd" }}>
                             <h3 style={{ margin: "0 0 8px", fontSize: 15, fontWeight: 700, color: "#3a2e25" }}>Portal Pembayaran</h3>
-                            <p style={{ margin: "0 0 18px", fontSize: 12.5, color: "#8a7e72", lineHeight: 1.5 }}>Gunakan link eksternal di bawah ini (lynk.id) untuk memproses tagihan aplikasi Anda.</p>
-                            <a href={LYNKID_URL} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
-                                <button style={{ width: "100%", padding: "14px 20px", background: "linear-gradient(135deg, #3a2e25 0%, #4a3d32 100%)", color: "#fff", border: "none", borderRadius: 10, fontWeight: 600, fontSize: 13, cursor: "pointer", letterSpacing: 0.8, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 4px 14px rgba(58,46,37,0.2)" }}>
-                                    BUKA LINK PEMBAYARAN <span style={{ fontSize: 14 }}>↗</span>
-                                </button>
-                            </a>
+                            <p style={{ margin: "0 0 18px", fontSize: 12.5, color: "#8a7e72", lineHeight: 1.5 }}>Scan QRIS di bawah untuk memproses pembayaran tagihan aplikasi Anda.</p>
+                            <button onClick={() => setShowQrisModal(true)} style={{ width: "100%", padding: "14px 20px", background: "linear-gradient(135deg, #3a2e25 0%, #4a3d32 100%)", color: "#fff", border: "none", borderRadius: 10, fontWeight: 600, fontSize: 13, cursor: "pointer", letterSpacing: 0.8, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 4px 14px rgba(58,46,37,0.2)" }}>
+                                <QrCode size={16} /> LIHAT QRIS PEMBAYARAN
+                            </button>
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 12, fontSize: 11, color: "#a09488" }}>
-                                <span>🔒</span><span style={{ fontWeight: 500 }}>SECURED SESSION BY SSL</span>
+                                <span>🔒</span><span style={{ fontWeight: 500 }}>PEMBAYARAN AMAN VIA QRIS</span>
                             </div>
                         </div>
 
                         <div style={{ background: "#fff", borderRadius: 14, padding: "24px 28px", border: "1px solid #ebe5dd" }}>
-                            <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#3a2e25" }}>Form Konfirmasi</h3>
-                            <form onSubmit={submitManualReport}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                                <span style={{ fontSize: 16 }}>📋</span>
+                                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#3a2e25" }}>Aktivasi Fitur Absensi</h3>
+                                {license?.is_absensi_aktif && (
+                                    <span style={{ marginLeft: "auto", background: "#e8f5e9", color: "#2e7d32", fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 20, letterSpacing: 0.5 }}>● AKTIF</span>
+                                )}
+                            </div>
+                            <p style={{ margin: "0 0 18px", fontSize: 12.5, color: "#8a7e72", lineHeight: 1.5 }}>
+                                {license?.is_absensi_aktif
+                                    ? "Fitur absensi sudah aktif. Banner pemberitahuan telah disembunyikan."
+                                    : "Lakukan pembayaran fitur absensi dan server untuk foto absensi via QRIS, lalu upload Bukti untuk mengaktifkan."}
+                            </p>
+                            {!license?.is_absensi_aktif && (
+                                <button onClick={() => setShowQrisModal(true)} style={{ width: "100%", padding: "13px 20px", background: "linear-gradient(135deg, #1D4ED8 0%, #1E3A5F 100%)", color: "#fff", border: "none", borderRadius: 10, fontWeight: 600, fontSize: 13, cursor: "pointer", letterSpacing: 0.8, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 4px 14px rgba(29,78,216,0.2)", marginBottom: 12 }}>
+                                    <QrCode size={16} /> LIHAT QRIS AKTIVASI ABSENSI
+                                </button>
+                            )}
+                            {isOwner && !license?.is_absensi_aktif && (
+                                <button onClick={() => activateAbsensi()} disabled={loading} style={{ width: "100%", padding: "13px 20px", background: loading ? "#a09488" : "linear-gradient(135deg, #5a8f6e 0%, #3d6b50 100%)", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: loading ? "not-allowed" : "pointer", letterSpacing: 0.8, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 4px 14px rgba(90,143,110,0.25)" }}>
+                                    {loading ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                                    {loading ? "MEMPROSES..." : "KONFIRMASI PEMBAYARAN ABSENSI"}
+                                </button>
+                            )}
+                        </div>
+
+                        <div style={{ background: "#fff", borderRadius: 14, padding: "24px 28px", border: "1px solid #ebe5dd" }}>
+                            <h3 style={{ margin: "0 0 6px", fontSize: 15, fontWeight: 700, color: "#3a2e25" }}>Bukti Transfer</h3>
+                            <p style={{ margin: "0 0 18px", fontSize: 12, color: "#8a7e72", lineHeight: 1.5 }}>Upload screenshot / foto bukti transfer untuk diverifikasi admin.</p>
+                            <form onSubmit={submitBuktiTransfer}>
                                 <div style={{ marginBottom: 16 }}>
-                                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#6b5e52", marginBottom: 6, letterSpacing: 0.3 }}>ID Transaksi / Nomor Referensi</label>
-                                    <input type="text" value={refNumber} onChange={e => setRefNumber(e.target.value)} placeholder="Masukkan nomor referensi..." style={{ width: "100%", padding: "11px 14px", borderRadius: 8, border: "1.5px solid #ddd6cd", fontSize: 13.5, fontFamily: "'DM Sans', sans-serif", background: "#faf8f5", outline: "none", boxSizing: "border-box", transition: "border-color 0.2s" }} onFocus={e => e.target.style.borderColor = "#c69c6d"} onBlur={e => e.target.style.borderColor = "#ddd6cd"} required />
+                                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#6b5e52", marginBottom: 8, letterSpacing: 0.3 }}>
+                                        Foto / Screenshot Bukti Transfer <span style={{ color: "#d63230" }}>*</span>
+                                    </label>
+                                    <label style={{
+                                        display: "flex", flexDirection: "column" as const, alignItems: "center", justifyContent: "center",
+                                        gap: 8, padding: buktiPreview ? 0 : "24px 16px", borderRadius: 10,
+                                        border: `2px dashed ${buktiPreview ? "transparent" : "#ddd6cd"}`,
+                                        background: buktiPreview ? "transparent" : "#faf8f5",
+                                        cursor: "pointer", overflow: "hidden",
+                                    }}>
+                                        {buktiPreview ? (
+                                            /* eslint-disable-next-line @next/next/no-img-element */
+                                            <img src={buktiPreview} alt="Preview" style={{ width: "100%", borderRadius: 8, display: "block", maxHeight: 220, objectFit: "contain" }} />
+                                        ) : (
+                                            <>
+                                                <div style={{ fontSize: 28 }}>📎</div>
+                                                <div style={{ fontSize: 12.5, color: "#8a7e72", textAlign: "center" as const }}>
+                                                    Klik untuk pilih foto<br />
+                                                    <span style={{ fontSize: 11, color: "#a09488" }}>JPG, PNG, WEBP</span>
+                                                </div>
+                                            </>
+                                        )}
+                                        <input type="file" accept="image/*" onChange={handleBuktiFileChange} style={{ display: "none" }} required />
+                                    </label>
+                                    {buktiPreview && (
+                                        <button type="button" onClick={() => { setBuktiFile(null); setBuktiPreview(""); }} style={{ marginTop: 6, fontSize: 11, color: "#d63230", background: "none", border: "none", cursor: "pointer", padding: 0, fontWeight: 600 }}>
+                                            ✕ Hapus foto
+                                        </button>
+                                    )}
                                 </div>
                                 <div style={{ marginBottom: 20 }}>
                                     <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#6b5e52", marginBottom: 6, letterSpacing: 0.3 }}>Catatan (Pilihan)</label>
-                                    <input type="text" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Contoh: Transfer BCA, QRIS, dll." style={{ width: "100%", padding: "11px 14px", borderRadius: 8, border: "1.5px solid #ddd6cd", fontSize: 13.5, fontFamily: "'DM Sans', sans-serif", background: "#faf8f5", outline: "none", boxSizing: "border-box", transition: "border-color 0.2s" }} onFocus={e => e.target.style.borderColor = "#c69c6d"} onBlur={e => e.target.style.borderColor = "#ddd6cd"} />
+                                    <input type="text" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Contoh: Transfer BCA tgl 11 Mei, QRIS, dll." style={{ width: "100%", padding: "11px 14px", borderRadius: 8, border: "1.5px solid #ddd6cd", fontSize: 13.5, fontFamily: "'DM Sans', sans-serif", background: "#faf8f5", outline: "none", boxSizing: "border-box" }} />
                                 </div>
-                                <button type="submit" disabled={submitting} style={{ width: "100%", padding: "13px 20px", background: submitting ? "#a09488" : "linear-gradient(135deg, #c69c6d 0%, #a67c52 100%)", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: submitting ? "not-allowed" : "pointer", letterSpacing: 0.8, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 4px 14px rgba(198,156,109,0.3)" }}>
-                                    {submitting ? <Loader2 size={16} className="animate-spin" /> : "✓"} {submitting ? "MENGIRIM..." : "KIRIM KONFIRMASI"}
+                                <button type="submit" disabled={uploading || !buktiFile} style={{ width: "100%", padding: "13px 20px", background: (uploading || !buktiFile) ? "#a09488" : "linear-gradient(135deg, #c69c6d 0%, #a67c52 100%)", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: (uploading || !buktiFile) ? "not-allowed" : "pointer", letterSpacing: 0.8, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 4px 14px rgba(198,156,109,0.3)" }}>
+                                    {uploading ? <Loader2 size={16} className="animate-spin" /> : "📤"} {uploading ? "MENGUNGGAH..." : "KIRIM BUKTI TRANSFER"}
                                 </button>
                             </form>
                         </div>
@@ -361,7 +471,9 @@ export default function BillingPage() {
                             {history.length > 0 ? history.map(item => (
                                 <tr key={item.order_id} style={{ borderBottom: "1px solid #f5f3f0" }}>
                                     <td style={{ padding: "14px 16px", fontSize: 13, fontWeight: 500 }}>{format(new Date(item.created_at), 'dd MMM yyyy')}</td>
-                                    <td style={{ padding: "14px 16px", fontSize: 11, textTransform: "uppercase", fontWeight: 700, color: "#8a7e72" }}>{item.payment_type === 'initial' ? 'Setup + Lisensi' : 'Langganan Bulanan'}</td>
+                                    <td style={{ padding: "14px 16px", fontSize: 11, textTransform: "uppercase", fontWeight: 700, color: item.payment_type === 'absensi_activation' ? "#1D4ED8" : "#8a7e72" }}>
+                                        {item.payment_type === 'initial' ? 'Setup + Lisensi' : item.payment_type === 'absensi_activation' ? '📋 Aktivasi Absensi' : 'Langganan Bulanan'}
+                                    </td>
                                     <td style={{ padding: "14px 16px", fontSize: 13, fontWeight: 700, fontFamily: "'Playfair Display', serif" }}>{formatCurrency(item.amount)}</td>
                                     <td style={{ padding: "14px 16px", textAlign: "center" }}>
                                         <button onClick={() => openInvoice(item)} style={{ background: "#f5f3f0", color: "#3a2e25", border: "none", padding: "6px 12px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer" }}>LIHAT</button>
@@ -382,18 +494,43 @@ export default function BillingPage() {
             )}
 
             {activeTab === "admin" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 800 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 860 }}>
                     <h3 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 700, color: "#d63230", textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
                         <Zap size={14} /> Review Pembayaran Manual
                     </h3>
                     {manualReports.map(report => (
-                        <div key={report.id} style={{ padding: "20px 24px", background: "#fff", borderRadius: 14, border: "1px solid #ebe5dd", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 32px", flex: 1 }}>
+                        <div key={report.id} style={{ background: "#fff", borderRadius: 14, border: "1px solid #ebe5dd", overflow: "hidden" }}>
+                            {/* Info row */}
+                            <div style={{ padding: "18px 24px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "8px 32px", borderBottom: report.bukti_url ? "1px solid #f5f3f0" : "none" }}>
                                 <div><div style={{ fontSize: 10, fontWeight: 700, color: "#a09488", textTransform: "uppercase", marginBottom: 2 }}>User</div><div style={{ fontSize: 14, fontWeight: 700, textTransform: "uppercase", color: "#3a2e25" }}>{report.username}</div></div>
                                 <div><div style={{ fontSize: 10, fontWeight: 700, color: "#a09488", textTransform: "uppercase", marginBottom: 2 }}>Nominal</div><div style={{ fontSize: 14, fontWeight: 700, color: "#3a2e25" }}>{formatCurrency(report.amount)}</div></div>
-                                <div style={{ gridColumn: "span 2" }}><div style={{ fontSize: 10, fontWeight: 700, color: "#a09488", textTransform: "uppercase", marginBottom: 2 }}>Kode Ref</div><div style={{ fontSize: 15, fontWeight: 700, color: "#457b9d", letterSpacing: 0.5 }}>{report.reference_number}</div></div>
+                                <div><div style={{ fontSize: 10, fontWeight: 700, color: "#a09488", textTransform: "uppercase", marginBottom: 2 }}>Tanggal</div><div style={{ fontSize: 13, color: "#3a2e25" }}>{format(new Date(report.created_at), "dd MMM yyyy HH:mm", { locale: localeId })}</div></div>
+                                {report.notes && <div style={{ gridColumn: "span 3" }}><div style={{ fontSize: 10, fontWeight: 700, color: "#a09488", textTransform: "uppercase", marginBottom: 2 }}>Catatan</div><div style={{ fontSize: 13, color: "#4a4440" }}>{report.notes}</div></div>}
                             </div>
-                            <button onClick={() => approveManual(report.id)} style={{ background: "#5a8f6e", color: "white", border: "none", padding: "12px 24px", borderRadius: 8, fontSize: 11, fontWeight: 700, textTransform: "uppercase", cursor: "pointer", boxShadow: "0 4px 10px rgba(90,143,110,0.2)" }}>Aktifkan Lisensi</button>
+
+                            {/* Bukti transfer image */}
+                            {report.bukti_url && (
+                                <div style={{ padding: "16px 24px", borderBottom: "1px solid #f5f3f0" }}>
+                                    <div style={{ fontSize: 10, fontWeight: 700, color: "#a09488", textTransform: "uppercase", marginBottom: 8 }}>Bukti Transfer</div>
+                                    <a href={report.bukti_url} target="_blank" rel="noopener noreferrer" title="Klik untuk zoom">
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img src={report.bukti_url} alt="Bukti Transfer" style={{ maxHeight: 260, maxWidth: "100%", borderRadius: 8, border: "1px solid #ebe5dd", display: "block", cursor: "zoom-in", objectFit: "contain" }} />
+                                    </a>
+                                    <div style={{ fontSize: 11, color: "#a09488", marginTop: 4 }}>Klik gambar untuk lihat ukuran penuh</div>
+                                </div>
+                            )}
+
+                            {/* Action buttons */}
+                            <div style={{ padding: "14px 24px", display: "flex", gap: 10, flexWrap: "wrap" }}>
+                                <button onClick={() => approveManual(report.id)} style={{ background: "#5a8f6e", color: "white", border: "none", padding: "10px 20px", borderRadius: 8, fontSize: 11, fontWeight: 700, textTransform: "uppercase", cursor: "pointer", boxShadow: "0 4px 10px rgba(90,143,110,0.2)" }}>
+                                    ✓ Aktifkan Lisensi Web App
+                                </button>
+                                {!license?.is_absensi_aktif && (
+                                    <button onClick={() => activateAbsensi(report.id)} disabled={loading} style={{ background: loading ? "#a09488" : "linear-gradient(135deg, #1D4ED8, #1E3A5F)", color: "white", border: "none", padding: "10px 20px", borderRadius: 8, fontSize: 11, fontWeight: 700, textTransform: "uppercase", cursor: loading ? "not-allowed" : "pointer", boxShadow: "0 4px 10px rgba(29,78,216,0.2)" }}>
+                                        {loading ? <Loader2 size={14} className="animate-spin" /> : "📋"} Konfirmasi Absensi
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     ))}
                 </div>
@@ -525,6 +662,30 @@ export default function BillingPage() {
                                             <span style={{ fontSize: 11, fontWeight: 900, color: "#059669" }}>- Rp 5.200.000</span>
                                         </div>
                                     </div>
+                                ) : selectedInvoice.payment_type === 'absensi_activation' ? (
+                                    <div className="mt-4 pt-4 border-t border-dashed border-gray-200">
+                                        <div className="cert-row">
+                                            <span className="cert-label">Jenis Layanan</span>
+                                            <span className="cert-value uppercase">Aktivasi Fitur Absensi Karyawan</span>
+                                        </div>
+                                        <p className="cert-label mb-2">Rincian Biaya:</p>
+                                        <div className="cert-row !border-none !mb-1">
+                                            <span style={{ fontSize: 10, color: "#6b7280" }}>Biaya Pembuatan Menu Absensi</span>
+                                            <span style={{ fontSize: 11, textDecoration: "line-through", color: "#9ca3af" }}>Rp 6.000.000</span>
+                                        </div>
+                                        <div className="cert-row !border-none !mb-1">
+                                            <span style={{ fontSize: 10, fontStyle: "italic", color: "#059669" }}>Diskon 40% (Paket 5 Fitur Tambahan)</span>
+                                            <span style={{ fontSize: 11, fontWeight: 900, color: "#059669" }}>- Rp 2.400.000</span>
+                                        </div>
+                                        <div className="cert-row !border-none !mb-1">
+                                            <span style={{ fontSize: 10, color: "#6b7280" }}>Biaya Server Tambahan (1 Tahun)</span>
+                                            <span style={{ fontSize: 11, fontWeight: "bold" }}>Rp 2.500.000</span>
+                                        </div>
+                                        <div className="cert-row !border-none !mt-2 pt-2 border-t border-gray-100">
+                                            <span style={{ fontSize: 10, fontWeight: "bold" }}>Setelah Diskon</span>
+                                            <span style={{ fontSize: 11, fontWeight: "bold" }}>Rp 3.600.000 + Rp 2.500.000</span>
+                                        </div>
+                                    </div>
                                 ) : (
                                     <div className="cert-row">
                                         <span className="cert-label">Jenis Lisensi</span>
@@ -582,6 +743,45 @@ export default function BillingPage() {
                     </div>
                 </div>
             )}
+            {/* Modal QRIS Pembayaran */}
+            {showQrisModal && (
+                <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.7)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={() => setShowQrisModal(false)}>
+                    <div style={{ background: "#fff", borderRadius: 20, padding: "28px 24px", maxWidth: 380, width: "100%", textAlign: "center", boxShadow: "0 24px 48px rgba(0,0,0,0.25)", position: "relative" }} onClick={e => e.stopPropagation()}>
+                        <button onClick={() => setShowQrisModal(false)} style={{ position: "absolute", top: 14, right: 14, background: "#f5f3f0", border: "none", borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#6b5e52" }}>
+                            <X size={16} />
+                        </button>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "#a09488", letterSpacing: "0.1em", marginBottom: 6, textTransform: "uppercase" }}>Scan untuk Membayar</div>
+                        <h3 style={{ margin: "0 0 16px", fontSize: 17, fontWeight: 800, color: "#3a2e25" }}>QRIS Pembayaran</h3>
+                        <div style={{ borderRadius: 12, overflow: "hidden", border: "2px solid #ebe5dd", marginBottom: 16 }}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src="/qris-payment.jpeg" alt="QRIS Pembayaran" style={{ width: "100%", display: "block" }} />
+                        </div>
+                        <p style={{ margin: "0 0 20px", fontSize: 12, color: "#8a7e72", lineHeight: 1.6 }}>
+                            Buka aplikasi bank / dompet digital Anda, pilih <b>Scan QR</b>, lalu arahkan ke kode di atas.
+                        </p>
+                        <button onClick={() => setShowQrisModal(false)} style={{ width: "100%", padding: "13px", background: "#3a2e25", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: "pointer", letterSpacing: 0.5 }}>
+                            TUTUP
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal Sukses Aktivasi Absensi */}
+            {showAbsensiConfirmSuccess && (
+                <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={() => setShowAbsensiConfirmSuccess(false)}>
+                    <div style={{ background: "#fff", width: "100%", maxWidth: 400, padding: 32, borderRadius: 20, textAlign: "center", boxShadow: "0 20px 40px rgba(0,0,0,0.2)" }} onClick={e => e.stopPropagation()}>
+                        <div style={{ width: 80, height: 80, background: "#e8f5e9", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px", color: "#4caf50" }}>
+                            <CheckCircle2 size={40} />
+                        </div>
+                        <h3 style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 900, color: "#3a2e25", textTransform: "uppercase", letterSpacing: 0.5 }}>Fitur Absensi Aktif!</h3>
+                        <p style={{ margin: "0 0 24px", fontSize: 13, color: "#8a7e72", lineHeight: 1.6 }}>Pembayaran dikonfirmasi. Banner pemberitahuan di menu absensi telah dihapus.</p>
+                        <button onClick={() => setShowAbsensiConfirmSuccess(false)} style={{ background: "#5a8f6e", color: "white", width: "100%", padding: "14px", borderRadius: 12, fontWeight: 700, textTransform: "uppercase", fontSize: 12, border: "none", cursor: "pointer", letterSpacing: 0.5, boxShadow: "0 4px 12px rgba(90,143,110,0.3)" }}>
+                            Oke, Lanjutkan
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Modal Sukses Aktifasi */}
             {showApproveSuccess && (
                 <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={() => setShowApproveSuccess(false)}>

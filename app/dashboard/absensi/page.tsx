@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { useKaryawan, DataKaryawan } from "@/lib/karyawan-store";
 import { useAbsensi, AbsensiRecord, IzinRecord } from "@/lib/absensi-store";
+import { useLicense } from "@/lib/license-store";
 
 /* ── Helpers umum ─────────────────────────────────────────────── */
 
@@ -70,6 +71,7 @@ type ActiveTab = "rekap" | "mingguan" | "bulanan" | "izin" | "link";
 export default function AbsensiPage() {
     const { karyawan } = useKaryawan();
     const { absensi, izin, deleteAbsensi, refreshFromLS, addIzin, deleteIzin } = useAbsensi();
+    const { license } = useLicense();
 
     const [activeTab, setActiveTab] = useState<ActiveTab>("rekap");
     const [selectedDate, setSelectedDate] = useState(getWIBToday());
@@ -244,7 +246,7 @@ export default function AbsensiPage() {
         <div style={{ padding: "24px 28px", maxWidth: 1200, margin: "0 auto" }}>
 
             {/* ══ BANNER PEMBERITAHUAN BIAYA ══════════════════════ */}
-            <div style={{
+            {!license?.is_absensi_aktif && <div style={{
                 background: "linear-gradient(135deg, #1E3A5F 0%, #1D4ED8 100%)",
                 borderRadius: 18, padding: "24px 28px", marginBottom: 28,
                 boxShadow: "0 8px 32px rgba(29,78,216,0.25)",
@@ -337,7 +339,7 @@ export default function AbsensiPage() {
                         </div>
                     </div>
                 </div>
-            </div>
+            </div>}
             {/* ════════════════════════════════════════════════════ */}
 
             {/* Header */}

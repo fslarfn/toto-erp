@@ -23,6 +23,7 @@ export default function KeuanganPage() {
     const now = new Date();
     const thisMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
     const [filterMonth, setFilterMonth] = useState(thisMonthStr);
+    const [searchKeterangan, setSearchKeterangan] = useState("");
     const [form, setForm] = useState<FormState>({
         tanggal: now.toISOString().slice(0, 10),
         type: "income",
@@ -49,9 +50,9 @@ export default function KeuanganPage() {
 
     const months = [...new Set([...cashFlow.map((c) => c.date.substring(0, 7)), thisMonthStr])].sort().reverse();
 
-    const filtered = filterMonth === "semua"
-        ? cashFlow
-        : cashFlow.filter((c) => c.date.startsWith(filterMonth));
+    const filtered = cashFlow
+        .filter((c) => filterMonth === "semua" || c.date.startsWith(filterMonth))
+        .filter((c) => !searchKeterangan.trim() || c.description.toLowerCase().includes(searchKeterangan.toLowerCase().trim()));
 
     const totalIn = filtered.filter((c) => c.type === "income").reduce((s, c) => s + c.amount, 0);
     const totalOut = filtered.filter((c) => c.type === "expense").reduce((s, c) => s + c.amount, 0);
@@ -227,24 +228,44 @@ export default function KeuanganPage() {
 
             {/* Riwayat Transaksi */}
             <div className="card">
-                <div className="card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span>Riwayat Transaksi</span>
-                    <div style={{ display: "flex", gap: "1rem", alignItems: "center", fontSize: 13 }}>
-                        <span style={{ color: "#B89678" }}>
-                            Masuk: <strong style={{ color: "#10b981" }}>{formatCurrency(totalIn)}</strong> |
-                            Keluar: <strong style={{ color: "#ef4444" }}>{formatCurrency(totalOut)}</strong>
-                        </span>
-                        <select
-                            className="form-select"
-                            style={{ width: "auto", padding: "4px 8px", fontSize: 12 }}
-                            value={filterMonth}
-                            onChange={(e) => setFilterMonth(e.target.value)}
-                        >
-                            <option value="semua">Semua Periode</option>
-                            {months.map((m) => (
-                                <option key={m} value={m}>{m}</option>
-                            ))}
-                        </select>
+                <div className="card-header" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                        <span>Riwayat Transaksi</span>
+                        <div style={{ display: "flex", gap: "1rem", alignItems: "center", fontSize: 13, flexWrap: "wrap" }}>
+                            <span style={{ color: "#B89678" }}>
+                                Masuk: <strong style={{ color: "#10b981" }}>{formatCurrency(totalIn)}</strong> |
+                                Keluar: <strong style={{ color: "#ef4444" }}>{formatCurrency(totalOut)}</strong>
+                            </span>
+                            <select
+                                className="form-select"
+                                style={{ width: "auto", padding: "4px 8px", fontSize: 12 }}
+                                value={filterMonth}
+                                onChange={(e) => setFilterMonth(e.target.value)}
+                            >
+                                <option value="semua">Semua Periode</option>
+                                {months.map((m) => (
+                                    <option key={m} value={m}>{m}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                    <div style={{ position: "relative" }}>
+                        <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 14, pointerEvents: "none", opacity: 0.4 }}>🔍</span>
+                        <input
+                            type="text"
+                            placeholder="Cari keterangan transaksi..."
+                            value={searchKeterangan}
+                            onChange={(e) => setSearchKeterangan(e.target.value)}
+                            style={{ width: "100%", padding: "7px 32px 7px 32px", borderRadius: 8, border: "1.5px solid #e5e0d8", fontSize: 13, background: "#faf8f5", outline: "none", boxSizing: "border-box" as const }}
+                            onFocus={(e) => (e.target.style.borderColor = "#B89678")}
+                            onBlur={(e) => (e.target.style.borderColor = "#e5e0d8")}
+                        />
+                        {searchKeterangan && (
+                            <button
+                                onClick={() => setSearchKeterangan("")}
+                                style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: 14, opacity: 0.5, padding: 2 }}
+                            >✕</button>
+                        )}
                     </div>
                 </div>
                 <div className="table-container">

@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase-client";
 export interface LicenseInfo {
     license_expired_at: string;
     is_setup_completed: boolean;
+    is_absensi_aktif: boolean;
     max_users: number;
     isActive: boolean;
     daysLeft: number;
@@ -40,6 +41,7 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
                 setLicense({
                     license_expired_at: data.license_expired_at,
                     is_setup_completed: data.is_setup_completed,
+                    is_absensi_aktif: data.is_absensi_aktif ?? false,
                     max_users: data.max_users,
                     isActive: diffTime > 0,
                     daysLeft: diffDays,
