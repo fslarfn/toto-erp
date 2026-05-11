@@ -27,6 +27,7 @@ export default function BillingPage() {
     const [buktiFile, setBuktiFile] = useState<File | null>(null);
     const [buktiPreview, setBuktiPreview] = useState<string>("");
     const [notes, setNotes] = useState("");
+    const [paymentPurpose, setPaymentPurpose] = useState<"perpanjang_web_app" | "aktivasi_absensi">("perpanjang_web_app");
     const [showInvoice, setShowInvoice] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showApproveSuccess, setShowApproveSuccess] = useState(false);
@@ -97,24 +98,49 @@ export default function BillingPage() {
 
             const { data: { publicUrl } } = supabase.storage.from("bukti-transfer").getPublicUrl(fileName);
 
+            const isAbsensi = paymentPurpose === "aktivasi_absensi";
+            const amount = isAbsensi ? 6100000 : (license?.is_setup_completed ? 6200000 : 20800000);
+
             const { error } = await supabase.from("billing_manual_confirmations").insert({
                 username: user?.username,
-                amount: license?.is_setup_completed ? 6200000 : 20800000,
+                amount,
                 reference_number: `BUKTI-${Date.now()}`,
                 bukti_url: publicUrl,
                 notes: notes || null,
-                status: "pending",
+                type: paymentPurpose,
+                status: isAbsensi ? "auto_approved" : "pending",
             });
-            if (!error) {
-                setShowSuccessModal(true);
-                setBuktiFile(null);
-                setBuktiPreview("");
-                setNotes("");
-                fetchData();
-                refreshBanner();
+            if (error) throw new Error(error.message);
+
+            if (isAbsensi) {
+                const nextPaymentAt = new Date();
+                nextPaymentAt.setFullYear(nextPaymentAt.getFullYear() + 1);
+                await Promise.all([
+                    supabase.from("app_config").update({
+                        is_absensi_aktif: true,
+                        absensi_next_payment_at: nextPaymentAt.toISOString(),
+                    }).eq("id", 1),
+                    supabase.from("billing_history").insert({
+                        order_id: `ABSENSI-${Date.now()}`,
+                        amount: 6100000,
+                        payment_type: "absensi_activation",
+                        status: "settlement",
+                        payment_method: "QRIS",
+                        created_at: new Date().toISOString(),
+                    }),
+                ]);
+                setShowAbsensiConfirmSuccess(true);
             } else {
-                alert("Gagal mengirim: " + error.message);
+                setShowSuccessModal(true);
             }
+
+            setBuktiFile(null);
+            setBuktiPreview("");
+            setNotes("");
+            setPaymentPurpose("perpanjang_web_app");
+            fetchData();
+            refreshLicense();
+            refreshBanner();
         } catch (err: any) { alert(err.message ?? "Sistem error."); } finally { setUploading(false); }
     };
 
@@ -203,8 +229,13 @@ export default function BillingPage() {
         if (!confirm("Konfirmasi pembayaran fitur absensi sudah diterima?\nBanner di menu absensi akan hilang dan invoice akan dibuat.")) return;
         setLoading(true);
         try {
+            const nextPaymentAt = new Date();
+            nextPaymentAt.setFullYear(nextPaymentAt.getFullYear() + 1);
             const [configRes, invoiceRes] = await Promise.all([
-                supabase.from("app_config").update({ is_absensi_aktif: true }).eq("id", 1),
+                supabase.from("app_config").update({
+                    is_absensi_aktif: true,
+                    absensi_next_payment_at: nextPaymentAt.toISOString(),
+                }).eq("id", 1),
                 supabase.from("billing_history").insert({
                     order_id: `ABSENSI-${Date.now()}`,
                     amount: 6100000,
@@ -389,21 +420,38 @@ export default function BillingPage() {
                                     <span style={{ marginLeft: "auto", background: "#e8f5e9", color: "#2e7d32", fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 20, letterSpacing: 0.5 }}>● AKTIF</span>
                                 )}
                             </div>
-                            <p style={{ margin: "0 0 18px", fontSize: 12.5, color: "#8a7e72", lineHeight: 1.5 }}>
-                                {license?.is_absensi_aktif
-                                    ? "Fitur absensi sudah aktif. Banner pemberitahuan telah disembunyikan."
-                                    : "Lakukan pembayaran fitur absensi dan server untuk foto absensi via QRIS, lalu upload Bukti untuk mengaktifkan."}
-                            </p>
-                            {!license?.is_absensi_aktif && (
-                                <button onClick={() => setShowQrisModal(true)} style={{ width: "100%", padding: "13px 20px", background: "linear-gradient(135deg, #1D4ED8 0%, #1E3A5F 100%)", color: "#fff", border: "none", borderRadius: 10, fontWeight: 600, fontSize: 13, cursor: "pointer", letterSpacing: 0.8, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 4px 14px rgba(29,78,216,0.2)", marginBottom: 12 }}>
-                                    <QrCode size={16} /> LIHAT QRIS AKTIVASI ABSENSI
-                                </button>
-                            )}
-                            {isOwner && !license?.is_absensi_aktif && (
-                                <button onClick={() => activateAbsensi()} disabled={loading} style={{ width: "100%", padding: "13px 20px", background: loading ? "#a09488" : "linear-gradient(135deg, #5a8f6e 0%, #3d6b50 100%)", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: loading ? "not-allowed" : "pointer", letterSpacing: 0.8, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 4px 14px rgba(90,143,110,0.25)" }}>
-                                    {loading ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
-                                    {loading ? "MEMPROSES..." : "KONFIRMASI PEMBAYARAN ABSENSI"}
-                                </button>
+                            {license?.is_absensi_aktif ? (
+                                <div style={{ display: "flex", flexDirection: "column" as const, gap: 10 }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "#f0fdf4", borderRadius: 10, border: "1px solid #bbf7d0" }}>
+                                        <span style={{ fontSize: 12.5, color: "#166534", fontWeight: 600 }}>✓ Fitur aktif — banner telah disembunyikan</span>
+                                    </div>
+                                    {license?.absensi_next_payment_at && (
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "#fffbeb", borderRadius: 10, border: "1px solid #fde68a" }}>
+                                            <div>
+                                                <div style={{ fontSize: 10, fontWeight: 700, color: "#92400e", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 2 }}>Pembayaran Server Berikutnya</div>
+                                                <div style={{ fontSize: 14, fontWeight: 700, color: "#78350f" }}>
+                                                    {format(new Date(license.absensi_next_payment_at), "dd MMMM yyyy", { locale: localeId })}
+                                                </div>
+                                            </div>
+                                            <span style={{ fontSize: 20 }}>🗓️</span>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <>
+                                    <p style={{ margin: "0 0 14px", fontSize: 12.5, color: "#8a7e72", lineHeight: 1.5 }}>
+                                        Pilih <strong>"Aktivasi Absensi"</strong> di form Bukti Transfer, upload bukti pembayaran — fitur langsung aktif otomatis.
+                                    </p>
+                                    <button onClick={() => setShowQrisModal(true)} style={{ width: "100%", padding: "13px 20px", background: "linear-gradient(135deg, #1D4ED8 0%, #1E3A5F 100%)", color: "#fff", border: "none", borderRadius: 10, fontWeight: 600, fontSize: 13, cursor: "pointer", letterSpacing: 0.8, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 4px 14px rgba(29,78,216,0.2)", marginBottom: isOwner ? 12 : 0 }}>
+                                        <QrCode size={16} /> LIHAT QRIS AKTIVASI ABSENSI
+                                    </button>
+                                    {isOwner && (
+                                        <button onClick={() => activateAbsensi()} disabled={loading} style={{ width: "100%", padding: "13px 20px", background: loading ? "#a09488" : "linear-gradient(135deg, #5a8f6e 0%, #3d6b50 100%)", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: loading ? "not-allowed" : "pointer", letterSpacing: 0.8, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 4px 14px rgba(90,143,110,0.25)" }}>
+                                            {loading ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                                            {loading ? "MEMPROSES..." : "KONFIRMASI MANUAL (FAISAL)"}
+                                        </button>
+                                    )}
+                                </>
                             )}
                         </div>
 
@@ -411,6 +459,24 @@ export default function BillingPage() {
                             <h3 style={{ margin: "0 0 6px", fontSize: 15, fontWeight: 700, color: "#3a2e25" }}>Bukti Transfer</h3>
                             <p style={{ margin: "0 0 18px", fontSize: 12, color: "#8a7e72", lineHeight: 1.5 }}>Upload screenshot / foto bukti transfer untuk diverifikasi admin.</p>
                             <form onSubmit={submitBuktiTransfer}>
+                                <div style={{ marginBottom: 16 }}>
+                                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#6b5e52", marginBottom: 6, letterSpacing: 0.3 }}>
+                                        Keperluan Pembayaran <span style={{ color: "#d63230" }}>*</span>
+                                    </label>
+                                    <select
+                                        value={paymentPurpose}
+                                        onChange={e => setPaymentPurpose(e.target.value as "perpanjang_web_app" | "aktivasi_absensi")}
+                                        style={{ width: "100%", padding: "11px 14px", borderRadius: 8, border: "1.5px solid #ddd6cd", fontSize: 13.5, fontFamily: "'DM Sans', sans-serif", background: "#faf8f5", outline: "none", boxSizing: "border-box" as const, cursor: "pointer" }}
+                                    >
+                                        <option value="perpanjang_web_app">Perpanjang Web App</option>
+                                        <option value="aktivasi_absensi">Aktivasi Absensi</option>
+                                    </select>
+                                    {paymentPurpose === "aktivasi_absensi" && (
+                                        <div style={{ marginTop: 6, padding: "8px 12px", background: "rgba(29,78,216,0.06)", borderRadius: 8, fontSize: 11.5, color: "#1D4ED8", lineHeight: 1.5 }}>
+                                            ℹ️ Setelah bukti dikirim, fitur absensi langsung aktif dan banner hilang otomatis.
+                                        </div>
+                                    )}
+                                </div>
                                 <div style={{ marginBottom: 16 }}>
                                     <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#6b5e52", marginBottom: 8, letterSpacing: 0.3 }}>
                                         Foto / Screenshot Bukti Transfer <span style={{ color: "#d63230" }}>*</span>
@@ -505,7 +571,13 @@ export default function BillingPage() {
                                 <div><div style={{ fontSize: 10, fontWeight: 700, color: "#a09488", textTransform: "uppercase", marginBottom: 2 }}>User</div><div style={{ fontSize: 14, fontWeight: 700, textTransform: "uppercase", color: "#3a2e25" }}>{report.username}</div></div>
                                 <div><div style={{ fontSize: 10, fontWeight: 700, color: "#a09488", textTransform: "uppercase", marginBottom: 2 }}>Nominal</div><div style={{ fontSize: 14, fontWeight: 700, color: "#3a2e25" }}>{formatCurrency(report.amount)}</div></div>
                                 <div><div style={{ fontSize: 10, fontWeight: 700, color: "#a09488", textTransform: "uppercase", marginBottom: 2 }}>Tanggal</div><div style={{ fontSize: 13, color: "#3a2e25" }}>{format(new Date(report.created_at), "dd MMM yyyy HH:mm", { locale: localeId })}</div></div>
-                                {report.notes && <div style={{ gridColumn: "span 3" }}><div style={{ fontSize: 10, fontWeight: 700, color: "#a09488", textTransform: "uppercase", marginBottom: 2 }}>Catatan</div><div style={{ fontSize: 13, color: "#4a4440" }}>{report.notes}</div></div>}
+                                <div>
+                                    <div style={{ fontSize: 10, fontWeight: 700, color: "#a09488", textTransform: "uppercase", marginBottom: 4 }}>Keperluan</div>
+                                    <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, background: report.type === "aktivasi_absensi" ? "rgba(29,78,216,0.1)" : "rgba(90,143,110,0.1)", color: report.type === "aktivasi_absensi" ? "#1D4ED8" : "#3d6b50" }}>
+                                        {report.type === "aktivasi_absensi" ? "📋 Aktivasi Absensi" : "🔄 Perpanjang Web App"}
+                                    </span>
+                                </div>
+                                {report.notes && <div style={{ gridColumn: "span 4" }}><div style={{ fontSize: 10, fontWeight: 700, color: "#a09488", textTransform: "uppercase", marginBottom: 2 }}>Catatan</div><div style={{ fontSize: 13, color: "#4a4440" }}>{report.notes}</div></div>}
                             </div>
 
                             {/* Bukti transfer image */}
@@ -521,13 +593,14 @@ export default function BillingPage() {
                             )}
 
                             {/* Action buttons */}
-                            <div style={{ padding: "14px 24px", display: "flex", gap: 10, flexWrap: "wrap" }}>
-                                <button onClick={() => approveManual(report.id)} style={{ background: "#5a8f6e", color: "white", border: "none", padding: "10px 20px", borderRadius: 8, fontSize: 11, fontWeight: 700, textTransform: "uppercase", cursor: "pointer", boxShadow: "0 4px 10px rgba(90,143,110,0.2)" }}>
-                                    ✓ Aktifkan Lisensi Web App
-                                </button>
-                                {!license?.is_absensi_aktif && (
-                                    <button onClick={() => activateAbsensi(report.id)} disabled={loading} style={{ background: loading ? "#a09488" : "linear-gradient(135deg, #1D4ED8, #1E3A5F)", color: "white", border: "none", padding: "10px 20px", borderRadius: 8, fontSize: 11, fontWeight: 700, textTransform: "uppercase", cursor: loading ? "not-allowed" : "pointer", boxShadow: "0 4px 10px rgba(29,78,216,0.2)" }}>
-                                        {loading ? <Loader2 size={14} className="animate-spin" /> : "📋"} Konfirmasi Absensi
+                            <div style={{ padding: "14px 24px", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                                {report.type === "aktivasi_absensi" ? (
+                                    <div style={{ fontSize: 12, color: "#1D4ED8", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                                        <CheckCircle2 size={14} /> Sudah diproses otomatis saat pengiriman bukti
+                                    </div>
+                                ) : (
+                                    <button onClick={() => approveManual(report.id)} style={{ background: "#5a8f6e", color: "white", border: "none", padding: "10px 20px", borderRadius: 8, fontSize: 11, fontWeight: 700, textTransform: "uppercase", cursor: "pointer", boxShadow: "0 4px 10px rgba(90,143,110,0.2)" }}>
+                                        ✓ Aktifkan Lisensi Web App
                                     </button>
                                 )}
                             </div>
