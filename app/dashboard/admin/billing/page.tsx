@@ -603,6 +603,13 @@ export default function BillingPage() {
                                         ✓ Aktifkan Lisensi Web App
                                     </button>
                                 )}
+                                <button onClick={async () => {
+                                    if (!confirm("Hapus laporan ini?")) return;
+                                    await supabase.from("billing_manual_confirmations").update({ status: "rejected" }).eq("id", report.id);
+                                    fetchData();
+                                }} style={{ background: "none", color: "#d63230", border: "1.5px solid #d63230", padding: "9px 18px", borderRadius: 8, fontSize: 11, fontWeight: 700, textTransform: "uppercase", cursor: "pointer" }}>
+                                    ✕ Hapus Laporan
+                                </button>
                             </div>
                         </div>
                     ))}
