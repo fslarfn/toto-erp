@@ -51,64 +51,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
 
-    // Restore session from localStorage & Sync with DB
+    // Restore session dari localStorage
     useEffect(() => {
-        const restoreAndSync = async () => {
-            try {
-                const stored = localStorage.getItem(LS_USER_KEY);
-                if (stored) {
-                    const localUser = JSON.parse(stored) as User;
-                    setUser(localUser); // Set local immediately for UI responsiveness
-                    
-                    // Background refetch to ensure avatar and other data are fresh
-                    const { data, error } = await supabase
-                        .from("app_users")
-                        .select("*")
-                        .eq("id", localUser.id)
-                        .maybeSingle();
-                    
-                    if (data && !error) {
-                        const freshUser: User = {
-                            id: data.id,
-                            name: data.name,
-                            username: data.username,
-                            role: data.role as UserRole,
-                            avatar: data.avatar || undefined,
-                        };
-                        setUser(freshUser);
-                        localStorage.setItem(LS_USER_KEY, JSON.stringify(freshUser));
-                    }
-                }
-            } catch { /* ignore */ }
-            setLoading(false);
-        };
-        restoreAndSync();
+        try {
+            const stored = localStorage.getItem(LS_USER_KEY);
+            if (stored) {
+                setUser(JSON.parse(stored) as User);
+            }
+        } catch { /* ignore */ }
+        setLoading(false);
     }, []);
 
     const login = async (username: string, password: string): Promise<boolean> => {
         try {
-            // Try Supabase first
-            const { data, error } = await supabase
-                .from("app_users")
-                .select("*")
-                .eq("username", username.toLowerCase().trim())
-                .eq("password_hash", password)
-                .maybeSingle();
+            const res = await fetch("/api/auth/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username, password }),
+            });
 
-            if (data && !error) {
-                const u: User = {
-                    id: data.id,
-                    name: data.name,
-                    username: data.username,
-                    role: data.role as UserRole,
-                    avatar: data.avatar || undefined,
-                };
-                setUser(u);
-                localStorage.setItem(LS_USER_KEY, JSON.stringify(u));
-                return true;
-            }
+            if (!res.ok) return false;
 
-            return false;
+            const { user: data } = await res.json();
+            if (!data) return false;
+
+            const u: User = {
+                id: data.id,
+                name: data.name,
+                username: data.username,
+                role: data.role as UserRole,
+                avatar: data.avatar || undefined,
+            };
+            setUser(u);
+            localStorage.setItem(LS_USER_KEY, JSON.stringify(u));
+            return true;
         } catch {
             return false;
         }
@@ -117,6 +93,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const logout = () => {
         setUser(null);
         localStorage.removeItem(LS_USER_KEY);
+        // Hapus session cookie di server
+        fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
     };
 
     const hasAccess = (module: string) => {

@@ -31,6 +31,9 @@ yarn-error.log*
 # env files
 .env*
 
+# Claude Code internal
+.claude/
+
 # vercel
 .vercel
 

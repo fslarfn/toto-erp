@@ -17,6 +17,7 @@ export default function AkunPage() {
     // Form states
     const [name, setName] = useState(user?.name || "");
     const [username, setUsername] = useState(user?.username || "");
+    const [currentPassword, setCurrentPassword] = useState("");
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
 
@@ -80,36 +81,43 @@ export default function AkunPage() {
         setMessage(null);
 
         try {
-            const updates: any = { name };
-            
-            // Hanya kirim username jika berubah
-            if (username.toLowerCase() !== user.username.toLowerCase()) {
-                updates.username = username;
+            // Validasi password jika diisi
+            if (newPassword) {
+                if (!currentPassword) throw new Error("Masukkan password lama terlebih dahulu.");
+                if (newPassword !== confirmPassword) throw new Error("Konfirmasi password tidak cocok.");
             }
 
-            // Validasi Password
-            if (newPassword) {
-                if (newPassword !== confirmPassword) {
-                    throw new Error("Konfirmasi password tidak cocok.");
-                }
-                updates.password_hash = newPassword;
+            // 1. Update profil (nama, username)
+            const updates: Record<string, string> = { name };
+            if (username.toLowerCase() !== user.username.toLowerCase()) {
+                updates.username = username;
             }
 
             const res = await fetch("/api/profile/update", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ userId: user.id, updates })
+                body: JSON.stringify({ updates })
             });
 
             const data = await res.json();
-            if (data.success) {
-                updateUserData(data.user);
-                setNewPassword("");
-                setConfirmPassword("");
-                setMessage({ type: "success", text: "Profil berhasil diperbarui!" });
-            } else {
-                throw new Error(data.error);
+            if (!data.success) throw new Error(data.error);
+            updateUserData(data.user);
+
+            // 2. Ganti password jika diisi (endpoint terpisah dengan hashing)
+            if (newPassword) {
+                const pwRes = await fetch("/api/auth/change-password", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ currentPassword, newPassword }),
+                });
+                const pwData = await pwRes.json();
+                if (!pwData.success) throw new Error(pwData.error);
             }
+
+            setCurrentPassword("");
+            setNewPassword("");
+            setConfirmPassword("");
+            setMessage({ type: "success", text: "Profil berhasil diperbarui!" });
         } catch (err: any) {
             setMessage({ type: "error", text: err.message || "Gagal memperbarui profil." });
         } finally {
@@ -232,25 +240,38 @@ export default function AkunPage() {
                                         </div>
                                         KEAMANAN AKUN (GANTI PASSWORD)
                                     </h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                                        <div className="space-y-3">
+                                            <label className="form-label text-[10px] uppercase font-bold tracking-[0.2em] text-slate-400">Password Lama</label>
+                                            <input
+                                                type="password"
+                                                value={currentPassword}
+                                                onChange={e => setCurrentPassword(e.target.value)}
+                                                className="form-input focus:ring-4 focus:ring-[#5C4033]/5 transition-all"
+                                                placeholder="Wajib diisi jika ganti password"
+                                                autoComplete="current-password"
+                                            />
+                                        </div>
                                         <div className="space-y-3">
                                             <label className="form-label text-[10px] uppercase font-bold tracking-[0.2em] text-slate-400">Password Baru</label>
-                                            <input 
-                                                type="password" 
+                                            <input
+                                                type="password"
                                                 value={newPassword}
                                                 onChange={e => setNewPassword(e.target.value)}
                                                 className="form-input focus:ring-4 focus:ring-[#5C4033]/5 transition-all"
                                                 placeholder="Kosongkan jika tidak diganti"
+                                                autoComplete="new-password"
                                             />
                                         </div>
                                         <div className="space-y-3">
                                             <label className="form-label text-[10px] uppercase font-bold tracking-[0.2em] text-slate-400">Konfirmasi Password</label>
-                                            <input 
-                                                type="password" 
+                                            <input
+                                                type="password"
                                                 value={confirmPassword}
                                                 onChange={e => setConfirmPassword(e.target.value)}
                                                 className="form-input focus:ring-4 focus:ring-[#5C4033]/5 transition-all"
-                                                placeholder="Masukkan ulang password"
+                                                placeholder="Masukkan ulang password baru"
+                                                autoComplete="new-password"
                                             />
                                         </div>
                                     </div>

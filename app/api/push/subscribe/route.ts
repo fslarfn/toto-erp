@@ -56,9 +56,14 @@ function getSupabase() {
 /** POST /api/push/subscribe — simpan atau update subscription */
 export async function POST(req: Request) {
   try {
+    // userId dari session (middleware), bukan dari body — mencegah subscribe atas nama user lain
+    const userId = req.headers.get("x-user-id");
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await req.json();
-    const { userId, subscription, oldEndpoint, notificationPrefs } = body as {
-      userId: string;
+    const { subscription, oldEndpoint, notificationPrefs } = body as {
       subscription: { endpoint: string; keys: { p256dh: string; auth: string } };
       oldEndpoint?: string | null;
       notificationPrefs?: Record<string, boolean>;
@@ -117,12 +122,14 @@ export async function POST(req: Request) {
 /** DELETE /api/push/subscribe — hapus subscription */
 export async function DELETE(req: Request) {
   try {
-    const { userId, endpoint } = (await req.json()) as {
-      userId: string;
-      endpoint: string;
-    };
+    const userId = req.headers.get("x-user-id");
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-    if (!userId || !endpoint) {
+    const { endpoint } = (await req.json()) as { endpoint: string };
+
+    if (!endpoint) {
       return NextResponse.json({ error: "Payload tidak lengkap" }, { status: 400 });
     }
 
@@ -145,13 +152,17 @@ export async function DELETE(req: Request) {
 /** PATCH /api/push/subscribe — update preferensi notifikasi */
 export async function PATCH(req: Request) {
   try {
-    const { userId, endpoint, notificationPrefs } = (await req.json()) as {
-      userId: string;
+    const userId = req.headers.get("x-user-id");
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { endpoint, notificationPrefs } = (await req.json()) as {
       endpoint: string;
       notificationPrefs: Record<string, boolean>;
     };
 
-    if (!userId || !endpoint || !notificationPrefs) {
+    if (!endpoint || !notificationPrefs) {
       return NextResponse.json({ error: "Payload tidak lengkap" }, { status: 400 });
     }
 

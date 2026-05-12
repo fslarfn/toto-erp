@@ -32,6 +32,16 @@ function getVapidConfig() {
 
 export async function POST(req: Request) {
   try {
+    // Izinkan dari user terautentikasi (via middleware) ATAU dari cron job internal
+    const cronSecret = process.env.CRON_SECRET;
+    const authHeader = req.headers.get("authorization");
+    const isInternalCall = cronSecret && authHeader === `Bearer ${cronSecret}`;
+    const isAuthenticatedUser = !!req.headers.get("x-user-id");
+
+    if (!isInternalCall && !isAuthenticatedUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const payload = (await req.json()) as PushPayload;
 
     if (!payload.notificationType || !payload.title || !payload.body) {
