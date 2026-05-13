@@ -2,7 +2,6 @@
 import { useState } from "react";
 import { Settings, X } from "lucide-react";
 import { setMonthlyTarget } from "../../lib/queries/cockpit";
-import { useAuth } from "../../lib/auth";
 import { mutate } from "swr";
 
 interface Props {
@@ -13,14 +12,12 @@ export default function SetTargetDialog({ currentTarget }: Props) {
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState(currentTarget.toString());
   const [loading, setLoading] = useState(false);
-  const { user } = useAuth();
 
   const handleSave = async () => {
-    if (!user) return;
     setLoading(true);
     try {
       const now = new Date();
-      await setMonthlyTarget(now.getFullYear(), now.getMonth() + 1, Number(target), user.id);
+      await setMonthlyTarget(now.getFullYear(), now.getMonth() + 1, Number(target));
       await mutate('cockpit-profit-stats');
       setOpen(false);
     } catch (err) {

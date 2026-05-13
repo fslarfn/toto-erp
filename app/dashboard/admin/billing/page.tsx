@@ -54,8 +54,9 @@ export default function BillingPage() {
         try {
             const { data: historyData } = await supabase.from("billing_history").select("*").order("created_at", { ascending: false });
             setHistory(historyData || []);
-            const { data: reports } = await supabase.from("billing_manual_confirmations").select("*").eq("status", "pending").order("created_at", { ascending: false });
-            setManualReports(reports || []);
+            const reportsRes = await fetch("/api/billing/confirmations");
+            const reportsData = reportsRes.ok ? await reportsRes.json() : [];
+            setManualReports(reportsData || []);
         } catch (err) { console.error(err); } finally { setLoading(false); }
     }, []);
 
@@ -101,34 +102,24 @@ export default function BillingPage() {
             const isAbsensi = paymentPurpose === "aktivasi_absensi";
             const amount = isAbsensi ? 6100000 : (license?.is_setup_completed ? 6200000 : 20800000);
 
-            const { error } = await supabase.from("billing_manual_confirmations").insert({
-                username: user?.username,
-                amount,
-                reference_number: `BUKTI-${Date.now()}`,
-                bukti_url: publicUrl,
-                notes: notes || null,
-                type: paymentPurpose,
-                status: isAbsensi ? "auto_approved" : "pending",
+            const reportRes = await fetch("/api/billing/manual-report", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    username: user?.username,
+                    amount,
+                    reference_number: `BUKTI-${Date.now()}`,
+                    bukti_url: publicUrl,
+                    notes: notes || null,
+                    type: paymentPurpose,
+                }),
             });
-            if (error) throw new Error(error.message);
+            if (!reportRes.ok) {
+                const err = await reportRes.json();
+                throw new Error(err.error ?? "Gagal mengirim laporan.");
+            }
 
             if (isAbsensi) {
-                const nextPaymentAt = new Date();
-                nextPaymentAt.setFullYear(nextPaymentAt.getFullYear() + 1);
-                await Promise.all([
-                    supabase.from("app_config").update({
-                        is_absensi_aktif: true,
-                        absensi_next_payment_at: nextPaymentAt.toISOString(),
-                    }).eq("id", 1),
-                    supabase.from("billing_history").insert({
-                        order_id: `ABSENSI-${Date.now()}`,
-                        amount: 6100000,
-                        payment_type: "absensi_activation",
-                        status: "settlement",
-                        payment_method: "QRIS",
-                        created_at: new Date().toISOString(),
-                    }),
-                ]);
                 setShowAbsensiConfirmSuccess(true);
             } else {
                 setShowSuccessModal(true);
@@ -169,32 +160,15 @@ export default function BillingPage() {
         
         setLoading(true);
         try {
-            let baseDate = new Date();
-            const currentExpiredStr = license?.license_expired_at;
-            if (currentExpiredStr) {
-                const currentExpired = new Date(currentExpiredStr);
-                if (currentExpired > baseDate) baseDate = currentExpired;
-            }
-
-            const newExpiredAt = new Date(baseDate);
-            newExpiredAt.setDate(newExpiredAt.getDate() + daysToAdd);
-
-            // 1. Update Config
-            await supabase.from("app_config").update({ 
-                license_expired_at: newExpiredAt.toISOString(), 
-                is_setup_completed: true 
-            }).eq("id", 1);
-
-            // 2. Insert History
-            await supabase.from("billing_history").insert({
-                order_id: `ADMIN-MANUAL-${Date.now()}`,
-                amount: isInitial ? 20800000 : 6200000,
-                payment_type: isInitial ? "initial" : "monthly",
-                status: "settlement",
-                payment_method: "ADMIN_DIRECT",
-                created_at: new Date().toISOString()
+            const res = await fetch("/api/billing/manual-extend", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({}),
             });
-
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.error ?? "Gagal.");
+            }
             setShowApproveSuccess(true);
             refreshLicense();
             fetchData();
@@ -229,31 +203,15 @@ export default function BillingPage() {
         if (!confirm("Konfirmasi pembayaran fitur absensi sudah diterima?\nBanner di menu absensi akan hilang dan invoice akan dibuat.")) return;
         setLoading(true);
         try {
-            const nextPaymentAt = new Date();
-            nextPaymentAt.setFullYear(nextPaymentAt.getFullYear() + 1);
-            const [configRes, invoiceRes] = await Promise.all([
-                supabase.from("app_config").update({
-                    is_absensi_aktif: true,
-                    absensi_next_payment_at: nextPaymentAt.toISOString(),
-                }).eq("id", 1),
-                supabase.from("billing_history").insert({
-                    order_id: `ABSENSI-${Date.now()}`,
-                    amount: 6100000,
-                    payment_type: "absensi_activation",
-                    status: "settlement",
-                    payment_method: "QRIS",
-                    created_at: new Date().toISOString(),
-                }),
-            ]);
-            if (configRes.error) throw new Error(configRes.error.message);
-            if (invoiceRes.error) throw new Error(invoiceRes.error.message);
-
-            if (reportId) {
-                await supabase.from("billing_manual_confirmations")
-                    .update({ status: "approved" })
-                    .eq("id", reportId);
+            const res = await fetch("/api/billing/activate-absensi", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ reportId }),
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.error ?? "Gagal.");
             }
-
             setShowAbsensiConfirmSuccess(true);
             refreshLicense();
             fetchData();
@@ -605,7 +563,11 @@ export default function BillingPage() {
                                 )}
                                 <button onClick={async () => {
                                     if (!confirm("Hapus laporan ini?")) return;
-                                    await supabase.from("billing_manual_confirmations").update({ status: "rejected" }).eq("id", report.id);
+                                    await fetch("/api/billing/confirmations", {
+                                        method: "PATCH",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ id: report.id, status: "rejected" }),
+                                    });
                                     fetchData();
                                 }} style={{ background: "none", color: "#d63230", border: "1.5px solid #d63230", padding: "9px 18px", borderRadius: 8, fontSize: 11, fontWeight: 700, textTransform: "uppercase", cursor: "pointer" }}>
                                     ✕ Hapus Laporan

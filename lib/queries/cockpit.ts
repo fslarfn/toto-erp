@@ -181,15 +181,14 @@ export const getProfitStats = async (): Promise<ProfitStats> => {
   };
 };
 
-export const setMonthlyTarget = async (year: number, month: number, target: number, userId: string) => {
-  const { error } = await supabase
-    .from('monthly_targets')
-    .upsert({
-      year,
-      month,
-      target_profit: target,
-      updated_by: userId,
-      updated_at: new Date().toISOString()
-    });
-  if (error) throw error;
+export const setMonthlyTarget = async (year: number, month: number, target: number) => {
+  const res = await fetch("/api/cockpit/target", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ year, month, target }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error ?? "Failed to set target");
+  }
 };
