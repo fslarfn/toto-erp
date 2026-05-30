@@ -109,7 +109,17 @@ const TableRow = memo(function TableRow({
                                 const v = e.target.value;
                                 setLocalVals(prev => ({ ...prev, [key]: v }));
                             }}
-                            onPaste={(e) => onPaste(e, ri, ci)}
+                            onPaste={(e) => {
+                                // Ambil nilai cell pertama dari clipboard untuk update tampilan lokal
+                                const rawText = e.clipboardData.getData("text");
+                                const firstCell = rawText.split(/\r?\n/)[0]?.split("\t")[0] ?? "";
+                                // Hapus editing flag agar sync dari store tidak diblok setelah paste
+                                editingCols.current.delete(key);
+                                // Update tampilan cell saat ini langsung tanpa menunggu store
+                                setLocalVals(prev => ({ ...prev, [key]: firstCell }));
+                                // Delegasikan ke parent untuk handle multi-cell paste + simpan ke store
+                                onPaste(e, ri, ci);
+                            }}
                             onFocus={() => {
                                 editingCols.current.add(key);
                                 onFocus(ri, ci);
@@ -308,9 +318,11 @@ export default function PesananPage() {
                 const lines: string[] = [];
                 for (let ri = b.r1; ri <= b.r2; ri++) {
                     lines.push(
-                        Array.from({ length: b.c2 - b.c1 + 1 }, (_, ci) =>
-                            displayRows[ri][COL_KEYS[b.c1 + ci] as keyof PesananRow] as string
-                        ).join("\t")
+                        Array.from({ length: b.c2 - b.c1 + 1 }, (_, ci) => {
+                            // Baca dari DOM input agar dapat nilai terbaru (termasuk yang belum di-blur)
+                            const inputEl = inputRefs.current[ri]?.[b.c1 + ci];
+                            return inputEl?.value ?? (displayRows[ri][COL_KEYS[b.c1 + ci] as keyof PesananRow] as string ?? "");
+                        }).join("\t")
                     );
                 }
                 navigator.clipboard?.writeText(lines.join("\n")).catch(() => { });
