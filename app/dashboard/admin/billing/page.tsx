@@ -184,11 +184,13 @@ export default function BillingPage() {
         if (!confirm("Setel ulang masa trial ke 25 April 2026?")) return;
         setLoading(true);
         try {
-            await supabase.from("app_config").update({ 
-                license_expired_at: "2026-04-25T23:59:59+07:00", 
-                is_setup_completed: false 
-            }).eq("id", 1);
-            alert("Berhasil Reset Trial!"); 
+            const res = await fetch("/api/billing/reset-trial", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({}),
+            });
+            if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? "Gagal."); }
+            alert("Berhasil Reset Trial!");
             refreshLicense();
             refreshBanner();
         } catch (err) { alert("Gagal."); } finally { setLoading(false); }

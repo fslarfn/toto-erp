@@ -23,6 +23,12 @@ export async function POST(req: Request) {
     const { reportId } = await req.json();
     const supabase = getServiceSupabase();
 
+    // Cek apakah absensi sudah aktif — cegah duplikat billing history
+    const { data: cfg } = await supabase.from("app_config").select("is_absensi_aktif").eq("id", 1).single();
+    if (cfg?.is_absensi_aktif) {
+      return NextResponse.json({ error: "Fitur absensi sudah aktif" }, { status: 409 });
+    }
+
     const nextPaymentAt = new Date();
     nextPaymentAt.setFullYear(nextPaymentAt.getFullYear() + 1);
 

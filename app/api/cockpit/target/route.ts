@@ -8,10 +8,16 @@ function getServiceSupabase() {
   );
 }
 
+const ALLOWED = ["owner"];
+
 export async function POST(req: Request) {
   const userId = req.headers.get("x-user-id");
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const callerRole = req.headers.get("x-user-role") ?? "";
+  const callerUsername = req.headers.get("x-username") ?? "";
+  const isOwner = ALLOWED.includes(callerRole) || callerUsername === "faisal";
+
+  if (!userId || !isOwner) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
   try {

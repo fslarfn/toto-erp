@@ -9,21 +9,32 @@ function getServiceSupabase() {
 }
 
 export async function POST(req: Request) {
+  // Username dari session (tidak bisa dipalsukan dari body)
+  const sessionUsername = req.headers.get("x-username");
+  if (!sessionUsername) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = await req.json();
-    const { username, amount, reference_number, bukti_url, notes, type } = body;
+    const { amount, reference_number, bukti_url, notes, type } = body;
 
-    if (!username || !amount || !reference_number) {
+    if (!amount || !reference_number) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    const supabase = getServiceSupabase();
+    // Aktivasi absensi harus menyertakan bukti bayar
     const isAbsensi = type === "aktivasi_absensi";
+    if (isAbsensi && !bukti_url) {
+      return NextResponse.json({ error: "Bukti transfer wajib untuk aktivasi absensi" }, { status: 400 });
+    }
+
+    const supabase = getServiceSupabase();
 
     const { data, error } = await supabase
       .from("billing_manual_confirmations")
       .insert({
-        username,
+        username: sessionUsername,
         amount: Number(amount),
         reference_number,
         bukti_url: bukti_url || null,
