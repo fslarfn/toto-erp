@@ -213,7 +213,7 @@ function TabCekGudang() {
     filtered.forEach(r => { const k = r.po_label || "(Tanpa PO)"; if (!groups[k]) groups[k] = []; groups[k].push(r); });
 
     const markReady = (row: PesananRow) => {
-        updateRow(row.id, { siap_kirim: true, di_warna: true, di_kirim: false }, true);
+        updateRow(row.id, { siap_kirim: true, di_warna: true }, true);
         addLog(row.id, "status_change", "di_produksi", "siap_kirim", "", user?.name || "");
         pushNotify({
             notificationType: "status_produksi",
@@ -226,7 +226,7 @@ function TabCekGudang() {
 
     const markAllReady = (opRows: PesananRow[]) => {
         opRows.forEach(r => {
-            updateRow(r.id, { siap_kirim: true, di_warna: true, di_kirim: false }, true);
+            updateRow(r.id, { siap_kirim: true, di_warna: true }, true);
             addLog(r.id, "status_change", "di_produksi", "siap_kirim", "", user?.name || "");
         });
     };

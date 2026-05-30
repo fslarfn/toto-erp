@@ -57,9 +57,9 @@ export const StatusRow = memo(function StatusRow({
     const renderCheck = (key: keyof PesananRow, width: number) => {
         const handleCheckUpdate = (checked: boolean) => {
             const patch: Partial<PesananRow> = { [key]: checked };
-            
-            // Cascading logic for production pipeline
+
             if (checked) {
+                // Forward cascade: centang tahap atas otomatis aktifkan tahap bawah
                 if (key === "di_kirim") {
                     patch.siap_kirim = true;
                     patch.di_warna = true;
@@ -71,16 +71,24 @@ export const StatusRow = memo(function StatusRow({
                     patch.di_produksi = true;
                 }
             } else {
-                if (key === "di_produksi") {
+                // Backward cascade: WAJIB konfirmasi bila ada status lebih tinggi yang aktif
+                // karena tanpa konfirmasi banyak data hilang secara tidak sengaja
+                if (key === "di_produksi" && (row.di_warna || row.siap_kirim || row.di_kirim)) {
+                    const lebih = [row.di_warna && "Di Warna", row.siap_kirim && "Siap Kirim", row.di_kirim && "Di Kirim"].filter(Boolean).join(", ");
+                    if (!window.confirm(`Hapus "Di Produksi" juga akan mereset: ${lebih}.\n\nLanjutkan?`)) return;
                     patch.di_warna = false;
                     patch.siap_kirim = false;
                     patch.di_kirim = false;
-                } else if (key === "di_warna") {
+                } else if (key === "di_warna" && (row.siap_kirim || row.di_kirim)) {
+                    const lebih = [row.siap_kirim && "Siap Kirim", row.di_kirim && "Di Kirim"].filter(Boolean).join(", ");
+                    if (!window.confirm(`Hapus "Di Warna" juga akan mereset: ${lebih}.\n\nLanjutkan?`)) return;
                     patch.siap_kirim = false;
                     patch.di_kirim = false;
-                } else if (key === "siap_kirim") {
+                } else if (key === "siap_kirim" && row.di_kirim) {
+                    if (!window.confirm(`Hapus "Siap Kirim" juga akan mereset "Di Kirim".\n\nLanjutkan?`)) return;
                     patch.di_kirim = false;
                 }
+                // Jika tidak ada status lebih tinggi: uncheck bebas tanpa konfirmasi
             }
             onUpdate(row.id, patch);
         };
