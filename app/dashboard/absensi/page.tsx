@@ -91,7 +91,7 @@ export default function AbsensiPage() {
 
     // Refresh periodik
     useEffect(() => {
-        const interval = setInterval(() => refreshFromLS(), 10000);
+        const interval = setInterval(() => refreshFromLS(), 60000);
         return () => clearInterval(interval);
     }, [refreshFromLS]);
 

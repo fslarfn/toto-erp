@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from "react";
 import { supabase } from "@/lib/supabase-client";
 
 export type AbsensiRecord = {
@@ -24,7 +24,7 @@ export type IzinRecord = {
     karyawan_id: number;
     nama_karyawan: string;
     tanggal: string;
-    jenis: string; // 'izin' | 'sakit' | 'cuti'
+    jenis: string;
     keterangan: string;
     status: string;
     created_at: string;
@@ -46,6 +46,20 @@ type AbsensiCtx = {
     addIzin: (i: Omit<IzinRecord, "id" | "created_at">) => void;
     deleteIzin: (id: number) => void;
 };
+
+function padZero(n: number) { return n.toString().padStart(2, "0"); }
+
+function getTodayWIB() {
+    const now = new Date();
+    const wib = new Date(now.getTime() + now.getTimezoneOffset() * 60000 + 7 * 3600000);
+    return `${wib.getFullYear()}-${padZero(wib.getMonth() + 1)}-${padZero(wib.getDate())}`;
+}
+
+function getNinetyDaysAgo() {
+    const d = new Date();
+    d.setDate(d.getDate() - 90);
+    return `${d.getFullYear()}-${padZero(d.getMonth() + 1)}-${padZero(d.getDate())}`;
+}
 
 function dbToAbsensi(r: Record<string, unknown>): AbsensiRecord {
     return {
@@ -91,69 +105,77 @@ export function AbsensiProvider({ children }: { children: ReactNode }) {
     const [izin, setIzin] = useState<IzinRecord[]>([]);
     const [loading, setLoading] = useState(true);
 
-    // Load from Supabase on mount
+    // ── PHASED LOAD ──────────────────────────────────────────────
+    // Fase 1: Hari ini saja → selesai dalam < 300ms → loading=false
+    // Fase 2: 90 hari terakhir di background → dashboard punya data lengkap
     useEffect(() => {
         let cancelled = false;
+
         (async () => {
+            const today = getTodayWIB();
+            const cutoff = getNinetyDaysAgo();
+
             try {
-                const { data, error } = await supabase
-                    .from("absensi")
-                    .select("*")
-                    .order("id", { ascending: false });
+                // ── FASE 1: Hanya data hari ini (fast path untuk /absen) ──
+                const [{ data: todayAbs }, { data: todayIzin }] = await Promise.all([
+                    supabase.from("absensi").select("*").eq("tanggal", today),
+                    supabase.from("izin_absensi").select("*").gte("tanggal", today),
+                ]);
 
-                if (!cancelled && data && !error) {
-                    setAbsensi(data.map(dbToAbsensi));
+                if (!cancelled) {
+                    if (todayAbs) setAbsensi(todayAbs.map(dbToAbsensi));
+                    if (todayIzin) setIzin(todayIzin as IzinRecord[]);
+                    setLoading(false); // ← Unblock UI setelah data hari ini tiba
                 }
 
-                // Load izin records
-                const { data: izinData, error: izinErr } = await supabase
-                    .from("izin_absensi")
-                    .select("*")
-                    .order("tanggal", { ascending: false });
-                if (!cancelled && izinData && !izinErr) {
-                    setIzin(izinData as IzinRecord[]);
+                // ── FASE 2: 90 hari terakhir (background, untuk dashboard) ──
+                const [{ data: histAbs }, { data: histIzin }] = await Promise.all([
+                    supabase.from("absensi").select("*").gte("tanggal", cutoff).order("tanggal", { ascending: false }),
+                    supabase.from("izin_absensi").select("*").gte("tanggal", cutoff).order("tanggal", { ascending: false }),
+                ]);
+
+                if (!cancelled) {
+                    if (histAbs) setAbsensi(histAbs.map(dbToAbsensi));
+                    if (histIzin) setIzin(histIzin as IzinRecord[]);
                 }
 
-                // Migrate old localStorage data if exists
+                // ── FASE 3: Migrasi localStorage (jika ada data lama) ──
                 if (typeof window !== "undefined") {
                     const lsRaw = localStorage.getItem("totobaru_absensi");
                     if (lsRaw) {
                         try {
                             const lsData = JSON.parse(lsRaw) as AbsensiRecord[];
-                            if (lsData.length > 0 && (!data || data.length === 0)) {
+                            if (lsData.length > 0 && (!histAbs || histAbs.length === 0)) {
                                 for (let i = 0; i < lsData.length; i += 50) {
-                                    const chunk = lsData.slice(i, i + 50).map(a => absensiToDb(a));
-                                    await supabase.from("absensi").insert(chunk);
+                                    await supabase.from("absensi").insert(lsData.slice(i, i + 50).map(a => absensiToDb(a)));
                                 }
                                 const { data: freshData } = await supabase
-                                    .from("absensi")
-                                    .select("*")
-                                    .order("id", { ascending: false });
-                                if (!cancelled && freshData) {
-                                    setAbsensi(freshData.map(dbToAbsensi));
-                                }
+                                    .from("absensi").select("*").gte("tanggal", cutoff).order("tanggal", { ascending: false });
+                                if (!cancelled && freshData) setAbsensi(freshData.map(dbToAbsensi));
                                 localStorage.removeItem("totobaru_absensi");
                             }
                         } catch { /* ignore */ }
                     }
                 }
             } catch {
-                // keep empty
-            } finally {
                 if (!cancelled) setLoading(false);
             }
         })();
+
         return () => { cancelled = true; };
     }, []);
 
-    // Realtime subscriptions
+    // ── REALTIME ─────────────────────────────────────────────────
     useEffect(() => {
         const channel = supabase
             .channel("realtime_absensi_v2")
             .on("postgres_changes", { event: "*", schema: "public", table: "absensi" }, (payload) => {
                 const { eventType, new: n, old: o } = payload;
                 if (eventType === "INSERT") {
-                    setAbsensi(prev => [dbToAbsensi(n as Record<string, any>), ...prev]);
+                    setAbsensi(prev => {
+                        if (prev.find(x => x.id === (n as any).id)) return prev;
+                        return [dbToAbsensi(n as Record<string, any>), ...prev];
+                    });
                 } else if (eventType === "UPDATE") {
                     const row = n as Record<string, any>;
                     const mapped: Partial<AbsensiRecord> = {};
@@ -194,6 +216,23 @@ export function AbsensiProvider({ children }: { children: ReactNode }) {
         return () => { supabase.removeChannel(channel); };
     }, []);
 
+    // ── O(1) LOOKUP SETS ─────────────────────────────────────────
+    // Menggantikan .some() O(n) per karyawan menjadi Set.has() O(1)
+    const masukSet = useMemo(
+        () => new Set(absensi.map(a => `${a.karyawan_id}_${a.tanggal}`)),
+        [absensi]
+    );
+    const pulangSet = useMemo(
+        () => new Set(absensi.filter(a => !!a.jam_keluar).map(a => `${a.karyawan_id}_${a.tanggal}`)),
+        [absensi]
+    );
+    const absensiMap = useMemo(() => {
+        const m = new Map<string, AbsensiRecord>();
+        absensi.forEach(a => m.set(`${a.karyawan_id}_${a.tanggal}`, a));
+        return m;
+    }, [absensi]);
+
+    // ── MUTATIONS ────────────────────────────────────────────────
     const addAbsensi = useCallback((a: Omit<AbsensiRecord, "id">) => {
         const tempId: number = Date.now();
         const newRec: AbsensiRecord = { ...a, id: tempId };
@@ -214,29 +253,18 @@ export function AbsensiProvider({ children }: { children: ReactNode }) {
         overtime_hours: number = 0,
     ) => {
         setAbsensi(prev => {
-            const next = prev.map((a: AbsensiRecord) => {
+            return prev.map((a: AbsensiRecord) => {
                 if (a.karyawan_id === karyawan_id && a.tanggal === tanggal && !a.jam_keluar) {
                     const [hm, mm] = a.jam_masuk.split(":").map(Number);
                     const [hk, mk] = jam_keluar.split(":").map(Number);
-                    const totalMinMasuk = hm * 60 + mm;
-                    const totalMinKeluar = hk * 60 + mk;
-                    const diffMin = Math.max(0, totalMinKeluar - totalMinMasuk);
-                    const jam = Math.floor(diffMin / 60);
-                    const min = diffMin % 60;
-                    const total_jam_kerja = `${jam}j ${min}m`;
-
+                    const diffMin = Math.max(0, hk * 60 + mk - (hm * 60 + mm));
+                    const total_jam_kerja = `${Math.floor(diffMin / 60)}j ${diffMin % 60}m`;
                     const updated = { ...a, jam_keluar, foto_keluar_base64, total_jam_kerja, overtime_hours };
-                    supabase.from("absensi").update({
-                        jam_keluar,
-                        foto_keluar_url: foto_keluar_base64,
-                        total_jam_kerja,
-                        overtime_hours,
-                    }).eq("id", a.id).then();
+                    supabase.from("absensi").update({ jam_keluar, foto_keluar_url: foto_keluar_base64, total_jam_kerja, overtime_hours }).eq("id", a.id).then();
                     return updated;
                 }
                 return a;
             });
-            return next;
         });
     }, []);
 
@@ -247,13 +275,13 @@ export function AbsensiProvider({ children }: { children: ReactNode }) {
         absensi.filter(a => a.karyawan_id === karyawan_id), [absensi]);
 
     const getAbsensiHariIni = useCallback((karyawan_id: number, tanggal: string) =>
-        absensi.find(a => a.karyawan_id === karyawan_id && a.tanggal === tanggal), [absensi]);
+        absensiMap.get(`${karyawan_id}_${tanggal}`), [absensiMap]);
 
     const sudahAbsenMasuk = useCallback((karyawan_id: number, tanggal: string) =>
-        absensi.some(a => a.karyawan_id === karyawan_id && a.tanggal === tanggal), [absensi]);
+        masukSet.has(`${karyawan_id}_${tanggal}`), [masukSet]);
 
     const sudahAbsenPulang = useCallback((karyawan_id: number, tanggal: string) =>
-        absensi.some(a => a.karyawan_id === karyawan_id && a.tanggal === tanggal && !!a.jam_keluar), [absensi]);
+        pulangSet.has(`${karyawan_id}_${tanggal}`), [pulangSet]);
 
     const deleteAbsensi = useCallback((id: number) => {
         setAbsensi(prev => prev.filter(a => a.id !== id));
@@ -261,10 +289,13 @@ export function AbsensiProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const refreshFromLS = useCallback(() => {
+        const cutoff = getNinetyDaysAgo();
         (async () => {
-            const { data } = await supabase.from("absensi").select("*").order("id", { ascending: false });
+            const [{ data }, { data: izinData }] = await Promise.all([
+                supabase.from("absensi").select("*").gte("tanggal", cutoff).order("tanggal", { ascending: false }),
+                supabase.from("izin_absensi").select("*").gte("tanggal", cutoff).order("tanggal", { ascending: false }),
+            ]);
             if (data) setAbsensi(data.map(dbToAbsensi));
-            const { data: izinData } = await supabase.from("izin_absensi").select("*").order("tanggal", { ascending: false });
             if (izinData) setIzin(izinData as IzinRecord[]);
         })();
     }, []);
