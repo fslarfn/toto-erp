@@ -43,9 +43,35 @@ const TableRow = memo(function TableRow({
     const isFilled = row.customer || row.deskripsi;
     const isTemp = row.id >= 1000000000;
     const isFillRow = isFilling && selBounds && ri > selBounds.r2 && fillEndRow !== null && ri <= fillEndRow;
-    
-    // Background: Fill row (blue), Temp/Modified (light yellow), Filled (white), Empty (cream)
     const bg = isFillRow ? "#dbeafe" : isTemp ? "#FFFBEB" : isFilled ? "white" : "#FAFAF8";
+
+    // ── Local state per row ──────────────────────────────────────
+    // Selama mengetik hanya state lokal yang update → TIDAK ada re-render parent.
+    // Store baru di-update saat blur (pindah cell), bukan setiap keystroke.
+    const [localVals, setLocalVals] = useState<Record<ColKey, string>>(() => ({
+        tanggal: row.tanggal, customer: row.customer,
+        deskripsi: row.deskripsi, ukuran: row.ukuran, qty: row.qty,
+    }));
+
+    // Kolom yang sedang diketik user — jangan di-overwrite oleh sync eksternal
+    const editingCols = useRef(new Set<ColKey>());
+
+    // Sync dari store ketika ada perubahan eksternal (paste, realtime, fill-down)
+    // tapi SKIP kolom yang sedang diketik user
+    useEffect(() => {
+        setLocalVals(prev => {
+            let changed = false;
+            const next = { ...prev };
+            for (const k of COL_KEYS) {
+                const storeVal = row[k] as string;
+                if (!editingCols.current.has(k) && storeVal !== prev[k]) {
+                    next[k] = storeVal;
+                    changed = true;
+                }
+            }
+            return changed ? next : prev;
+        });
+    }, [row.tanggal, row.customer, row.deskripsi, row.ukuran, row.qty]); // eslint-disable-line react-hooks/exhaustive-deps
 
     return (
         <tr style={{ background: bg }}>
@@ -76,12 +102,26 @@ const TableRow = memo(function TableRow({
                             ref={(el) => inputRefSetter(ri, ci, el)}
                             type={key === "tanggal" ? "date" : "text"}
                             inputMode={key === "qty" || key === "ukuran" ? "decimal" : "text"}
-                            value={row[key] as string}
-                            onChange={(e) => onChange(row.id, key, e.target.value)}
+                            value={localVals[key]}
+                            onChange={(e) => {
+                                // Hanya update state lokal — TIDAK panggil parent onChange
+                                // Ini mencegah re-render parent + rekomputasi filteredRows tiap huruf
+                                const v = e.target.value;
+                                setLocalVals(prev => ({ ...prev, [key]: v }));
+                            }}
                             onPaste={(e) => onPaste(e, ri, ci)}
-                            onFocus={() => onFocus(ri, ci)}
+                            onFocus={() => {
+                                editingCols.current.add(key);
+                                onFocus(ri, ci);
+                            }}
                             onBlur={() => {
-                                onValidateAndCorrect(row.id, key, row[key] as string);
+                                editingCols.current.delete(key);
+                                const finalVal = localVals[key];
+                                // Sync ke store hanya jika nilai berubah dari store
+                                if (finalVal !== (row[key] as string)) {
+                                    onChange(row.id, key, finalVal);
+                                }
+                                onValidateAndCorrect(row.id, key, finalVal);
                                 onFlushRow(row.id);
                             }}
                             placeholder={key === "customer" ? "Nama customer..." : key === "deskripsi" ? "Deskripsi pesanan..." : key === "ukuran" ? "cth: 1,9" : key === "qty" ? "0" : ""}
@@ -380,11 +420,12 @@ export default function PesananPage() {
     }, [displayRows, updateRow, flushRow]);
 
     /* ── Change handler + Flush callback ───────────────────── */
+    // Dipanggil dari TableRow.onBlur (setelah user selesai mengetik di satu cell).
+    // Tidak lagi dipanggil setiap keystroke — local state TableRow yang menangani display.
     const handleChange = useCallback((id: number, key: ColKey, val: string) => {
         const patch: Partial<PesananRow> = { [key]: val };
 
-        // Auto-fill tanggal hari ini saat user pertama kali mengisi baris kosong (temp row).
-        // Cek di rows langsung agar tidak perlu prop tambahan ke TableRow.
+        // Auto-fill tanggal saat user selesai isi field pertama di baris kosong
         if (key !== "tanggal" && id >= 1000000000) {
             const currentRow = rows.find(r => r.id === id);
             if (currentRow && !currentRow.tanggal) {
@@ -392,7 +433,7 @@ export default function PesananPage() {
             }
         }
 
-        updateRow(id, patch, true);
+        updateRow(id, patch, false); // autoFlush=false — blur handler yang trigger flushRow
     }, [updateRow, rows]);
 
     const handleFlushRow = useCallback((id: number) => {
