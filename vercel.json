@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/notify-stuck-orders",
       "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/generate-notifications",
+      "schedule": "30 1 * * *"
     }
   ]
 }

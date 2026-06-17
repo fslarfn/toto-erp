@@ -85,3 +85,31 @@ export interface BankAccount {
   accountNumber: string;
   balance: number;
 }
+
+// ── Notifikasi (tabel `notifications`) ──
+export type NotificationSeverity = 'info' | 'warning' | 'danger';
+
+export type NotificationType =
+  | 'piutang_jatuh_tempo'
+  | 'stok_minimum'
+  | 'pesanan_baru'
+  | 'produksi_selesai'
+  | 'absensi'
+  | 'tagihan_jatuh_tempo'
+  | string;                // tetap longgar agar kompatibel dengan tipe lama
+
+export interface NotificationRecord {
+  id: string;              // UUID
+  title: string;
+  body: string;
+  url: string | null;
+  notification_type: NotificationType;
+  severity: NotificationSeverity;
+  is_read: boolean;
+  target_user_id: string | null;
+  meta: Record<string, unknown>;
+  created_at: string;
+}
+
+// Kategori tab pada NotificationPanel
+export type NotificationCategory = 'keuangan' | 'produksi' | 'stok';

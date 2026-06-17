@@ -11,7 +11,8 @@ import { TagihanBahanProvider } from "@/lib/tagihan-bahan-store";
 import { QuotationProvider } from "@/lib/quotation-store";
 import ChatOrderBox from "@/components/layout/ChatOrderBox";
 import NotificationSettings from "@/components/notifications/NotificationSettings";
-import { useNotificationHistory } from "@/hooks/useNotificationHistory";
+import NotificationPanel from "@/components/NotificationPanel";
+import { useNotifications } from "@/hooks/useNotifications";
 
 const NAV_ITEMS = [
     {
@@ -70,8 +71,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const [mobileOpen, setMobileOpen] = useState(false);
     const [chatOpen, setChatOpen] = useState(false);
     const [notifOpen, setNotifOpen] = useState(false);
+    const [notifPanelOpen, setNotifPanelOpen] = useState(false);
     const [showTrialModal, setShowTrialModal] = useState(false);
-    const { unreadCount } = useNotificationHistory();
+    const { notifications, unreadCount, loading: notifLoading, markAsRead, markAllRead } = useNotifications();
 
     type ChatToast = { id: number; senderName: string; message: string };
     const [chatToast, setChatToast] = useState<ChatToast | null>(null);
@@ -267,7 +269,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                     <div className="flex items-center gap-3">
                                         {/* Notification Bell */}
                                         <button
-                                            onClick={() => setNotifOpen(true)}
+                                            onClick={() => setNotifPanelOpen(true)}
                                             className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-slate-100 transition-colors text-primary relative"
                                             title="Notifikasi"
                                         >
@@ -344,6 +346,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         </div>
                     )}
                     <ChatOrderBox isOpen={chatOpen} onClose={() => setChatOpen(false)} onNewMessage={handleNewChatMessage} />
+                    <NotificationPanel
+                        isOpen={notifPanelOpen}
+                        onClose={() => setNotifPanelOpen(false)}
+                        onOpenSettings={() => { setNotifPanelOpen(false); setNotifOpen(true); }}
+                        notifications={notifications}
+                        loading={notifLoading}
+                        markAsRead={markAsRead}
+                        markAllRead={markAllRead}
+                    />
                     <NotificationSettings isOpen={notifOpen} onClose={() => setNotifOpen(false)} />
 
                     {/* ── Chat Toast Pop-up ── */}
