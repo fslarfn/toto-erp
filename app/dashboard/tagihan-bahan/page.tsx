@@ -123,6 +123,37 @@ export default function TagihanBahanPage() {
 
             {/* List / Table Panel */}
             <div style={{ flex: 1, overflow: "auto", padding: "20px 24px", background: "#FAF7F3" }}>
+                {/* ── Ringkasan Total ── */}
+                {(() => {
+                    const totalTagihan = tagihanList.reduce((s, t) => s + t.grandTotal, 0);
+                    const totalDibayar = tagihanList.reduce((s, t) => s + t.paidAmount, 0);
+                    const totalSisa = totalTagihan - totalDibayar;
+                    const jmlBelumLunas = tagihanList.filter(t => tagihanStatus(t) !== "lunas").length;
+                    const cardSt: React.CSSProperties = {
+                        flex: 1, minWidth: 180, background: "white", borderRadius: 12,
+                        border: "1px solid #E6D5BE", boxShadow: "0 2px 24px rgba(92,64,51,0.06)",
+                        padding: "14px 18px",
+                    };
+                    return (
+                        <div style={{ display: "flex", gap: 14, marginBottom: 18, flexWrap: "wrap" }}>
+                            <div style={cardSt}>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: "#B89678", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Total Tagihan</div>
+                                <div style={{ fontSize: 20, fontWeight: 900, color: "#5C4033", letterSpacing: -0.5 }}>{toRupiah(totalTagihan)}</div>
+                                <div style={{ fontSize: 11, color: "#B89678", marginTop: 2 }}>{tagihanList.length} tagihan</div>
+                            </div>
+                            <div style={cardSt}>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: "#B89678", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Sudah Dibayar</div>
+                                <div style={{ fontSize: 20, fontWeight: 900, color: "#15803D", letterSpacing: -0.5 }}>{toRupiah(totalDibayar)}</div>
+                            </div>
+                            <div style={{ ...cardSt, borderLeft: "4px solid #B91C1C" }}>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: "#B89678", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Sisa (Belum Dibayar)</div>
+                                <div style={{ fontSize: 20, fontWeight: 900, color: totalSisa > 0 ? "#B91C1C" : "#15803D", letterSpacing: -0.5 }}>{toRupiah(totalSisa)}</div>
+                                <div style={{ fontSize: 11, color: "#B89678", marginTop: 2 }}>{jmlBelumLunas} tagihan belum lunas</div>
+                            </div>
+                        </div>
+                    );
+                })()}
+
                 <div style={{ background: "white", borderRadius: 12, boxShadow: "0 2px 24px rgba(92,64,51,0.06)", border: "1px solid #E6D5BE", overflow: "hidden" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 12 }}>
                         <thead>
