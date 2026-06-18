@@ -1,8 +1,15 @@
 "use client";
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
-import { Order, Material, CashFlow, Payment, BankAccount } from "@/types";
+import { Order, Material, CashFlow, Payment, BankAccount, AccountReconciliation } from "@/types";
 import { supabase } from "@/lib/supabase-client";
 import { generateNumbers } from "@/lib/utils";
+import { computeBalance, resolveAccountId, reconcileAccounts, buildTransferPair } from "@/lib/balance";
+
+// Input transaksi: kolom turunan (accountId/flags/transferGroup) opsional —
+// store akan mengisinya (resolusi account_id dari nama kas, default flag false).
+export type CashFlowInput =
+    Omit<CashFlow, "id" | "accountId" | "isTest" | "isAdjustment" | "transferGroup"> &
+    Partial<Pick<CashFlow, "accountId" | "isTest" | "isAdjustment" | "transferGroup">>;
 
 interface AppStore {
     orders: Order[];
@@ -18,12 +25,20 @@ interface AppStore {
     addMaterial: (m: Omit<Material, "id">) => void;
     updateMaterial: (id: string, updates: Partial<Material>) => void;
     deleteMaterial: (id: string) => void;
-    addCashFlow: (c: Omit<CashFlow, "id">) => void;
+    addCashFlow: (c: CashFlowInput) => void;
     updateCashFlow: (id: string, updates: Partial<CashFlow>) => void;
     deleteCashFlow: (id: string) => void;
+    /** Mutasi antar-kas: catat sebagai pasangan expense(sumber)+income(tujuan). */
+    addTransfer: (p: { fromAccountId: string; toAccountId: string; amount: number; date: string; description?: string; createdBy?: string }) => void;
     addPayment: (p: Omit<Payment, "id">) => void;
     updateBankBalance: (id: string, delta: number) => void;
+    /** Saldo terhitung (sumber kebenaran) untuk satu akun. */
+    getComputedBalance: (accountId: string, opts?: { includeTest?: boolean }) => number;
+    /** Rekonsiliasi seluruh akun: stored vs computed vs diff. */
+    reconcile: (opts?: { includeTest?: boolean }) => AccountReconciliation[];
     recalculateBalances: () => void;
+    /** Sinkronkan SELURUH akun via RPC (idempotent). Mengembalikan ringkasan. */
+    syncAllBalances: () => Promise<AccountReconciliation[]>;
 }
 
 const StoreContext = createContext<AppStore | null>(null);
@@ -118,7 +133,11 @@ function dbToCashFlow(r: Record<string, unknown>): CashFlow {
         description: (r.description as string) || "",
         date: (r.date as string) || "",
         bankAccount: (r.bank_account as string) || "",
+        accountId: (r.account_id as string) ?? null,
         createdBy: (r.created_by as string) || "",
+        isTest: Boolean(r.is_test),
+        isAdjustment: Boolean(r.is_adjustment),
+        transferGroup: (r.transfer_group as string) ?? null,
     };
 }
 
@@ -131,7 +150,11 @@ function cashFlowToDb(c: Partial<CashFlow>): Record<string, unknown> {
     if (c.description !== undefined) d.description = c.description;
     if (c.date !== undefined) d.date = c.date;
     if (c.bankAccount !== undefined) d.bank_account = c.bankAccount;
+    if (c.accountId !== undefined) d.account_id = c.accountId;
     if (c.createdBy !== undefined) d.created_by = c.createdBy;
+    if (c.isTest !== undefined) d.is_test = c.isTest;
+    if (c.isAdjustment !== undefined) d.is_adjustment = c.isAdjustment;
+    if (c.transferGroup !== undefined) d.transfer_group = c.transferGroup;
     return d;
 }
 
@@ -170,6 +193,7 @@ function dbToBankAccount(r: Record<string, unknown>): BankAccount {
         bank: (r.bank as string) || "",
         accountNumber: (r.account_number as string) || "",
         balance: Number(r.balance) || 0,
+        initialBalance: Number(r.initial_balance) || 0,
     };
 }
 
@@ -276,6 +300,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                     if ("description" in row) mapped.description = row.description;
                     if ("date" in row) mapped.date = row.date;
                     if ("bank_account" in row) mapped.bankAccount = row.bank_account;
+                    if ("account_id" in row) mapped.accountId = row.account_id ?? null;
+                    if ("is_test" in row) mapped.isTest = Boolean(row.is_test);
+                    if ("is_adjustment" in row) mapped.isAdjustment = Boolean(row.is_adjustment);
+                    if ("transfer_group" in row) mapped.transferGroup = row.transfer_group ?? null;
                     setCashFlow(prev => prev.map(x => x.id === (n as any).id ? { ...x, ...mapped } : x));
                 }
                 else if (eventType === "DELETE") setCashFlow(prev => prev.filter(x => x.id !== (o as any).id));
@@ -313,6 +341,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                     if ("bank" in row) mapped.bank = row.bank;
                     if ("account_number" in row) mapped.accountNumber = row.account_number;
                     if ("balance" in row) mapped.balance = Number(row.balance);
+                    if ("initial_balance" in row) mapped.initialBalance = Number(row.initial_balance);
                     setBankAccounts(prev => prev.map(x => x.id === (n as any).id ? { ...x, ...mapped } : x));
                 }
                 else if (eventType === "DELETE") setBankAccounts(prev => prev.filter(x => x.id !== (o as any).id));
@@ -383,18 +412,39 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         );
     }, []);
 
-    const addCashFlow = useCallback((entry: Omit<CashFlow, "id">) => {
+    const addCashFlow = useCallback((entry: CashFlowInput) => {
         const id = String(Date.now());
-        const newCf = { ...entry, id };
+        // Resolusi account_id dari nama kas (FK), bukan lagi pencocokan string saat hitung saldo.
+        const accountId = entry.accountId ?? resolveAccountId(entry.bankAccount, bankAccounts);
+        const newCf: CashFlow = {
+            id,
+            type: entry.type,
+            category: entry.category,
+            amount: entry.amount,
+            description: entry.description,
+            date: entry.date,
+            bankAccount: entry.bankAccount,
+            accountId,
+            createdBy: entry.createdBy,
+            isTest: entry.isTest ?? false,
+            isAdjustment: entry.isAdjustment ?? false,
+            transferGroup: entry.transferGroup ?? null,
+        };
+        // Optimistic: realtime juga akan menyusulkan. Saldo = TERHITUNG dari cash_flow
+        // (lihat lib/balance.computeBalance) → tidak ada lagi mutasi balance manual.
+        setCashFlow(prev => [newCf, ...prev]);
         supabase.from("cash_flow").insert(cashFlowToDb(newCf)).then();
+    }, [bankAccounts]);
 
-        // Update Bank Balance
-        const bank = bankAccounts.find(b => b.name === entry.bankAccount);
-        if (bank) {
-            const delta = entry.type === "income" ? entry.amount : -entry.amount;
-            updateBankBalance(bank.id, delta);
-        }
-    }, [bankAccounts, updateBankBalance]);
+    const addTransfer = useCallback((p: { fromAccountId: string; toAccountId: string; amount: number; date: string; description?: string; createdBy?: string }) => {
+        const nameOf = (accId: string) => bankAccounts.find(b => b.id === accId)?.name ?? "";
+        const [out, inn] = buildTransferPair(p);
+        const base = Date.now();
+        const outRow: CashFlow = { ...out, id: String(base), bankAccount: nameOf(out.accountId!) };
+        const innRow: CashFlow = { ...inn, id: String(base + 1), bankAccount: nameOf(inn.accountId!) };
+        setCashFlow(prev => [innRow, outRow, ...prev]);
+        supabase.from("cash_flow").insert([cashFlowToDb(outRow), cashFlowToDb(innRow)]).then();
+    }, [bankAccounts]);
 
     const updateCashFlow = useCallback((id: string, updates: Partial<CashFlow>) => {
         const oldRecord = cashFlow.find(c => c.id === id);
@@ -405,23 +455,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // Optimistic local update
         setCashFlow(prev => prev.map(c => c.id === id ? newRecord : c));
 
-        // Persist to DB
-        supabase.from("cash_flow").update(cashFlowToDb(updates)).eq("id", id).then();
-
-        // Revert the old record's bank balance effect
-        const oldBank = bankAccounts.find(b => b.name === oldRecord.bankAccount);
-        if (oldBank) {
-            const revertDelta = oldRecord.type === "income" ? -oldRecord.amount : oldRecord.amount;
-            updateBankBalance(oldBank.id, revertDelta);
+        // Jika kas berubah, sinkronkan account_id (FK) mengikuti nama kas baru.
+        if (updates.bankAccount !== undefined && updates.accountId === undefined) {
+            const resolved = resolveAccountId(newRecord.bankAccount, bankAccounts);
+            newRecord.accountId = resolved;
+            setCashFlow(prev => prev.map(c => c.id === id ? newRecord : c));
+            supabase.from("cash_flow").update(cashFlowToDb({ ...updates, accountId: resolved })).eq("id", id).then();
+        } else {
+            supabase.from("cash_flow").update(cashFlowToDb(updates)).eq("id", id).then();
         }
-
-        // Apply the new record's bank balance effect
-        const newBank = bankAccounts.find(b => b.name === newRecord.bankAccount);
-        if (newBank) {
-            const applyDelta = newRecord.type === "income" ? newRecord.amount : -newRecord.amount;
-            updateBankBalance(newBank.id, applyDelta);
-        }
-    }, [cashFlow, bankAccounts, updateBankBalance]);
+        // Saldo = TERHITUNG dari cash_flow → tidak ada mutasi balance manual lagi.
+    }, [cashFlow, bankAccounts]);
 
     const deleteCashFlow = useCallback((id: string) => {
         const target = cashFlow.find(c => c.id === id);
@@ -429,14 +473,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
         setCashFlow((prev) => prev.filter((c) => c.id !== id));
         supabase.from("cash_flow").delete().eq("id", id).then();
-
-        // Reverse Bank Balance
-        const bank = bankAccounts.find(b => b.name === target.bankAccount);
-        if (bank) {
-            const delta = target.type === "income" ? -target.amount : target.amount;
-            updateBankBalance(bank.id, delta);
-        }
-    }, [cashFlow, bankAccounts, updateBankBalance]);
+        // Saldo = TERHITUNG dari cash_flow → recalc effect akan menyesuaikan cache.
+    }, [cashFlow]);
 
     const addPayment = useCallback((payment: Omit<Payment, "id">) => {
         const newPayment = { ...payment, id: String(Date.now()) };
@@ -459,22 +497,51 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
     }, [bankAccounts, updateBankBalance]);
 
+    const getComputedBalance = useCallback((accountId: string, opts?: { includeTest?: boolean }) => {
+        return computeBalance(accountId, bankAccounts, cashFlow, opts);
+    }, [bankAccounts, cashFlow]);
+
+    const reconcile = useCallback((opts?: { includeTest?: boolean }) => {
+        return reconcileAccounts(bankAccounts, cashFlow, opts);
+    }, [bankAccounts, cashFlow]);
+
+    // Recalc lokal: loop SELURUH akun via computeBalance (account_id, bukan nama),
+    // tulis cache yang berubah saja → idempotent.
     const recalculateBalances = useCallback(() => {
         setBankAccounts(prev => {
-            const next = [...prev];
-            next.forEach(bank => {
-                const cfIncome  = cashFlow.filter(c => c.bankAccount === bank.name && c.type === "income").reduce((s, c) => s + c.amount, 0);
-                const cfExpense = cashFlow.filter(c => c.bankAccount === bank.name && c.type === "expense").reduce((s, c) => s + c.amount, 0);
-                // cash_flow is the single source of truth — payments table is for invoice tracking only
-                const newBalance = cfIncome - cfExpense;
+            return prev.map(bank => {
+                const newBalance = computeBalance(bank.id, prev, cashFlow);
                 if (Math.abs(bank.balance - newBalance) > 0.01) {
-                    bank.balance = newBalance;
                     supabase.from("bank_accounts").update({ balance: newBalance }).eq("id", bank.id).then();
+                    return { ...bank, balance: newBalance };
                 }
+                return bank;
             });
-            return next;
         });
     }, [cashFlow]);
+
+    // Tombol "Sinkronkan Saldo": SATU batch idempotent di server (RPC).
+    const syncAllBalances = useCallback(async (): Promise<AccountReconciliation[]> => {
+        const { data, error } = await supabase.rpc("sync_all_balances");
+        if (error) {
+            // Fallback: hitung & tulis dari client bila RPC belum ada di DB.
+            recalculateBalances();
+            return reconcileAccounts(bankAccounts, cashFlow);
+        }
+        type Row = { account_id: string; name: string; old_balance: number; new_balance: number; diff: number };
+        const rows = (data ?? []) as Row[];
+        // Selaraskan state lokal dengan hasil server.
+        setBankAccounts(prev => prev.map(b => {
+            const row = rows.find(r => r.account_id === b.id);
+            return row ? { ...b, balance: Number(row.new_balance) } : b;
+        }));
+        return rows.map(r => ({
+            id: r.account_id, name: r.name,
+            storedBalance: Number(r.old_balance),
+            computedBalance: Number(r.new_balance),
+            diff: Number(r.new_balance) - Number(r.old_balance),
+        }));
+    }, [bankAccounts, cashFlow, recalculateBalances]);
 
     // Auto-sync balances whenever cash_flow data changes (length or amounts)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -492,8 +559,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             orders, materials, cashFlow, payments, bankAccounts, loading,
             addOrder, updateOrder, deleteOrder,
             addMaterial, updateMaterial, deleteMaterial,
-            addCashFlow, updateCashFlow, deleteCashFlow, addPayment, updateBankBalance,
-            recalculateBalances,
+            addCashFlow, updateCashFlow, deleteCashFlow, addTransfer, addPayment, updateBankBalance,
+            getComputedBalance, reconcile, recalculateBalances, syncAllBalances,
         }}>
             {children}
         </StoreContext.Provider>

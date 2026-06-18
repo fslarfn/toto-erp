@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { CashFlow } from "@/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import ReconciliationPanel from "@/components/ReconciliationPanel";
 
 const BANK_ACCOUNTS = ["Bank BCA Toto", "Bank BCA Yanto", "Cash"];
 const CATEGORIES_IN = ["Pembayaran Invoice", "DP Invoice", "Penjualan", "Lainnya"];
@@ -15,15 +16,26 @@ type FormState = {
     amount: string;
     kas: string;
     keterangan: string;
+    isTest?: boolean;
+    isAdjustment?: boolean;
 };
 
 export default function KeuanganPage() {
-    const { cashFlow, bankAccounts, addCashFlow, updateCashFlow, deleteCashFlow, recalculateBalances } = useStore();
+    const { cashFlow, bankAccounts, addCashFlow, updateCashFlow, deleteCashFlow, addTransfer, getComputedBalance, reconcile, syncAllBalances } = useStore();
 
     const now = new Date();
     const thisMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
     const [filterMonth, setFilterMonth] = useState(thisMonthStr);
     const [searchKeterangan, setSearchKeterangan] = useState("");
+    const [showTest, setShowTest] = useState(false);
+
+    // Opsi kas: dari bank_accounts (agar account_id ter-resolve), fallback ke daftar statis.
+    const kasOptions = bankAccounts.length ? bankAccounts.map((b) => b.name) : BANK_ACCOUNTS;
+
+    // ── Mutasi antar kas ──
+    const [transfer, setTransfer] = useState({
+        from: "", to: "", amount: "", date: now.toISOString().slice(0, 10), keterangan: "",
+    });
     const [form, setForm] = useState<FormState>({
         tanggal: now.toISOString().slice(0, 10),
         type: "income",
@@ -51,12 +63,17 @@ export default function KeuanganPage() {
     const months = [...new Set([...cashFlow.map((c) => c.date.substring(0, 7)), thisMonthStr])].sort().reverse();
 
     const filtered = cashFlow
+        .filter((c) => showTest || !c.isTest)
         .filter((c) => filterMonth === "semua" || c.date.startsWith(filterMonth))
         .filter((c) => !searchKeterangan.trim() || c.description.toLowerCase().includes(searchKeterangan.toLowerCase().trim()));
 
     const totalIn = filtered.filter((c) => c.type === "income").reduce((s, c) => s + c.amount, 0);
     const totalOut = filtered.filter((c) => c.type === "expense").reduce((s, c) => s + c.amount, 0);
-    const netSaldo = bankAccounts.reduce((s, b) => s + b.balance, 0);
+
+    // Saldo TERHITUNG (sumber kebenaran) — bukan field tersimpan.
+    const computedFor = (id: string) => getComputedBalance(id, { includeTest: showTest });
+    const netSaldo = bankAccounts.reduce((s, b) => s + computedFor(b.id), 0);
+    const recRows = reconcile();
 
     // ── Form Input handlers ────────────────────────────────────
     const handleSubmit = async (e: React.FormEvent) => {
@@ -83,10 +100,37 @@ export default function KeuanganPage() {
 
     const handleSync = async () => {
         setSyncing(true);
-        recalculateBalances();
-        await new Promise(r => setTimeout(r, 1000));
+        const summary = await syncAllBalances();
         setSyncing(false);
-        alert("Sinkronisasi saldo selesai!");
+        const changed = summary.filter((s) => Math.abs(s.diff) > 0.01);
+        if (changed.length === 0) {
+            showToast("✅ Semua saldo sudah seimbang");
+        } else {
+            const detail = changed.map((s) => `${s.name}: ${s.diff > 0 ? "+" : ""}${formatCurrency(s.diff)}`).join(" · ");
+            showToast(`✅ ${changed.length} akun disinkronkan — ${detail}`);
+        }
+    };
+
+    const handleTransfer = (e: React.FormEvent) => {
+        e.preventDefault();
+        const amount = parseFloat(transfer.amount.replace(/[^0-9.]/g, "")) || 0;
+        if (!transfer.from || !transfer.to || transfer.from === transfer.to || amount <= 0) {
+            alert("Pilih kas sumber & tujuan yang berbeda dan jumlah > 0.");
+            return;
+        }
+        const fromAcc = bankAccounts.find((b) => b.name === transfer.from);
+        const toAcc = bankAccounts.find((b) => b.name === transfer.to);
+        if (!fromAcc || !toAcc) { alert("Akun kas tidak ditemukan."); return; }
+        addTransfer({
+            fromAccountId: fromAcc.id,
+            toAccountId: toAcc.id,
+            amount,
+            date: transfer.date,
+            description: transfer.keterangan || `Mutasi ${transfer.from} → ${transfer.to}`,
+            createdBy: "finance",
+        });
+        setTransfer((p) => ({ ...p, amount: "", keterangan: "" }));
+        showToast("✅ Mutasi antar kas tercatat (pasangan masuk + keluar)");
     };
 
     const categoryOptions = form.type === "income" ? CATEGORIES_IN : CATEGORIES_OUT;
@@ -101,6 +145,8 @@ export default function KeuanganPage() {
             amount: String(tx.amount),
             kas: tx.bankAccount,
             keterangan: tx.description,
+            isTest: tx.isTest,
+            isAdjustment: tx.isAdjustment,
         });
     };
 
@@ -126,6 +172,8 @@ export default function KeuanganPage() {
             amount: parsedAmount,
             bankAccount: editForm.kas,
             description: editForm.keterangan,
+            isTest: !!editForm.isTest,
+            isAdjustment: !!editForm.isAdjustment,
         });
         setEditSaving(false);
         setEditingTx(null);
@@ -156,12 +204,49 @@ export default function KeuanganPage() {
                 {bankAccounts.map((b) => (
                     <div key={b.id} className="stat-card">
                         <div style={{ fontSize: 11, fontWeight: 600, color: "#B89678", marginBottom: 4 }}>{b.name}</div>
-                        <div style={{ fontSize: "1.15rem", fontWeight: 700, color: "var(--text-dark)" }}>{formatCurrency(b.balance)}</div>
+                        <div style={{ fontSize: "1.15rem", fontWeight: 700, color: "var(--text-dark)" }}>{formatCurrency(computedFor(b.id))}</div>
                     </div>
                 ))}
                 <div className="stat-card" style={{ background: "var(--primary)", border: "1px solid var(--primary-dark)" }}>
                     <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.75)", marginBottom: 4 }}>Total Saldo</div>
                     <div style={{ fontSize: "1.15rem", fontWeight: 700, color: "white" }}>{formatCurrency(netSaldo)}</div>
+                </div>
+            </div>
+
+            {/* Panel Rekonsiliasi: stored vs computed vs selisih */}
+            <ReconciliationPanel rows={recRows} syncing={syncing} onSync={handleSync} />
+
+            {/* Mutasi Antar Kas (pasangan income+expense, total tetap balance) */}
+            <div className="card">
+                <div className="card-header">🔁 Mutasi Antar Kas</div>
+                <div className="card-body">
+                    <form onSubmit={handleTransfer}>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr auto", gap: "1rem", alignItems: "flex-end" }}>
+                            <div>
+                                <label className="form-label">Dari Kas</label>
+                                <select value={transfer.from} onChange={(e) => setTransfer((p) => ({ ...p, from: e.target.value }))} className="form-select" required>
+                                    <option value="" disabled>Pilih kas…</option>
+                                    {kasOptions.map((b) => <option key={b}>{b}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="form-label">Ke Kas</label>
+                                <select value={transfer.to} onChange={(e) => setTransfer((p) => ({ ...p, to: e.target.value }))} className="form-select" required>
+                                    <option value="" disabled>Pilih kas…</option>
+                                    {kasOptions.map((b) => <option key={b}>{b}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="form-label">Jumlah (Rp)</label>
+                                <input type="text" value={transfer.amount} onChange={(e) => setTransfer((p) => ({ ...p, amount: e.target.value }))} placeholder="500000" className="form-input" required />
+                            </div>
+                            <div>
+                                <label className="form-label">Tanggal</label>
+                                <input type="date" value={transfer.date} onChange={(e) => setTransfer((p) => ({ ...p, date: e.target.value }))} className="form-input" required />
+                            </div>
+                            <button type="submit" className="btn btn-secondary" style={{ padding: "0.625rem 1.25rem", whiteSpace: "nowrap" }}>🔁 Catat Mutasi</button>
+                        </div>
+                    </form>
                 </div>
             </div>
 
@@ -191,7 +276,7 @@ export default function KeuanganPage() {
                             <div>
                                 <label className="form-label">Sumber / Tujuan Kas</label>
                                 <select value={form.kas} onChange={(e) => setForm((p) => ({ ...p, kas: e.target.value }))} className="form-select">
-                                    {BANK_ACCOUNTS.map((b) => <option key={b}>{b}</option>)}
+                                    {kasOptions.map((b) => <option key={b}>{b}</option>)}
                                 </select>
                             </div>
                         </div>
@@ -236,6 +321,10 @@ export default function KeuanganPage() {
                                 Masuk: <strong style={{ color: "#10b981" }}>{formatCurrency(totalIn)}</strong> |
                                 Keluar: <strong style={{ color: "#ef4444" }}>{formatCurrency(totalOut)}</strong>
                             </span>
+                            <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#8A7B6E", cursor: "pointer" }}>
+                                <input type="checkbox" checked={showTest} onChange={(e) => setShowTest(e.target.checked)} />
+                                Tampilkan entri uji/test
+                            </label>
                             <select
                                 className="form-select"
                                 style={{ width: "auto", padding: "4px 8px", fontSize: 12 }}
@@ -285,7 +374,12 @@ export default function KeuanganPage() {
                             {filtered.map((c) => (
                                 <tr key={c.id}>
                                     <td style={{ fontSize: 13 }}>{formatDate(c.date)}</td>
-                                    <td style={{ fontWeight: 500 }}>{c.description}</td>
+                                    <td style={{ fontWeight: 500 }}>
+                                        {c.description}
+                                        {c.isTest && <span className="badge" style={{ marginLeft: 6, background: "#FEF3C7", color: "#B45309", fontSize: 10 }}>TEST</span>}
+                                        {c.isAdjustment && <span className="badge" style={{ marginLeft: 6, background: "#E0E7FF", color: "#4338CA", fontSize: 10 }}>ADJ</span>}
+                                        {c.transferGroup && <span className="badge" style={{ marginLeft: 6, background: "#DBEAFE", color: "#1D4ED8", fontSize: 10 }}>MUTASI</span>}
+                                    </td>
                                     <td>
                                         <span className="badge" style={{ background: "#FDF3E7", color: "#B89678" }}>{c.category}</span>
                                     </td>
@@ -402,7 +496,7 @@ export default function KeuanganPage() {
                                             onChange={(e) => setEditForm(p => ({ ...p, kas: e.target.value }))}
                                             className="form-select"
                                         >
-                                            {BANK_ACCOUNTS.map((b) => <option key={b}>{b}</option>)}
+                                            {kasOptions.map((b) => <option key={b}>{b}</option>)}
                                         </select>
                                     </div>
                                 </div>
@@ -428,6 +522,17 @@ export default function KeuanganPage() {
                                             className="form-input"
                                         />
                                     </div>
+                                </div>
+                                {/* Penanda non-riil (jangan hapus data — cukup di-flag) */}
+                                <div style={{ display: "flex", gap: 20, marginTop: 14, fontSize: 13, color: "#6B5B4D" }}>
+                                    <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                                        <input type="checkbox" checked={!!editForm.isTest} onChange={(e) => setEditForm(p => ({ ...p, isTest: e.target.checked }))} />
+                                        Entri uji/test (dikecualikan dari laporan)
+                                    </label>
+                                    <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                                        <input type="checkbox" checked={!!editForm.isAdjustment} onChange={(e) => setEditForm(p => ({ ...p, isAdjustment: e.target.checked }))} />
+                                        Penyesuaian (adjustment)
+                                    </label>
                                 </div>
                             </div>
 

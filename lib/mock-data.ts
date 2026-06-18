@@ -174,19 +174,21 @@ export const mockMaterials: Material[] = [
 ];
 
 export const mockBankAccounts: BankAccount[] = [
-    { id: "1", name: "Bank BCA Toto", bank: "BCA", accountNumber: "1234567890", balance: 45000000 },
-    { id: "2", name: "Bank BCA Yanto", bank: "BCA", accountNumber: "0987654321", balance: 28500000 },
-    { id: "3", name: "Cash", bank: "Tunai", accountNumber: "-", balance: 8750000 },
+    { id: "1", name: "Bank BCA Toto", bank: "BCA", accountNumber: "1234567890", balance: 45000000, initialBalance: 0 },
+    { id: "2", name: "Bank BCA Yanto", bank: "BCA", accountNumber: "0987654321", balance: 28500000, initialBalance: 0 },
+    { id: "3", name: "Cash", bank: "Tunai", accountNumber: "-", balance: 8750000, initialBalance: 0 },
 ];
 
+const cfDefaults = { accountId: null, isTest: false, isAdjustment: false, transferGroup: null } as const;
+
 export const mockCashFlow: CashFlow[] = [
-    { id: "1", type: "income", category: "Pembayaran Invoice", amount: 17000000, description: "Pelunasan INV-202601-001 — PT Maju Jaya", date: "2026-01-22", bankAccount: "Bank BCA Toto", createdBy: "finance" },
-    { id: "2", type: "income", category: "DP Invoice", amount: 5000000, description: "DP 50% INV-202601-002 — CV Sukses Makmur", date: "2026-01-10", bankAccount: "Bank BCA Yanto", createdBy: "finance" },
-    { id: "3", type: "expense", category: "Bahan Baku", amount: 8500000, description: "Pembelian batang aluminium 6063", date: "2026-01-15", bankAccount: "Bank BCA Toto", createdBy: "finance" },
-    { id: "4", type: "expense", category: "Operasional", amount: 2200000, description: "Listrik & Air bulan Januari", date: "2026-01-31", bankAccount: "Cash", createdBy: "finance" },
-    { id: "5", type: "expense", category: "Gaji", amount: 12000000, description: "Gaji karyawan Januari 2026", date: "2026-01-31", bankAccount: "Bank BCA Toto", createdBy: "finance" },
-    { id: "6", type: "income", category: "Pembayaran Invoice", amount: 9350000, description: "Lunas INV-202602-001 — Toko Bangunan Sejahtera", date: "2026-02-20", bankAccount: "Bank BCA Yanto", createdBy: "finance" },
-    { id: "7", type: "expense", category: "Bahan Baku", amount: 5400000, description: "Pembelian cat powder coat", date: "2026-02-05", bankAccount: "Cash", createdBy: "finance" },
+    { id: "1", type: "income", category: "Pembayaran Invoice", amount: 17000000, description: "Pelunasan INV-202601-001 — PT Maju Jaya", date: "2026-01-22", bankAccount: "Bank BCA Toto", createdBy: "finance", ...cfDefaults, accountId: "1" },
+    { id: "2", type: "income", category: "DP Invoice", amount: 5000000, description: "DP 50% INV-202601-002 — CV Sukses Makmur", date: "2026-01-10", bankAccount: "Bank BCA Yanto", createdBy: "finance", ...cfDefaults, accountId: "2" },
+    { id: "3", type: "expense", category: "Bahan Baku", amount: 8500000, description: "Pembelian batang aluminium 6063", date: "2026-01-15", bankAccount: "Bank BCA Toto", createdBy: "finance", ...cfDefaults, accountId: "1" },
+    { id: "4", type: "expense", category: "Operasional", amount: 2200000, description: "Listrik & Air bulan Januari", date: "2026-01-31", bankAccount: "Cash", createdBy: "finance", ...cfDefaults, accountId: "3" },
+    { id: "5", type: "expense", category: "Gaji", amount: 12000000, description: "Gaji karyawan Januari 2026", date: "2026-01-31", bankAccount: "Bank BCA Toto", createdBy: "finance", ...cfDefaults, accountId: "1" },
+    { id: "6", type: "income", category: "Pembayaran Invoice", amount: 9350000, description: "Lunas INV-202602-001 — Toko Bangunan Sejahtera", date: "2026-02-20", bankAccount: "Bank BCA Yanto", createdBy: "finance", ...cfDefaults, accountId: "2" },
+    { id: "7", type: "expense", category: "Bahan Baku", amount: 5400000, description: "Pembelian cat powder coat", date: "2026-02-05", bankAccount: "Cash", createdBy: "finance", ...cfDefaults, accountId: "3" },
 ];
 
 export const mockPayments: Payment[] = [
