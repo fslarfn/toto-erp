@@ -74,8 +74,12 @@ export interface CashFlow {
   amount: number;
   description: string;
   date: string;
-  bankAccount: string;     // BCA Toto | BCA Yanto | Cash
+  bankAccount: string;     // nama kas (legacy, dipertahankan utk kompatibilitas)
+  accountId: string | null; // FK ke BankAccount.id — sumber kebenaran pemetaan kas
   createdBy: string;
+  isTest: boolean;         // entri simulasi/preview → dikecualikan dari laporan riil
+  isAdjustment: boolean;   // entri penyesuaian manual
+  transferGroup: string | null; // penanda pasangan mutasi antar-kas (income+expense)
 }
 
 export interface BankAccount {
@@ -83,7 +87,17 @@ export interface BankAccount {
   name: string;            // BCA Toto, BCA Yanto, Cash
   bank: string;
   accountNumber: string;
-  balance: number;
+  balance: number;         // cache saldo (hasil hitung). Bukan sumber kebenaran.
+  initialBalance: number;  // saldo pembuka sebelum periode pencatatan
+}
+
+// Ringkasan rekonsiliasi per akun (stored vs computed)
+export interface AccountReconciliation {
+  id: string;
+  name: string;
+  storedBalance: number;
+  computedBalance: number;
+  diff: number;            // stored - computed (idealnya 0)
 }
 
 // ── Notifikasi (tabel `notifications`) ──
