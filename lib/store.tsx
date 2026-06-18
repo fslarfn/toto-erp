@@ -289,7 +289,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             // 3. Cash Flow
             .on("postgres_changes", { event: "*", schema: "public", table: "cash_flow" }, (payload) => {
                 const { eventType, new: n, old: o } = payload;
-                if (eventType === "INSERT") setCashFlow(prev => [dbToCashFlow(n as Record<string, any>), ...prev]);
+                if (eventType === "INSERT") {
+                    // Idempoten: lewati bila id sudah ada (mis. sudah ditambah optimistic
+                    // di addCashFlow/addTransfer) agar tidak dobel saat realtime echo balik.
+                    setCashFlow(prev => prev.some(x => x.id === (n as any).id) ? prev : [dbToCashFlow(n as Record<string, any>), ...prev]);
+                }
                 else if (eventType === "UPDATE") {
                     const row = n as Record<string, any>;
                     const mapped: Partial<CashFlow> = {};
