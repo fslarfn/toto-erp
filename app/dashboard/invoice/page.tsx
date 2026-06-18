@@ -71,6 +71,7 @@ export default function InvoicePage() {
     const [diskonRp, setDiskonRp] = useState("");
     const [diskonPct, setDiskonPct] = useState("");
     const [rekening, setRekening] = useState<RekeningKey>("yanto");
+    const [tanggalOverride, setTanggalOverride] = useState(""); // kosong = pakai tanggal pesan
 
     const years: number[] = [];
     for (let y = 2023; y <= now.getFullYear() + 1; y++) years.push(y);
@@ -103,6 +104,14 @@ export default function InvoicePage() {
 
     const invoiceCustomer = invoiceItems[0]?.customer ?? "";
     const invoiceDate = invoiceItems[0]?.tanggal ?? "";
+    // Tanggal yang ditampilkan di invoice: override (cetak/kirim) bila diisi, jika tidak pakai tanggal pesan
+    const effectiveDate = tanggalOverride || invoiceDate;
+
+    const pad2 = (n: number) => String(n).padStart(2, "0");
+    const todayIso = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+
+    // Cari invoice + reset tanggal override agar tidak terbawa dari invoice sebelumnya
+    const doSearch = (inv: string) => { setSearchedInv(inv); setTanggalOverride(""); };
 
     /* ── calculations ───────────────────────────────────────── */
     const subtotal = useMemo(() =>
@@ -209,7 +218,7 @@ export default function InvoicePage() {
   <div class="inv-meta">
     <table>
       <tr><td>No. Invoice</td><td>: ${searchedInv}</td></tr>
-      <tr><td>Tanggal</td><td>: ${fmtDate(invoiceDate)}</td></tr>
+      <tr><td>Tanggal</td><td>: ${fmtDate(effectiveDate)}</td></tr>
       <tr><td>Customer</td><td>: ${invoiceCustomer.toUpperCase()}</td></tr>
     </table>
   </div>
@@ -338,7 +347,7 @@ export default function InvoicePage() {
                                             const done = invoiceMap.get(inv)!.every((r) => r.di_kirim);
                                             return (
                                                 <button key={inv}
-                                                    onClick={() => { setNoInvInput(inv); setSearchedInv(inv); }}
+                                                    onClick={() => { setNoInvInput(inv); doSearch(inv); }}
                                                     style={{
                                                         padding: "3px 10px", borderRadius: 99, border: "none", cursor: "pointer",
                                                         fontSize: 11, fontWeight: 700,
@@ -366,11 +375,11 @@ export default function InvoicePage() {
                                     <input
                                         type="text" value={noInvInput}
                                         onChange={(e) => setNoInvInput(e.target.value)}
-                                        onKeyDown={(e) => { if (e.key === "Enter") setSearchedInv(noInvInput.trim()); }}
+                                        onKeyDown={(e) => { if (e.key === "Enter") doSearch(noInvInput.trim()); }}
                                         placeholder="cth: 11312"
                                         style={{ ...inputSt, flex: 1 }} />
                                     <button
-                                        onClick={() => setSearchedInv(noInvInput.trim())}
+                                        onClick={() => doSearch(noInvInput.trim())}
                                         style={{
                                             padding: "8px 14px", borderRadius: 7, border: "none", cursor: "pointer",
                                             background: "#A67B5B", color: "white", fontWeight: 700, fontSize: 12, whiteSpace: "nowrap",
@@ -416,6 +425,32 @@ export default function InvoicePage() {
                                     <option value="yanto">{REKENING.yanto.no} — a/n {REKENING.yanto.an}</option>
                                     <option value="toto">{REKENING.toto.no} — a/n {REKENING.toto.an}</option>
                                 </select>
+                            </div>
+
+                            {/* Tanggal invoice (bisa beda dari tanggal pesan: tgl cetak/kirim) */}
+                            <div style={{ marginBottom: 6 }}>
+                                <label style={labelSt}>Tanggal Invoice</label>
+                                <input
+                                    type="date"
+                                    value={effectiveDate}
+                                    onChange={(e) => setTanggalOverride(e.target.value)}
+                                    style={inputSt}
+                                />
+                                <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                                    <button type="button" onClick={() => setTanggalOverride(todayIso)}
+                                        style={{ flex: 1, padding: "5px 0", borderRadius: 6, border: "1px solid #D1BFA3", cursor: "pointer", background: "white", color: "#5C4033", fontSize: 11, fontWeight: 700 }}>
+                                        Hari Ini
+                                    </button>
+                                    <button type="button" onClick={() => setTanggalOverride("")}
+                                        style={{ flex: 1, padding: "5px 0", borderRadius: 6, border: "1px solid #D1BFA3", cursor: "pointer", background: tanggalOverride === "" ? "#F5EBDD" : "white", color: "#5C4033", fontSize: 11, fontWeight: 700 }}>
+                                        Tgl Pesan
+                                    </button>
+                                </div>
+                                {tanggalOverride && tanggalOverride !== invoiceDate && (
+                                    <div style={{ fontSize: 10, color: "#A16207", marginTop: 4 }}>
+                                        ℹ️ Tanggal diubah dari tanggal pesan ({fmtDate(invoiceDate)})
+                                    </div>
+                                )}
                             </div>
 
                             {/* Result summary */}
@@ -510,7 +545,7 @@ export default function InvoicePage() {
                                         <tbody>
                                             {[
                                                 ["No. Invoice", searchedInv],
-                                                ["Tanggal", fmtDate(invoiceDate)],
+                                                ["Tanggal", fmtDate(effectiveDate)],
                                                 ["Customer", invoiceCustomer.toUpperCase()],
                                             ].map(([k, v]) => (
                                                 <tr key={k}>
