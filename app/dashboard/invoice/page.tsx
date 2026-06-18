@@ -13,6 +13,13 @@ const MONTH_NAMES_LONG = [
     "Juli", "Agustus", "September", "Oktober", "November", "Desember",
 ];
 
+/* ── Rekening pembayaran (bisa dipilih saat cetak invoice) ── */
+const REKENING = {
+    yanto: { no: "841-606-0148", an: "YANTO" },
+    toto: { no: "841 596 2955", an: "TOTO ALUMUNIUM MANUFACTURE" },
+} as const;
+type RekeningKey = keyof typeof REKENING;
+
 function fmtRp(val: number): string {
     return "Rp " + val.toLocaleString("id-ID");
 }
@@ -63,6 +70,7 @@ export default function InvoicePage() {
     const [dp, setDp] = useState("");
     const [diskonRp, setDiskonRp] = useState("");
     const [diskonPct, setDiskonPct] = useState("");
+    const [rekening, setRekening] = useState<RekeningKey>("yanto");
 
     const years: number[] = [];
     for (let y = 2023; y <= now.getFullYear() + 1; y++) years.push(y);
@@ -119,6 +127,7 @@ export default function InvoicePage() {
     /* ── print ───────────────────────────────────────────────── */
     const cetakInvoice = () => {
         if (invoiceItems.length === 0) return;
+        const rek = REKENING[rekening];
 
         const tableRows = invoiceItems.map((r, i) => {
             const h = parseIdNum(r.harga);
@@ -173,7 +182,9 @@ export default function InvoicePage() {
   .totals td { padding:5px 10px; font-size:12px; }
   .grand { background:#111; color:#fff; }
   .grand td { padding:10px 10px; font-size:14px; font-weight:800; }
-  .footer { margin-top:40px; display:flex; justify-content:space-between; align-items:flex-end; }
+  .footer { margin-top:34px; display:flex; justify-content:space-between; align-items:flex-start; gap:24px; }
+  .note { font-size:11px; color:#333; line-height:1.85; max-width:62%; }
+  .note-title { font-weight:700; margin-bottom:4px; }
   .tagline { font-size:12px; color:#A0522D; font-style:italic; }
   .sign { text-align:center; }
   .sign-line { width:130px; border-top:1px solid #333; margin:0 auto 6px; }
@@ -233,10 +244,21 @@ export default function InvoicePage() {
   </table>
 
   <div class="footer">
-    <div class="tagline">Terima kasih atas kepercayaan Anda.</div>
+    <div class="note">
+      <div class="note-title">NOTE :</div>
+      <div>Sistem pembayaran : DP 30% dari total harga.</div>
+      <div>Pelunasan ketika barang jadi dan siap kirim atau di ambil.</div>
+      <div>Cara Pembayaran : Transfer ke Rekening Bank BCA</div>
+      <div>No. Rekening : <strong>${rek.no}</strong></div>
+      <div>A/N : <strong>${rek.an}</strong></div>
+      <div class="tagline" style="margin-top:14px">Terima kasih atas kepercayaan Anda.</div>
+    </div>
     <div class="sign">
+      <p style="margin-bottom:2px">Hormat Kami,</p>
+      <div style="height:46px"></div>
       <div class="sign-line"></div>
-      <p>Hormat Kami,</p>
+      <p>( Yanto )</p>
+      <p style="font-weight:400;color:#666">Direktur</p>
     </div>
   </div>
 
@@ -386,6 +408,15 @@ export default function InvoicePage() {
                                     ℹ️ Jika keduanya diisi, diskon <strong>persentase</strong> yang digunakan
                                 </div>
                             )}
+
+                            {/* Pilih Rekening Pembayaran (muncul di NOTE invoice) */}
+                            <div style={{ marginTop: 10, marginBottom: 6 }}>
+                                <label style={labelSt}>Rekening Pembayaran (BCA)</label>
+                                <select value={rekening} onChange={(e) => setRekening(e.target.value as RekeningKey)} style={inputSt}>
+                                    <option value="yanto">{REKENING.yanto.no} — a/n {REKENING.yanto.an}</option>
+                                    <option value="toto">{REKENING.toto.no} — a/n {REKENING.toto.an}</option>
+                                </select>
+                            </div>
 
                             {/* Result summary */}
                             {invoiceItems.length > 0 && (
@@ -560,14 +591,25 @@ export default function InvoicePage() {
                                     </tbody>
                                 </table>
 
-                                {/* Footer */}
-                                <div style={{ marginTop: 32, display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-                                    <div style={{ fontSize: 12, color: "#A0522D", fontStyle: "italic" }}>
-                                        Terima kasih atas kepercayaan Anda.
+                                {/* Footer: NOTE + Tanda tangan */}
+                                <div style={{ marginTop: 28, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 24 }}>
+                                    <div style={{ fontSize: 11.5, color: "#333", lineHeight: 1.85, maxWidth: "62%" }}>
+                                        <div style={{ fontWeight: 700, marginBottom: 4 }}>NOTE :</div>
+                                        <div>Sistem pembayaran : DP 30% dari total harga.</div>
+                                        <div>Pelunasan ketika barang jadi dan siap kirim atau di ambil.</div>
+                                        <div>Cara Pembayaran : Transfer ke Rekening Bank BCA</div>
+                                        <div>No. Rekening : <strong>{REKENING[rekening].no}</strong></div>
+                                        <div>A/N : <strong>{REKENING[rekening].an}</strong></div>
+                                        <div style={{ fontSize: 12, color: "#A0522D", fontStyle: "italic", marginTop: 14 }}>
+                                            Terima kasih atas kepercayaan Anda.
+                                        </div>
                                     </div>
                                     <div style={{ textAlign: "center" }}>
+                                        <div style={{ fontSize: 11, color: "#333", fontWeight: 600, marginBottom: 2 }}>Hormat Kami,</div>
+                                        <div style={{ height: 46 }} />
                                         <div style={{ width: 130, borderTop: "1px solid #333", marginBottom: 6 }} />
-                                        <div style={{ fontSize: 11, color: "#333", fontWeight: 600 }}>Hormat Kami,</div>
+                                        <div style={{ fontSize: 12, color: "#333", fontWeight: 700 }}>( Yanto )</div>
+                                        <div style={{ fontSize: 11, color: "#666" }}>Direktur</div>
                                     </div>
                                 </div>
                             </>
