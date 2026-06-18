@@ -1,12 +1,15 @@
 "use client";
 import { useState } from "react";
-import { useTagihanBahan, TagihanBahan, TagihanBahanItem } from "@/lib/tagihan-bahan-store";
-import { formatCurrency, formatDate } from "@/lib/utils"; // assuming utils has these, if not we will define inline or use standard JS
+import { useTagihanBahan, TagihanBahan, TagihanBahanItem, tagihanStatus } from "@/lib/tagihan-bahan-store";
 
 export default function TagihanBahanPage() {
-    const { tagihanList, addTagihan, deleteTagihan, updateTagihan } = useTagihanBahan();
+    const { tagihanList, addTagihan, deleteTagihan, payTagihan } = useTagihanBahan();
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [viewData, setViewData] = useState<TagihanBahan | null>(null);
+    const [bayarInput, setBayarInput] = useState("");
+
+    // viewData selalu ambil versi terbaru dari list (agar paidAmount sinkron setelah bayar)
+    const detail = viewData ? (tagihanList.find(t => t.id === viewData.id) ?? viewData) : null;
 
     // Form state
     const [formTanggal, setFormTanggal] = useState(new Date().toISOString().split("T")[0]);
@@ -58,6 +61,7 @@ export default function TagihanBahanPage() {
             catatan: formCatatan,
             items: itemsWithExtras,
             grandTotal: calculateGrandTotal(),
+            paidAmount: 0,
             isPaid: false,
             paidDate: ""
         });
@@ -144,11 +148,18 @@ export default function TagihanBahanPage() {
                                         <td style={{ padding: "10px 14px", borderBottom: "1px solid #F0E6D8", color: "#555" }}>{tagihan.supplier}</td>
                                         <td style={{ padding: "10px 14px", borderBottom: "1px solid #F0E6D8", textAlign: "right", fontWeight: 800, color: "#A67B5B" }}>{toRupiah(tagihan.grandTotal)}</td>
                                         <td style={{ padding: "10px 14px", borderBottom: "1px solid #F0E6D8", textAlign: "center" }}>
-                                            {tagihan.isPaid ? (
-                                                <span style={{ padding: "3px 10px", borderRadius: 99, fontSize: 10, fontWeight: 700, background: "#DCFCE7", color: "#15803D" }}>Lunas</span>
-                                            ) : (
-                                                <span style={{ padding: "3px 10px", borderRadius: 99, fontSize: 10, fontWeight: 700, background: "#FEF2F2", color: "#991B1B" }}>Belum Lunas</span>
-                                            )}
+                                            {(() => {
+                                                const st = tagihanStatus(tagihan);
+                                                const sisa = tagihan.grandTotal - tagihan.paidAmount;
+                                                if (st === "lunas") return <span style={{ padding: "3px 10px", borderRadius: 99, fontSize: 10, fontWeight: 700, background: "#DCFCE7", color: "#15803D" }}>Lunas</span>;
+                                                if (st === "sebagian") return (
+                                                    <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                                                        <span style={{ padding: "3px 10px", borderRadius: 99, fontSize: 10, fontWeight: 700, background: "#FEF9C3", color: "#A16207" }}>Sebagian</span>
+                                                        <span style={{ fontSize: 10, color: "#A16207", fontWeight: 600 }}>Sisa {toRupiah(sisa)}</span>
+                                                    </div>
+                                                );
+                                                return <span style={{ padding: "3px 10px", borderRadius: 99, fontSize: 10, fontWeight: 700, background: "#FEF2F2", color: "#991B1B" }}>Belum Bayar</span>;
+                                            })()}
                                         </td>
                                         <td style={{ padding: "10px 14px", borderBottom: "1px solid #F0E6D8", textAlign: "center" }}>
                                             <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
@@ -360,13 +371,13 @@ export default function TagihanBahanPage() {
             )}
 
             {/* Modal View Mode */}
-            {viewData && (
+            {detail && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col" style={{ border: "1px solid #E6D5BE" }}>
                         <div className="p-4 sm:p-5 flex justify-between items-center" style={{ borderBottom: "1px solid #E6D5BE", background: "#FAF7F3" }}>
                             <div>
                                 <h2 style={{ fontSize: 18, fontWeight: 800, color: "#5C4033", display: "flex", alignItems: "center", gap: 10 }}>
-                                    Detail Tagihan <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", background: "#FFFBF7", border: "1px solid #D1BFA3", borderRadius: 6, color: "#A67B5B" }}>{viewData.noInvoice}</span>
+                                    Detail Tagihan <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", background: "#FFFBF7", border: "1px solid #D1BFA3", borderRadius: 6, color: "#A67B5B" }}>{detail.noInvoice}</span>
                                 </h2>
                             </div>
                             <button onClick={() => setViewData(null)} style={{ color: "#B89678", cursor: "pointer" }} className="hover:opacity-70">
@@ -378,26 +389,27 @@ export default function TagihanBahanPage() {
                             <div className="grid grid-cols-2 gap-4 text-sm p-4 rounded-lg" style={{ background: "#F5EBDD", borderLeft: "4px solid #A67B5B" }}>
                                 <div>
                                     <div className="mb-1" style={{ color: "#B89678", fontWeight: 700, fontSize: 10, textTransform: "uppercase", letterSpacing: 1 }}>Supplier</div>
-                                    <div style={{ color: "#3C2F2F", fontWeight: 800, fontSize: 13 }}>{viewData.supplier}</div>
+                                    <div style={{ color: "#3C2F2F", fontWeight: 800, fontSize: 13 }}>{detail.supplier}</div>
                                 </div>
                                 <div className="text-right">
                                     <div className="mb-1" style={{ color: "#B89678", fontWeight: 700, fontSize: 10, textTransform: "uppercase", letterSpacing: 1 }}>Tanggal</div>
-                                    <div style={{ color: "#3C2F2F", fontWeight: 800, fontSize: 13 }}>{toDateStr(viewData.tanggal)}</div>
+                                    <div style={{ color: "#3C2F2F", fontWeight: 800, fontSize: 13 }}>{toDateStr(detail.tanggal)}</div>
                                 </div>
                                 <div>
                                     <div className="mb-1" style={{ color: "#B89678", fontWeight: 700, fontSize: 10, textTransform: "uppercase", letterSpacing: 1 }}>Status Pembayaran</div>
                                     <div>
-                                        {viewData.isPaid ? (
-                                            <span style={{ background: "#DCFCE7", color: "#15803D", padding: "4px 8px", borderRadius: 99, fontSize: 11, fontWeight: 700 }}>Lunas</span>
-                                        ) : (
-                                            <span style={{ background: "#FEF2F2", color: "#991B1B", padding: "4px 8px", borderRadius: 99, fontSize: 11, fontWeight: 700 }}>Belum Lunas</span>
-                                        )}
+                                        {(() => {
+                                            const st = tagihanStatus(detail);
+                                            if (st === "lunas") return <span style={{ background: "#DCFCE7", color: "#15803D", padding: "4px 8px", borderRadius: 99, fontSize: 11, fontWeight: 700 }}>Lunas</span>;
+                                            if (st === "sebagian") return <span style={{ background: "#FEF9C3", color: "#A16207", padding: "4px 8px", borderRadius: 99, fontSize: 11, fontWeight: 700 }}>Sebagian</span>;
+                                            return <span style={{ background: "#FEF2F2", color: "#991B1B", padding: "4px 8px", borderRadius: 99, fontSize: 11, fontWeight: 700 }}>Belum Bayar</span>;
+                                        })()}
                                     </div>
                                 </div>
-                                {viewData.catatan && (
+                                {detail.catatan && (
                                     <div className="col-span-2 mt-2 pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
                                         <div className="mb-1" style={{ color: "#B89678", fontWeight: 700, fontSize: 10, textTransform: "uppercase", letterSpacing: 1 }}>Catatan</div>
-                                        <div style={{ color: "#3C2F2F", fontSize: 12, fontStyle: "italic" }}>{viewData.catatan}</div>
+                                        <div style={{ color: "#3C2F2F", fontSize: 12, fontStyle: "italic" }}>{detail.catatan}</div>
                                     </div>
                                 )}
                             </div>
@@ -413,7 +425,7 @@ export default function TagihanBahanPage() {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {viewData.items.map((item, idx) => (
+                                        {detail.items.map((item, idx) => (
                                             <tr key={item.id || idx} style={{ background: idx % 2 === 0 ? "white" : "#FAFAFA" }}>
                                                 <td style={{ padding: "9px 10px", borderBottom: "1px solid #E5E5E5", fontSize: 12 }}>{item.namaBahan}</td>
                                                 <td style={{ padding: "9px 10px", textAlign: "center", borderBottom: "1px solid #E5E5E5", fontSize: 12, fontWeight: 700 }}>{item.qty} <span style={{ fontWeight: 400, fontSize: 10 }}>({item.ukuran}m)</span></td>
@@ -425,33 +437,79 @@ export default function TagihanBahanPage() {
                                     <tfoot>
                                         <tr style={{ background: "#111" }}>
                                             <td colSpan={3} style={{ padding: "11px 10px", textAlign: "right", color: "white", fontWeight: 800, fontSize: 14 }}>Grand Total</td>
-                                            <td style={{ padding: "11px 10px", textAlign: "right", fontWeight: 900, color: "white", fontSize: 14 }}>{toRupiah(viewData.grandTotal)}</td>
+                                            <td style={{ padding: "11px 10px", textAlign: "right", fontWeight: 900, color: "white", fontSize: 14 }}>{toRupiah(detail.grandTotal)}</td>
                                         </tr>
                                     </tfoot>
                                 </table>
                             </div>
+
+                            {/* ── Pembayaran (bisa bertahap / cicilan) ── */}
+                            {(() => {
+                                const sisa = detail.grandTotal - detail.paidAmount;
+                                const st = tagihanStatus(detail);
+                                return (
+                                    <div style={{ background: "#FFFBF7", border: "1px solid #E6D5BE", borderRadius: 12, padding: 16 }}>
+                                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                                            <span style={{ fontSize: 12, color: "#8A7B6E", fontWeight: 600 }}>Sudah Dibayar</span>
+                                            <span style={{ fontSize: 13, fontWeight: 800, color: "#15803D" }}>{toRupiah(detail.paidAmount)}</span>
+                                        </div>
+                                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12, paddingBottom: 10, borderBottom: "1px dashed #E6D5BE" }}>
+                                            <span style={{ fontSize: 12, color: "#8A7B6E", fontWeight: 600 }}>Sisa Tagihan</span>
+                                            <span style={{ fontSize: 15, fontWeight: 900, color: sisa > 0 ? "#B91C1C" : "#15803D" }}>{toRupiah(sisa)}</span>
+                                        </div>
+                                        {st !== "lunas" ? (
+                                            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                                                <input
+                                                    type="number" min="1" placeholder="Jumlah bayar (Rp)"
+                                                    value={bayarInput}
+                                                    onChange={(e) => setBayarInput(e.target.value)}
+                                                    style={{ ...inputSt, flex: 1, minWidth: 150 }}
+                                                />
+                                                <button
+                                                    onClick={() => {
+                                                        const amt = parseFloat((bayarInput || "").replace(/[^0-9.]/g, "")) || 0;
+                                                        if (amt <= 0) { alert("Masukkan jumlah pembayaran lebih dari 0."); return; }
+                                                        payTagihan(detail.id, amt);
+                                                        setBayarInput("");
+                                                    }}
+                                                    style={{ padding: "9px 16px", borderRadius: 7, border: "none", cursor: "pointer", background: "#A67B5B", color: "white", fontWeight: 700, fontSize: 13, whiteSpace: "nowrap" }}
+                                                >
+                                                    Catat Pembayaran
+                                                </button>
+                                                <button
+                                                    onClick={() => { payTagihan(detail.id, sisa); setBayarInput(""); }}
+                                                    style={{ padding: "9px 14px", borderRadius: 7, border: "1px solid #15803D", cursor: "pointer", background: "#DCFCE7", color: "#15803D", fontWeight: 700, fontSize: 13, whiteSpace: "nowrap" }}
+                                                >
+                                                    Lunaskan
+                                                </button>
+                                                {detail.paidAmount > 0 && (
+                                                    <button
+                                                        onClick={() => { payTagihan(detail.id, -detail.paidAmount); setBayarInput(""); }}
+                                                        style={{ padding: "9px 12px", borderRadius: 7, border: "1px solid #D1BFA3", cursor: "pointer", background: "white", color: "#991B1B", fontWeight: 700, fontSize: 12, whiteSpace: "nowrap" }}
+                                                    >
+                                                        Reset
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                                <span style={{ fontSize: 13, fontWeight: 700, color: "#15803D" }}>✓ Tagihan sudah lunas</span>
+                                                <button
+                                                    onClick={() => { payTagihan(detail.id, -detail.paidAmount); setBayarInput(""); }}
+                                                    style={{ padding: "7px 12px", borderRadius: 7, border: "1px solid #D1BFA3", cursor: "pointer", background: "white", color: "#991B1B", fontWeight: 700, fontSize: 12 }}
+                                                >
+                                                    Reset Pembayaran
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
                         </div>
 
-                        <div className="border-t p-4 sm:p-5 flex justify-between gap-3 rounded-b-xl" style={{ borderTop: "1px solid #E6D5BE", background: "#FAF7F3" }}>
-                            <button 
-                                onClick={() => {
-                                    updateTagihan(viewData.id, { 
-                                        isPaid: !viewData.isPaid,
-                                        paidDate: !viewData.isPaid ? new Date().toISOString() : "" 
-                                    });
-                                    setViewData({...viewData, isPaid: !viewData.isPaid});
-                                }}
-                                style={{
-                                    padding: "8px 14px", borderRadius: 7, border: "none", cursor: "pointer",
-                                    fontSize: 12, fontWeight: 700, whiteSpace: "nowrap",
-                                    background: viewData.isPaid ? "#FEF2F2" : "#DCFCE7",
-                                    color: viewData.isPaid ? "#991B1B" : "#15803D"
-                                }}
-                            >
-                                {viewData.isPaid ? 'Batal Lunas' : 'Tandai Lunas'}
-                            </button>
-                            <button 
-                                onClick={() => setViewData(null)}
+                        <div className="border-t p-4 sm:p-5 flex justify-end gap-3 rounded-b-xl" style={{ borderTop: "1px solid #E6D5BE", background: "#FAF7F3" }}>
+                            <button
+                                onClick={() => { setViewData(null); setBayarInput(""); }}
                                 style={{
                                     padding: "8px 18px", borderRadius: 7, border: "1px solid #D1BFA3", cursor: "pointer",
                                     background: "white", color: "#5C4033", fontWeight: 700, fontSize: 12,

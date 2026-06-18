@@ -23,9 +23,18 @@ export type TagihanBahan = {
     catatan: string;
     items: TagihanBahanItem[];
     grandTotal: number;
-    isPaid: boolean;
-    paidDate: string;
+    paidAmount: number;   // total yang sudah dibayar (cicilan)
+    isPaid: boolean;      // turunan: paidAmount >= grandTotal
+    paidDate: string;     // tanggal pembayaran terakhir
 };
+
+/** Status pembayaran turunan dari grandTotal vs paidAmount. */
+export type TagihanStatus = "belum" | "sebagian" | "lunas";
+export function tagihanStatus(t: Pick<TagihanBahan, "grandTotal" | "paidAmount">): TagihanStatus {
+    if (t.paidAmount <= 0) return "belum";
+    if (t.paidAmount >= t.grandTotal) return "lunas";
+    return "sebagian";
+}
 
 function dbToTagihan(r: Record<string, unknown>, items: Record<string, unknown>[]): TagihanBahan {
     return {
@@ -35,6 +44,7 @@ function dbToTagihan(r: Record<string, unknown>, items: Record<string, unknown>[
         supplier: (r.supplier as string) || "",
         catatan: (r.catatan as string) || "",
         grandTotal: Number(r.grand_total) || 0,
+        paidAmount: Number(r.paid_amount) || 0,
         isPaid: !!r.is_paid,
         paidDate: (r.paid_date as string) || "",
         items: items.map(it => ({
@@ -54,6 +64,8 @@ type Ctx = {
     addTagihan: (t: Omit<TagihanBahan, "id">) => string;
     updateTagihan: (id: string, updates: Partial<TagihanBahan>) => void;
     deleteTagihan: (id: string) => void;
+    /** Catat pembayaran (cicilan). amount bisa negatif utk koreksi; di-clamp 0..grandTotal. */
+    payTagihan: (id: string, amount: number) => void;
 };
 
 const TagihanBahanCtx = createContext<Ctx | null>(null);
@@ -104,7 +116,8 @@ export function TagihanBahanProvider({ children }: { children: ReactNode }) {
             .on("postgres_changes", { event: "*", schema: "public", table: "tagihan_bahan" }, (payload) => {
                 const { eventType, new: n, old: o } = payload;
                 if (eventType === "INSERT") {
-                    setTagihanList(prev => [dbToTagihan(n, []), ...prev]);
+                    // Idempoten: hindari dobel bila sudah ditambah optimistic di addTagihan.
+                    setTagihanList(prev => prev.some(x => x.id === (n as { id: string }).id) ? prev : [dbToTagihan(n, []), ...prev]);
                 } else if (eventType === "UPDATE") {
                     setTagihanList(prev => prev.map(x => x.id === n.id ? { ...x, ...dbToTagihan(n, x.items) } : x));
                 } else if (eventType === "DELETE") {
@@ -155,6 +168,7 @@ export function TagihanBahanProvider({ children }: { children: ReactNode }) {
                 supplier: t.supplier,
                 catatan: t.catatan,
                 grand_total: t.grandTotal,
+                paid_amount: t.paidAmount,
                 is_paid: t.isPaid,
                 paid_date: t.paidDate,
             });
@@ -183,11 +197,25 @@ export function TagihanBahanProvider({ children }: { children: ReactNode }) {
         if (updates.supplier !== undefined) dbUpdates.supplier = updates.supplier;
         if (updates.catatan !== undefined) dbUpdates.catatan = updates.catatan;
         if (updates.grandTotal !== undefined) dbUpdates.grand_total = updates.grandTotal;
+        if (updates.paidAmount !== undefined) dbUpdates.paid_amount = updates.paidAmount;
         if (updates.isPaid !== undefined) dbUpdates.is_paid = updates.isPaid;
         if (updates.paidDate !== undefined) dbUpdates.paid_date = updates.paidDate;
         if (Object.keys(dbUpdates).length > 0) {
             supabase.from("tagihan_bahan").update(dbUpdates).eq("id", id).then();
         }
+    }, []);
+
+    const payTagihan = useCallback((id: string, amount: number) => {
+        setTagihanList(prev => prev.map(t => {
+            if (t.id !== id) return t;
+            const newPaid = Math.min(t.grandTotal, Math.max(0, t.paidAmount + amount));
+            const isPaid = t.grandTotal > 0 && newPaid >= t.grandTotal;
+            const paidDate = newPaid > 0 ? new Date().toISOString() : "";
+            supabase.from("tagihan_bahan")
+                .update({ paid_amount: newPaid, is_paid: isPaid, paid_date: paidDate })
+                .eq("id", id).then();
+            return { ...t, paidAmount: newPaid, isPaid, paidDate };
+        }));
     }, []);
 
     const deleteTagihan = useCallback((id: string) => {
@@ -196,7 +224,7 @@ export function TagihanBahanProvider({ children }: { children: ReactNode }) {
     }, []);
 
     return (
-        <TagihanBahanCtx.Provider value={{ tagihanList, loading, addTagihan, updateTagihan, deleteTagihan }}>
+        <TagihanBahanCtx.Provider value={{ tagihanList, loading, addTagihan, updateTagihan, deleteTagihan, payTagihan }}>
             {children}
         </TagihanBahanCtx.Provider>
     );
