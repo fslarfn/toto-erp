@@ -70,6 +70,26 @@ type Ctx = {
 
 const TagihanBahanCtx = createContext<Ctx | null>(null);
 
+/** Ambil semua item dgn chunk id + paginasi .range (hindari cap 1000). */
+async function fetchAllTagihanItems(ids: string[]): Promise<Record<string, unknown>[]> {
+    const all: Record<string, unknown>[] = [];
+    const CHUNK = 150;
+    for (let i = 0; i < ids.length; i += CHUNK) {
+        const chunk = ids.slice(i, i + CHUNK);
+        let from = 0;
+        while (true) {
+            const { data, error } = await supabase
+                .from("tagihan_bahan_items").select("*")
+                .in("tagihan_id", chunk)
+                .range(from, from + 999);
+            if (error) { console.error("Error fetching tagihan_bahan_items:", error); break; }
+            if (data && data.length) { all.push(...data); if (data.length < 1000) break; from += 1000; }
+            else break;
+        }
+    }
+    return all;
+}
+
 export function TagihanBahanProvider({ children }: { children: ReactNode }) {
     const [tagihanList, setTagihanList] = useState<TagihanBahan[]>([]);
     const [loading, setLoading] = useState(true);
@@ -79,28 +99,28 @@ export function TagihanBahanProvider({ children }: { children: ReactNode }) {
         let cancelled = false;
         (async () => {
             try {
-                const { data: headers } = await supabase
-                    .from("tagihan_bahan")
-                    .select("*")
-                    .order("tanggal", { ascending: false });
-
-                if (!cancelled && headers) {
-                    const ids = headers.map(h => h.id);
-                    let itemsData: Record<string, unknown>[] = [];
-                    if (ids.length > 0) {
-                        const { data: items } = await supabase
-                            .from("tagihan_bahan_items")
-                            .select("*")
-                            .in("tagihan_id", ids);
-                        if (items) itemsData = items;
-                    }
-                    const mapped = headers.map(h =>
-                        dbToTagihan(h, itemsData.filter(it => (it as Record<string, unknown>).tagihan_id === h.id))
-                    );
-                    setTagihanList(mapped);
+                const headers: Record<string, unknown>[] = [];
+                let from = 0;
+                while (true) {
+                    const { data, error } = await supabase
+                        .from("tagihan_bahan").select("*")
+                        .order("tanggal", { ascending: false })
+                        .range(from, from + 999);
+                    if (error) { console.error("Error fetching tagihan_bahan:", error); break; }
+                    if (data && data.length) { headers.push(...data); if (data.length < 1000) break; from += 1000; }
+                    else break;
                 }
-            } catch {
-                // keep empty
+                if (cancelled) return;
+
+                const ids = headers.map(h => h.id as string);
+                const itemsData = ids.length > 0 ? await fetchAllTagihanItems(ids) : [];
+                if (cancelled) return;
+
+                setTagihanList(headers.map(h =>
+                    dbToTagihan(h, itemsData.filter(it => (it as Record<string, unknown>).tagihan_id === h.id))
+                ));
+            } catch (e) {
+                console.error("Tagihan Bahan fetch error:", e);
             } finally {
                 if (!cancelled) setLoading(false);
             }

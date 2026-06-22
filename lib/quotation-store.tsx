@@ -49,13 +49,19 @@ export function QuotationProvider({ children }: { children: ReactNode }) {
         let isMounted = true;
         (async () => {
             try {
-                const { data, error } = await supabase
-                    .from("quotations")
-                    .select("*")
-                    .order("created_at", { ascending: false });
-                
-                if (error) throw error;
-                if (isMounted) setQuotations(data || []);
+                // Paginasi (hindari cap 1000 → penawaran lama tidak hilang)
+                const all: Quotation[] = [];
+                let from = 0;
+                while (true) {
+                    const { data, error } = await supabase
+                        .from("quotations").select("*")
+                        .order("created_at", { ascending: false })
+                        .range(from, from + 999);
+                    if (error) throw error;
+                    if (data && data.length) { all.push(...(data as Quotation[])); if (data.length < 1000) break; from += 1000; }
+                    else break;
+                }
+                if (isMounted) setQuotations(all);
             } catch (err) {
                 console.error("Failed to fetch quotations:", err);
             } finally {
@@ -76,7 +82,7 @@ export function QuotationProvider({ children }: { children: ReactNode }) {
                     const { eventType, new: n, old: o } = payload;
 
                     if (eventType === "INSERT") {
-                        setQuotations(prev => [n as Quotation, ...prev]);
+                        setQuotations(prev => prev.some(q => q.id === (n as Quotation).id) ? prev : [n as Quotation, ...prev]);
                     } else if (eventType === "UPDATE") {
                         setQuotations(prev =>
                             prev.map(q => (q.id === n.id ? (n as Quotation) : q))

@@ -58,6 +58,27 @@ function dbToSuratJalan(r: Record<string, unknown>, items: Record<string, unknow
     };
 }
 
+/** Ambil SEMUA item utk daftar id, dgn chunk id (hindari URL kepanjangan)
+    + paginasi .range (hindari cap 1000 baris Supabase). */
+async function fetchAllSJItems(ids: string[]): Promise<Record<string, unknown>[]> {
+    const all: Record<string, unknown>[] = [];
+    const CHUNK = 150;
+    for (let i = 0; i < ids.length; i += CHUNK) {
+        const chunk = ids.slice(i, i + CHUNK);
+        let from = 0;
+        while (true) {
+            const { data, error } = await supabase
+                .from("surat_jalan_items").select("*")
+                .in("surat_jalan_id", chunk)
+                .range(from, from + 999);
+            if (error) { console.error("Error fetching surat_jalan_items:", error); break; }
+            if (data && data.length) { all.push(...data); if (data.length < 1000) break; from += 1000; }
+            else break;
+        }
+    }
+    return all;
+}
+
 type Ctx = {
     suratJalans: SuratJalanRow[];
     loading: boolean;
@@ -76,29 +97,28 @@ export function SuratJalanProvider({ children }: { children: ReactNode }) {
         let cancelled = false;
         (async () => {
             try {
-                const { data: headers, error: headersErr } = await supabase
-                    .from("surat_jalan")
-                    .select("*")
-                    .order("tanggal", { ascending: false });
-
-                if (headersErr) console.error("Error fetching surat_jalan:", headersErr);
-
-                if (!cancelled && headers) {
-                    const ids = headers.map(h => h.id);
-                    let itemsData: Record<string, unknown>[] = [];
-                    if (ids.length > 0) {
-                        const { data: items, error: itemsErr } = await supabase
-                            .from("surat_jalan_items")
-                            .select("*")
-                            .in("surat_jalan_id", ids);
-                        if (itemsErr) console.error("Error fetching surat_jalan_items:", itemsErr);
-                        if (items) itemsData = items;
-                    }
-                    setSuratJalans(headers.map(h =>
-                        dbToSuratJalan(h, itemsData.filter(it => (it as Record<string, unknown>).surat_jalan_id === h.id))
-                    ));
+                // Paginasi header (hindari cap 1000 → SJ lama tidak hilang)
+                const headers: Record<string, unknown>[] = [];
+                let from = 0;
+                while (true) {
+                    const { data, error } = await supabase
+                        .from("surat_jalan").select("*")
+                        .order("tanggal", { ascending: false })
+                        .range(from, from + 999);
+                    if (error) { console.error("Error fetching surat_jalan:", error); break; }
+                    if (data && data.length) { headers.push(...data); if (data.length < 1000) break; from += 1000; }
+                    else break;
                 }
-            } catch { /* keep empty */ }
+                if (cancelled) return;
+
+                const ids = headers.map(h => h.id as string);
+                const itemsData = ids.length > 0 ? await fetchAllSJItems(ids) : [];
+                if (cancelled) return;
+
+                setSuratJalans(headers.map(h =>
+                    dbToSuratJalan(h, itemsData.filter(it => (it as Record<string, unknown>).surat_jalan_id === h.id))
+                ));
+            } catch (e) { console.error("Surat Jalan fetch error:", e); }
             finally { if (!cancelled) setLoading(false); }
         })();
         return () => { cancelled = true; };
@@ -112,7 +132,9 @@ export function SuratJalanProvider({ children }: { children: ReactNode }) {
             .on("postgres_changes", { event: "*", schema: "public", table: "surat_jalan" }, (payload) => {
                 const { eventType, new: n, old: o } = payload;
                 if (eventType === "INSERT") {
-                    setSuratJalans(prev => [dbToSuratJalan(n, []), ...prev]);
+                    // Dedup: lewati bila id sudah ada (hindari duplikat dari echo realtime
+                    // setelah addSJ optimistik) yg bisa tampil dgn item kosong / qty 0.
+                    setSuratJalans(prev => prev.some(x => x.id === (n as { id: string }).id) ? prev : [dbToSuratJalan(n, []), ...prev]);
                 } else if (eventType === "UPDATE") {
                     setSuratJalans(prev => prev.map(x => x.id === n.id ? { ...x, ...dbToSuratJalan(n, x.items) } : x));
                 } else if (eventType === "DELETE") {

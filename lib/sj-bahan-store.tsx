@@ -60,6 +60,26 @@ type Ctx = {
     deleteSJBahan: (id: string) => void;
 };
 
+/** Ambil semua item dgn chunk id + paginasi .range (hindari cap 1000). */
+async function fetchAllSJBahanItems(ids: string[]): Promise<Record<string, unknown>[]> {
+    const all: Record<string, unknown>[] = [];
+    const CHUNK = 150;
+    for (let i = 0; i < ids.length; i += CHUNK) {
+        const chunk = ids.slice(i, i + CHUNK);
+        let from = 0;
+        while (true) {
+            const { data, error } = await supabase
+                .from("sj_bahan_items").select("*")
+                .in("sj_bahan_id", chunk)
+                .range(from, from + 999);
+            if (error) { console.error("Error fetching sj_bahan_items:", error); break; }
+            if (data && data.length) { all.push(...data); if (data.length < 1000) break; from += 1000; }
+            else break;
+        }
+    }
+    return all;
+}
+
 const SJBahanCtx = createContext<Ctx | null>(null);
 
 export function SJBahanProvider({ children }: { children: ReactNode }) {
@@ -70,26 +90,27 @@ export function SJBahanProvider({ children }: { children: ReactNode }) {
         let cancelled = false;
         (async () => {
             try {
-                const { data: headers } = await supabase
-                    .from("sj_bahan")
-                    .select("*")
-                    .order("tanggal", { ascending: false });
-
-                if (!cancelled && headers) {
-                    const ids = headers.map(h => h.id);
-                    let itemsData: Record<string, unknown>[] = [];
-                    if (ids.length > 0) {
-                        const { data: items } = await supabase
-                            .from("sj_bahan_items")
-                            .select("*")
-                            .in("sj_bahan_id", ids);
-                        if (items) itemsData = items;
-                    }
-                    setSjBahan(headers.map(h =>
-                        dbToSJBahan(h, itemsData.filter(it => (it as Record<string, unknown>).sj_bahan_id === h.id))
-                    ));
+                const headers: Record<string, unknown>[] = [];
+                let from = 0;
+                while (true) {
+                    const { data, error } = await supabase
+                        .from("sj_bahan").select("*")
+                        .order("tanggal", { ascending: false })
+                        .range(from, from + 999);
+                    if (error) { console.error("Error fetching sj_bahan:", error); break; }
+                    if (data && data.length) { headers.push(...data); if (data.length < 1000) break; from += 1000; }
+                    else break;
                 }
-            } catch { /* keep empty */ }
+                if (cancelled) return;
+
+                const ids = headers.map(h => h.id as string);
+                const itemsData = ids.length > 0 ? await fetchAllSJBahanItems(ids) : [];
+                if (cancelled) return;
+
+                setSjBahan(headers.map(h =>
+                    dbToSJBahan(h, itemsData.filter(it => (it as Record<string, unknown>).sj_bahan_id === h.id))
+                ));
+            } catch (e) { console.error("SJ Bahan fetch error:", e); }
             finally { if (!cancelled) setLoading(false); }
         })();
         return () => { cancelled = true; };
@@ -103,7 +124,7 @@ export function SJBahanProvider({ children }: { children: ReactNode }) {
             .on("postgres_changes", { event: "*", schema: "public", table: "sj_bahan" }, (payload) => {
                 const { eventType, new: n, old: o } = payload;
                 if (eventType === "INSERT") {
-                    setSjBahan(prev => [dbToSJBahan(n, []), ...prev]);
+                    setSjBahan(prev => prev.some(x => x.id === (n as { id: string }).id) ? prev : [dbToSJBahan(n, []), ...prev]);
                 } else if (eventType === "UPDATE") {
                     const row = n as Record<string, any>;
                     const mapped: Partial<SJBahanRow> = {};
