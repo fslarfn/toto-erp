@@ -25,29 +25,9 @@ async function addLog(pesanan_id: number, action: string, from_status: string, t
     try { await supabase.from("production_logs").insert({ pesanan_id, action, from_status, to_status, note, user_name }); } catch {}
 }
 
-const METODE_OPTIONS = [
-    { value: "", label: "Pilih metode kirim..." },
-    { value: "packing_ekspedisi", label: "📦 Packing + Ekspedisi" },
-    { value: "packing_lalamove", label: "📦 Packing + Lalamove/Gojek" },
-    { value: "tanpa_packing_ekspedisi", label: "🚚 Tanpa Packing + Ekspedisi" },
-    { value: "tanpa_packing_lalamove", label: "🛵 Tanpa Packing + Lalamove/Gojek" },
-    { value: "diambil", label: "🏪 Diambil Sendiri" },
-];
-
-const METODE_BADGE: Record<string, { label: string; bg: string; color: string }> = {
-    packing_ekspedisi: { label: "📦 Ekspedisi", bg: "#DBEAFE", color: "#1D4ED8" },
-    packing_lalamove: { label: "📦 Lalamove", bg: "#E0E7FF", color: "#4338CA" },
-    tanpa_packing_ekspedisi: { label: "🚚 Ekspedisi", bg: "#FEF9C3", color: "#A16207" },
-    tanpa_packing_lalamove: { label: "🛵 Lalamove", bg: "#FCE7F3", color: "#BE185D" },
-    diambil: { label: "🏪 Diambil", bg: "#F3F4F6", color: "#374151" },
-};
-
 /* ── SVG Icons for tabs ── */
 function IconGudang({ size = 16, color = "currentColor" }: { size?: number; color?: string }) {
     return (<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 2 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>);
-}
-function IconFollowUp({ size = 16, color = "currentColor" }: { size?: number; color?: string }) {
-    return (<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>);
 }
 function IconKirim({ size = 16, color = "currentColor" }: { size?: number; color?: string }) {
     return (<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>);
@@ -236,77 +216,7 @@ function TabCekGudang() {
 }
 
 /* ================================================================
-   TAB 3: FOLLOW UP — Marketing follow up customer & pilih metode kirim
-================================================================ */
-function TabFollowUp() {
-    const { rows, updateRow } = usePesanan();
-    const { user } = useAuth();
-    const [search, setSearch] = useState("");
-    const [flash, setFlash] = useState<number | null>(null);
-
-    const items = rows.filter(r => (r.customer || r.deskripsi) && r.siap_kirim === true && !r.metode_kirim && r.di_kirim === false);
-    const filtered = items.filter(r => {
-        if (!search) return true;
-        return [r.customer, r.deskripsi, r.po_label, r.production_note].join(" ").toLowerCase().includes(search.toLowerCase());
-    });
-
-    const groups: Record<string, PesananRow[]> = {};
-    filtered.forEach(r => { const k = r.po_label || "(Tanpa PO)"; if (!groups[k]) groups[k] = []; groups[k].push(r); });
-
-    const setMetode = (row: PesananRow, metode: string) => {
-        if (!metode) return;
-        const isPacking = metode.startsWith("packing_");
-        updateRow(row.id, { metode_kirim: metode, is_packing: isPacking }, true);
-        addLog(row.id, "metode_kirim", "", metode, "", user?.name || "");
-        setFlash(row.id); setTimeout(() => setFlash(null), 1200);
-    };
-
-    return (
-        <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
-            <SectionHeader title="Follow Up Customer" count={items.length} countBg="#FEF3C7" countColor="#D97706"
-                actions={<WaButtons title="Follow Up" items={filtered} statusOf={r => r.metode_kirim ? "✅" : "⏳"} />}>
-                <SearchBar value={search} onChange={setSearch} placeholder="Cari customer..." />
-            </SectionHeader>
-            <div style={{ flex: 1, overflow: "auto", padding: "12px 16px", background: "#F8F4EF" }}>
-                {Object.keys(groups).length === 0 ? (
-                    <EmptyState icon={<IconFollowUp size={48} color="#C5A882" />} title="Tidak ada yang perlu di-follow up" subtitle="Semua customer sudah dikonfirmasi" />
-                ) : Object.entries(groups).sort(([a], [b]) => a.localeCompare(b)).map(([opKey, opRows]) => (
-                    <div key={opKey} style={{ marginBottom: 12, borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.03)" }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "linear-gradient(135deg, #92400E, #D97706)" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                <span style={{ fontSize: 13, fontWeight: 700, color: "white" }}>PO {opKey}</span>
-                                <span style={{ background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.9)", borderRadius: 99, padding: "1px 8px", fontSize: 11, fontWeight: 600 }}>{opRows.length} item</span>
-                            </div>
-                        </div>
-                        <div style={{ background: "white" }}>
-                            {opRows.map((row, idx) => (
-                                <div key={row.id} style={{ padding: "11px 14px", borderBottom: idx < opRows.length - 1 ? "1px solid #F5F0EC" : "none", background: flash === row.id ? "#F0FFF4" : "white", transition: "background 0.4s" }}>
-                                    <div style={{ fontWeight: 600, fontSize: 13, color: "#3C2F2F" }}>{row.customer || "—"}</div>
-                                    <div style={{ fontSize: 11.5, color: "#8A7B6E", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>{row.deskripsi || "—"}</div>
-                                    <div style={{ fontSize: 10.5, color: "#B89678", marginTop: 2 }}>UK: {row.ukuran || "—"} · Qty: {row.qty || "—"} · PO: {row.po_label || "—"} · 🗓️ {fmtShort(row.tanggal)}</div>
-                                    {row.production_note && (
-                                        <div style={{ marginTop: 5, padding: "4px 8px", background: "#FAFAF5", borderRadius: 6, fontSize: 11, color: "#8A6D55", border: "1px dashed #E8DDD0" }}>📝 {row.production_note}</div>
-                                    )}
-                                    <select value={row.metode_kirim} onChange={e => setMetode(row, e.target.value)}
-                                        style={{
-                                            width: "100%", marginTop: 8, padding: "9px 12px", borderRadius: 8,
-                                            border: "1.5px solid #E8DDD0", fontSize: 12, fontWeight: 600,
-                                            color: "#5C4033", background: "#FAFAF8", cursor: "pointer", outline: "none",
-                                        }}>
-                                        {METODE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                                    </select>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-}
-
-/* ================================================================
-   TAB 4: PENGIRIMAN — PIC Gudang kirim barang sesuai metode dari marketing
+   TAB 4: KIRIM — input ekspedisi + tandai dikirim (per PO)
 ================================================================ */
 function TabPengiriman() {
     const { rows, updateRow } = usePesanan();
@@ -315,110 +225,77 @@ function TabPengiriman() {
     const [flash, setFlash] = useState<number | null>(null);
     const [ekspedisiInputs, setEkspedisiInputs] = useState<Record<number, string>>({});
 
-    const items = rows.filter(r => (r.customer || r.deskripsi) && r.siap_kirim === true && r.metode_kirim && r.di_kirim === false);
+    const items = rows.filter(r => (r.customer || r.deskripsi) && r.siap_kirim === true && r.di_kirim === false);
     const filtered = items.filter(r => {
         if (!search) return true;
-        return [r.customer, r.deskripsi, r.po_label, r.metode_kirim].join(" ").toLowerCase().includes(search.toLowerCase());
+        return [r.customer, r.deskripsi, r.po_label, r.no_inv, r.ekspedisi].join(" ").toLowerCase().includes(search.toLowerCase());
     });
 
     const groups: Record<string, PesananRow[]> = {};
-    filtered.forEach(r => { const k = r.metode_kirim || "unknown"; if (!groups[k]) groups[k] = []; groups[k].push(r); });
+    filtered.forEach(r => { const k = r.po_label || "(Tanpa PO)"; if (!groups[k]) groups[k] = []; groups[k].push(r); });
+    const sortedKeys = Object.keys(groups).sort((a, b) => a.localeCompare(b));
 
-    const getEkspedisiValue = (row: PesananRow) => {
-        if (ekspedisiInputs[row.id] !== undefined) return ekspedisiInputs[row.id];
-        return row.ekspedisi || "";
-    };
-
-    const setEkspedisiInput = (rowId: number, val: string) => {
-        setEkspedisiInputs(prev => ({ ...prev, [rowId]: val }));
-    };
+    const getEkspedisiValue = (row: PesananRow) => ekspedisiInputs[row.id] !== undefined ? ekspedisiInputs[row.id] : (row.ekspedisi || "");
+    const setEkspedisiInput = (rowId: number, val: string) => setEkspedisiInputs(prev => ({ ...prev, [rowId]: val }));
 
     const markDikirim = (row: PesananRow) => {
         const eks = getEkspedisiValue(row);
-        // Ekspedisi WAJIB terisi sebelum item ditandai dikirim
-        if (!eks.trim()) {
-            alert("Harap isi ekspedisi terlebih dahulu (mis. JNE, SiCepat, Lalamove, Diambil)!");
-            return;
-        }
-        const patch: Partial<PesananRow> = { di_kirim: true, shipped_at: new Date().toISOString() };
-        if (eks) patch.ekspedisi = eks;
-        updateRow(row.id, patch, true);
-        addLog(row.id, "status_change", "siap_kirim", "di_kirim", eks ? `via ${eks}` : "", user?.name || "");
-        pushNotify({
-            notificationType: "status_produksi",
-            title: "Pesanan Dikirim",
-            body: `${row.customer || "—"} — ${row.deskripsi || "—"}${eks ? ` via ${eks}` : ""}`,
-            url: "/dashboard/produksi",
-        });
+        if (!eks.trim()) { alert("Harap isi ekspedisi terlebih dahulu (mis. JNE, SiCepat, Lalamove, Diambil)!"); return; }
+        updateRow(row.id, { di_kirim: true, shipped_at: new Date().toISOString(), ekspedisi: eks.trim() }, true);
+        addLog(row.id, "status_change", "siap_kirim", "di_kirim", `via ${eks}`, user?.name || "");
+        pushNotify({ notificationType: "status_produksi", title: "Pesanan Dikirim", body: `${row.customer || "—"} — ${row.deskripsi || "—"} via ${eks}`, url: "/dashboard/produksi" });
         setFlash(row.id); setTimeout(() => setFlash(null), 1200);
     };
 
     const markAllDikirim = (rowList: PesananRow[]) => {
-        // Semua item wajib punya ekspedisi sebelum dikirim
         const missing = rowList.filter(r => !getEkspedisiValue(r).trim());
-        if (missing.length > 0) {
-            alert(`${missing.length} item belum diisi ekspedisinya!`);
-            return;
-        }
+        if (missing.length > 0) { alert(`${missing.length} item belum diisi ekspedisinya!`); return; }
         rowList.forEach(r => {
             const eks = getEkspedisiValue(r);
-            const patch: Partial<PesananRow> = { di_kirim: true, shipped_at: new Date().toISOString() };
-            if (eks) patch.ekspedisi = eks;
-            updateRow(r.id, patch, true);
-            addLog(r.id, "status_change", "siap_kirim", "di_kirim", eks ? `via ${eks}` : "", user?.name || "");
+            updateRow(r.id, { di_kirim: true, shipped_at: new Date().toISOString(), ekspedisi: eks.trim() }, true);
+            addLog(r.id, "status_change", "siap_kirim", "di_kirim", `via ${eks}`, user?.name || "");
         });
     };
 
-    const metodeOrder = ["packing_ekspedisi", "packing_lalamove", "tanpa_packing_ekspedisi", "tanpa_packing_lalamove", "diambil"];
-    const sortedKeys = Object.keys(groups).sort((a, b) => {
-        const ia = metodeOrder.indexOf(a); const ib = metodeOrder.indexOf(b);
-        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
-    });
-
     return (
         <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
-            <SectionHeader title="Proses Pengiriman" count={items.length} countBg="#DCFCE7" countColor="#15803D"
+            <SectionHeader title="Siap Dikirim" count={items.length} countBg="#DCFCE7" countColor="#15803D"
                 actions={<WaButtons title="Barang Keluar" items={filtered} ekspedisi statusOf={r => r.di_kirim ? "✅" : "⏳"} />}>
-                <SearchBar value={search} onChange={setSearch} placeholder="Cari customer, metode..." />
+                <SearchBar value={search} onChange={setSearch} placeholder="Cari customer, invoice, PO..." />
             </SectionHeader>
             <div style={{ flex: 1, overflow: "auto", padding: "12px 16px", background: "#F8F4EF" }}>
                 {sortedKeys.length === 0 ? (
-                    <EmptyState icon={<IconKirim size={48} color="#C5A882" />} title="Tidak ada barang untuk dikirim" subtitle="Tunggu Marketing menentukan metode kirim" />
-                ) : sortedKeys.map(metodeKey => {
-                    const metodeRows = groups[metodeKey];
-                    const badge = METODE_BADGE[metodeKey] || { label: metodeKey, bg: "#F3F4F6", color: "#374151" };
+                    <EmptyState icon={<IconKirim size={48} color="#C5A882" />} title="Tidak ada barang untuk dikirim" subtitle="Barang yang sudah siap (Gudang) akan muncul di sini" />
+                ) : sortedKeys.map(poKey => {
+                    const poRows = groups[poKey];
                     return (
-                        <div key={metodeKey} style={{ marginBottom: 12, borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.03)" }}>
+                        <div key={poKey} style={{ marginBottom: 12, borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.03)" }}>
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "linear-gradient(135deg, #166534, #22C55E)" }}>
                                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                    <span style={{ background: "rgba(255,255,255,0.15)", color: "white", borderRadius: 6, padding: "3px 10px", fontSize: 12, fontWeight: 700 }}>{badge.label}</span>
-                                    <span style={{ background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.9)", borderRadius: 99, padding: "1px 8px", fontSize: 11, fontWeight: 600 }}>{metodeRows.length}</span>
+                                    <span style={{ fontSize: 13, fontWeight: 700, color: "white" }}>PO {poKey}</span>
+                                    <span style={{ background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.9)", borderRadius: 99, padding: "1px 8px", fontSize: 11, fontWeight: 600 }}>{poRows.length}</span>
                                 </div>
-                                <button onClick={() => markAllDikirim(metodeRows)} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.9)", fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "background 0.2s" }}
+                                <button onClick={() => markAllDikirim(poRows)} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.9)", fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "background 0.2s" }}
                                     onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.2)")}
                                     onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}>
                                     Kirim Semua ✓
                                 </button>
                             </div>
                             <div style={{ background: "white" }}>
-                                {metodeRows.map((row, idx) => (
-                                    <div key={row.id} style={{ padding: "11px 14px", borderBottom: idx < metodeRows.length - 1 ? "1px solid #F5F0EC" : "none", background: flash === row.id ? "#F0FFF4" : "white", transition: "background 0.4s" }}>
+                                {poRows.map((row, idx) => (
+                                    <div key={row.id} style={{ padding: "11px 14px", borderBottom: idx < poRows.length - 1 ? "1px solid #F5F0EC" : "none", background: flash === row.id ? "#F0FFF4" : "white", transition: "background 0.4s" }}>
                                         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                                             <div style={{ flex: 1, minWidth: 0 }}>
                                                 <div style={{ fontWeight: 600, fontSize: 13, color: "#3C2F2F" }}>{row.customer || "—"}</div>
                                                 <div style={{ fontSize: 11.5, color: "#8A7B6E", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>{row.deskripsi || "—"}</div>
-                                                <div style={{ fontSize: 10.5, color: "#B89678", marginTop: 2 }}>UK: {row.ukuran || "—"} · Qty: {row.qty || "—"} · PO: {row.po_label || "—"}</div>
+                                                <div style={{ fontSize: 10.5, color: "#B89678", marginTop: 2 }}>UK: {row.ukuran || "—"} · Qty: {row.qty || "—"} · Inv: {row.no_inv || "—"}</div>
                                                 {row.production_note && <div style={{ marginTop: 3, fontSize: 10.5, color: "#8A6D55" }}>📝 {row.production_note}</div>}
                                             </div>
-                                            <button onClick={() => markDikirim(row)} style={{
-                                                padding: "7px 14px", borderRadius: 8, border: "none", cursor: "pointer",
-                                                fontWeight: 700, fontSize: 12, whiteSpace: "nowrap",
-                                                background: "#15803D", color: "white",
-                                                transition: "opacity 0.15s",
-                                            }}
+                                            <button onClick={() => markDikirim(row)} style={{ padding: "7px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12, whiteSpace: "nowrap", background: "#15803D", color: "white", transition: "opacity 0.15s" }}
                                                 onMouseEnter={e => { e.currentTarget.style.opacity = "0.85"; }}
-                                                onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}
-                                            >Dikirim ✓</button>
+                                                onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}>
+                                                Dikirim ✓
+                                            </button>
                                         </div>
                                         <div style={{ marginTop: 8 }}>
                                             <label style={{ display: "block", fontSize: 9, fontWeight: 700, color: "#B89678", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 3 }}>Ekspedisi</label>
@@ -428,13 +305,7 @@ function TabPengiriman() {
                                                 onChange={e => setEkspedisiInput(row.id, e.target.value)}
                                                 onBlur={e => { updateRow(row.id, { ekspedisi: e.target.value.trim() }, true); e.target.style.borderColor = e.target.value.trim() ? "#22C55E" : "#FCA5A5"; e.target.style.boxShadow = "none"; }}
                                                 placeholder="JNE, SiCepat, LION, Lalamove, Diambil..."
-                                                style={{
-                                                    width: "100%", padding: "8px 12px", borderRadius: 8,
-                                                    border: getEkspedisiValue(row).trim() ? "1.5px solid #22C55E" : "1.5px solid #FCA5A5",
-                                                    fontSize: 12, color: "#3C2F2F", background: getEkspedisiValue(row).trim() ? "#F0FFF4" : "#FFF5F5",
-                                                    outline: "none", boxSizing: "border-box",
-                                                    transition: "border-color 0.2s, background 0.2s",
-                                                }}
+                                                style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: getEkspedisiValue(row).trim() ? "1.5px solid #22C55E" : "1.5px solid #FCA5A5", fontSize: 12, color: "#3C2F2F", background: getEkspedisiValue(row).trim() ? "#F0FFF4" : "#FFF5F5", outline: "none", boxSizing: "border-box", transition: "border-color 0.2s, background 0.2s" }}
                                                 onFocus={e => { e.target.style.borderColor = "#A67B5B"; e.target.style.boxShadow = "0 0 0 3px rgba(166,123,91,0.08)"; }}
                                             />
                                         </div>
@@ -622,7 +493,7 @@ function IconFinishing({ size = 16, color = "currentColor" }: { size?: number; c
 }
 
 export default function AlurPesananPage() {
-    const [activeTab, setActiveTab] = useState<"finishing" | "gudang" | "followup" | "pengiriman" | "riwayat">("finishing");
+    const [activeTab, setActiveTab] = useState<"finishing" | "gudang" | "pengiriman" | "riwayat">("finishing");
     const { rows } = usePesanan();
     const { user } = useAuth();
     const isFinishing = user?.role === "finishing";
@@ -634,14 +505,12 @@ export default function AlurPesananPage() {
 
     const countFinishing  = rows.filter(r => (r.customer || r.deskripsi) && r.printed_at && !r.di_kirim && r.finishing_status === "belum").length;
     const countGudang     = rows.filter(r => (r.customer || r.deskripsi) && r.di_produksi && !r.siap_kirim && !r.di_kirim).length;
-    const countFollowUp   = rows.filter(r => (r.customer || r.deskripsi) && r.siap_kirim === true && !r.metode_kirim && r.di_kirim === false).length;
-    const countPengiriman = rows.filter(r => (r.customer || r.deskripsi) && r.siap_kirim === true && !!r.metode_kirim && r.di_kirim === false).length;
+    const countPengiriman = rows.filter(r => (r.customer || r.deskripsi) && r.siap_kirim === true && r.di_kirim === false).length;
 
     type TabKey = typeof activeTab;
     const tabs: { key: TabKey; label: string; Icon: React.FC<{ size?: number; color?: string }>; count: number; activeColor: string }[] = [
         { key: "finishing", label: "Finishing",  Icon: IconFinishing, count: countFinishing,  activeColor: "#9333EA" },
         { key: "gudang",    label: "Gudang",     Icon: IconGudang,    count: countGudang,     activeColor: "#2563EB" },
-        { key: "followup",  label: "Follow Up",  Icon: IconFollowUp,  count: countFollowUp,   activeColor: "#D97706" },
         { key: "pengiriman",label: "Kirim",      Icon: IconKirim,     count: countPengiriman, activeColor: "#15803D" },
         { key: "riwayat",   label: "Riwayat",    Icon: IconRiwayat,   count: 0,               activeColor: "#6B7280" },
     ];
@@ -680,7 +549,6 @@ export default function AlurPesananPage() {
             <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
                 {activeTab === "finishing" && <TabFinishing />}
                 {activeTab === "gudang"    && <TabCekGudang />}
-                {activeTab === "followup"  && <TabFollowUp />}
                 {activeTab === "pengiriman"&& <TabPengiriman />}
                 {activeTab === "riwayat"   && <TabRiwayatPO />}
             </div>
