@@ -30,18 +30,6 @@ function fmtTimestamp(iso: string | null) {
 }
 function parseQty(q: string) { return parseFloat(q.replace(",", ".")) || 0; }
 
-function playBeep(freq = 880, duration = 0.12) {
-    try {
-        const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-        const osc = ctx.createOscillator(); const gain = ctx.createGain();
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.type = "sine"; osc.frequency.setValueAtTime(freq, ctx.currentTime);
-        gain.gain.setValueAtTime(0.4, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-        osc.start(ctx.currentTime); osc.stop(ctx.currentTime + duration);
-    } catch { /* silent */ }
-}
-
 type ToastMsg = { id: number; text: string; color: string };
 let toastIdSeq = 0;
 function useToast() {
@@ -119,177 +107,18 @@ function buildSesiList(rows: PesananRow[], year: number, month: number): Sesi[] 
 }
 
 /* ================================================================
-   MODE OPERATOR — full-screen dark, tombol besar, 4 checkbox
-================================================================ */
-function OperatorMode({ sesi, onExit }: { sesi: Sesi; onExit?: () => void }) {
-    const { updateRow } = usePesanan();
-    const [operator, setOperator] = useState("");
-    const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
-    const [exitConfirm, setExitConfirm] = useState(false);
-    const { toasts, show: showToast } = useToast();
-
-    useEffect(() => {
-        supabase.from("app_users").select("id, name").then(({ data }) => { if (data) setUsers(data); });
-    }, []);
-
-    const handleTap = useCallback((item: PesananRow, field: CheckField) => {
-        if (!operator) { showToast("Pilih nama operator dulu!", "#DC2626"); return; }
-        const ts = { finishing_operator: operator, finishing_at: new Date().toISOString() };
-        const cur = isChecked(item, field);
-
-        if (field === 'produksi') {
-            updateRow(item.id, { di_produksi: !cur, ...ts }, true);
-            playBeep(cur ? 330 : CB.produksi.beep, 0.12);
-            showToast(cur ? "Produksi dibatalkan" : `Produksi: ${item.customer}`, cur ? "#6B7280" : CB.produksi.color);
-        } else if (field === 'repair') {
-            if (!cur) {
-                updateRow(item.id, { is_repair: true, di_produksi: true, finishing_status: 'repair', ...ts }, true);
-                pushNotify({ notificationType: "status_produksi", title: "Item Perlu Repair", body: `${item.customer} — ${item.deskripsi}`, url: "/dashboard/produksi" });
-                playBeep(CB.repair.beep, 0.2);
-                showToast(`Repair: ${item.customer}`, CB.repair.color);
-            } else {
-                updateRow(item.id, { is_repair: false, finishing_status: item.di_warna ? 'warna' : 'belum', finishing_operator: "", finishing_at: null }, true);
-                showToast("Repair dibatalkan", "#6B7280");
-            }
-        } else if (field === 'warna') {
-            if (!cur) {
-                updateRow(item.id, { di_warna: true, finishing_status: 'warna', ...ts }, true);
-                playBeep(CB.warna.beep, 0.12);
-                showToast(`Warna: ${item.customer}`, CB.warna.color);
-            } else {
-                updateRow(item.id, { di_warna: false, finishing_status: item.is_repair ? 'repair' : 'belum', finishing_operator: "", finishing_at: null }, true);
-                showToast("Warna dibatalkan", "#6B7280");
-            }
-        } else if (field === 'gudang') {
-            if (!cur) {
-                updateRow(item.id, { siap_kirim: true, di_warna: true, finishing_status: 'gudang', ...ts }, true);
-                playBeep(CB.gudang.beep, 0.12);
-                showToast(`Gudang: ${item.customer}`, CB.gudang.color);
-            } else {
-                updateRow(item.id, { siap_kirim: false, finishing_status: item.di_warna ? 'warna' : (item.is_repair ? 'repair' : 'belum'), finishing_operator: "", finishing_at: null }, true);
-                showToast("Gudang dibatalkan", "#6B7280");
-            }
-        }
-
-        supabase.from("finishing_checks").insert({ pesanan_id: item.id, status: field, operator_name: operator, checked_at: new Date().toISOString() }).then(() => {});
-    }, [operator, updateRow, showToast]);
-
-    const items = sesi.rows;
-    const done = items.filter(r => r.di_produksi || r.finishing_status !== 'belum').length;
-
-    return (
-        <div style={{ position: "fixed", inset: 0, background: "#1C1917", zIndex: 1000, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            {/* Header */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", background: "#292524", borderBottom: "1px solid #3C2F2F", flexShrink: 0 }}>
-                <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#A67B5B", letterSpacing: "0.1em", textTransform: "uppercase" }}>MODE OPERATOR — {sesi.poLabel}</div>
-                    <div style={{ fontSize: 12, color: "#D6D3D1", marginTop: 2 }}>{fmtDateFull(sesi.printedAt.slice(0, 10))} · {fmtTime(sesi.printedAt)} · {done}/{items.length} selesai</div>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <select value={operator} onChange={e => setOperator(e.target.value)}
-                        style={{ padding: "7px 12px", borderRadius: 8, border: "1.5px solid #57534E", background: "#3C3835", color: operator ? "#FCD34D" : "#78716C", fontSize: 12, fontWeight: 700, minWidth: 150, cursor: "pointer" }}>
-                        <option value="">— Pilih Nama —</option>
-                        {users.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
-                    </select>
-                    {onExit && (
-                        <button onClick={() => setExitConfirm(true)} style={{ padding: "7px 16px", borderRadius: 8, border: "1.5px solid #57534E", background: "transparent", color: "#F87171", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Keluar ✕</button>
-                    )}
-                </div>
-            </div>
-
-            {!operator && (
-                <div style={{ padding: "10px 20px", background: "#78350F", color: "#FCD34D", fontSize: 12, fontWeight: 700, textAlign: "center", flexShrink: 0 }}>
-                    ⚠️ Pilih nama operator di atas sebelum menceklis item
-                </div>
-            )}
-
-            {/* Items */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "14px 18px" }}>
-                {items.map((item, idx) => {
-                    const bg = rowBg(item);
-                    const isLight = item.di_produksi || item.is_repair || item.di_warna || item.siap_kirim;
-                    return (
-                        <div key={item.id} style={{ background: isLight ? bg : "#292524", border: `2px solid ${isLight ? "#D1BFA3" : "#3C3835"}`, borderRadius: 14, marginBottom: 10, padding: "14px 16px", transition: "all 0.2s" }}>
-                            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
-                                <div style={{ flex: 1 }}>
-                                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
-                                        <span style={{ width: 26, height: 26, borderRadius: "50%", background: "#3C3835", color: "#D6D3D1", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{idx + 1}</span>
-                                        <span style={{ fontSize: 16, fontWeight: 800, color: isLight ? "#3C2F2F" : "#E7E5E4" }}>{item.customer || "—"}</span>
-                                    </div>
-                                    <div style={{ fontSize: 12, color: isLight ? "#5C4033" : "#A8A29E", marginLeft: 34 }}>
-                                        {item.deskripsi || "—"} · UK: {item.ukuran || "—"} · Qty: {item.qty || "—"}
-                                    </div>
-                                </div>
-                            </div>
-                            {/* 4 buttons */}
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
-                                {(["produksi", "repair", "warna", "gudang"] as CheckField[]).map(f => {
-                                    const active = isChecked(item, f);
-                                    const m = CB[f];
-                                    return (
-                                        <button key={f} onClick={() => handleTap(item, f)}
-                                            style={{ padding: "14px 6px", borderRadius: 10, border: "none", cursor: "pointer", fontWeight: 800, fontSize: 13, transition: "all 0.15s", background: active ? m.color : "#3C3835", color: active ? "white" : m.color, boxShadow: active ? `0 4px 12px ${m.color}55` : "none", transform: active ? "scale(1.03)" : "scale(1)", minHeight: 50 }}
-                                            onMouseEnter={e => { if (!active) e.currentTarget.style.background = "#57534E"; }}
-                                            onMouseLeave={e => { if (!active) e.currentTarget.style.background = "#3C3835"; }}>
-                                            {m.label}{active ? " ✓" : ""}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                            {item.finishing_at && item.finishing_operator && (
-                                <div style={{ fontSize: 10, color: "#78716C", marginTop: 6 }}>oleh {item.finishing_operator} · {fmtTimestamp(item.finishing_at)}</div>
-                            )}
-                        </div>
-                    );
-                })}
-            </div>
-
-            {/* Footer progress */}
-            <div style={{ padding: "10px 20px", background: "#292524", borderTop: "1px solid #3C2F2F", display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
-                <div style={{ flex: 1, height: 7, background: "#3C3835", borderRadius: 99, overflow: "hidden" }}>
-                    <div style={{ height: "100%", borderRadius: 99, background: "linear-gradient(90deg, #A67B5B, #D4A574)", width: `${items.length ? (done / items.length) * 100 : 0}%`, transition: "width 0.4s ease" }} />
-                </div>
-                <span style={{ fontSize: 12, fontWeight: 700, color: "#D6D3D1", whiteSpace: "nowrap" }}>{done}/{items.length} selesai</span>
-            </div>
-
-            {/* Exit confirm */}
-            {exitConfirm && (
-                <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10000 }}>
-                    <div style={{ background: "white", borderRadius: 16, padding: "26px", width: 300 }}>
-                        <div style={{ fontSize: 14, fontWeight: 800, color: "#3C2F2F", marginBottom: 6 }}>Keluar Mode Operator?</div>
-                        <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 18 }}>Semua progress tersimpan otomatis.</div>
-                        <div style={{ display: "flex", gap: 8 }}>
-                            <button onClick={() => setExitConfirm(false)} style={{ flex: 1, padding: "10px", borderRadius: 10, border: "1.5px solid #E8DDD0", background: "white", fontSize: 12, fontWeight: 700, color: "#6B7280", cursor: "pointer" }}>Batal</button>
-                            <button onClick={() => onExit?.()} style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: "#DC2626", color: "white", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Keluar</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Toasts */}
-            <div style={{ position: "fixed", top: 20, right: 20, display: "flex", flexDirection: "column", gap: 7, zIndex: 20000 }}>
-                {toasts.map(t => (
-                    <div key={t.id} style={{ padding: "9px 16px", borderRadius: 10, background: t.color, color: "white", fontSize: 12, fontWeight: 700, boxShadow: "0 4px 16px rgba(0,0,0,0.2)" }}>{t.text}</div>
-                ))}
-            </div>
-        </div>
-    );
-}
-
-/* ================================================================
    MAIN: TAB FINISHING (Manager View)
 ================================================================ */
 export default function TabFinishing() {
     const { rows, updateRow } = usePesanan();
     const { user } = useAuth();
     const now = new Date();
-    const isFinishingRole = user?.role === "finishing";
 
     const [month, setMonth] = useState(now.getMonth() + 1);
     const [year, setYear]   = useState(now.getFullYear());
     const [search, setSearch] = useState("");
+    const [sortBy, setSortBy] = useState<"baru" | "lama" | "customer">("baru");
     const [selectedKey, setSelectedKey] = useState<string | null>(null);
-    const [operatorMode, setOperatorMode] = useState(false);
     const { toasts, show: showToast } = useToast();
 
     const years: number[] = [];
@@ -297,13 +126,18 @@ export default function TabFinishing() {
 
     const allSesi = useMemo(() => buildSesiList(rows, year, month), [rows, year, month]);
     const filteredSesi = useMemo(() => {
-        if (!search.trim()) return allSesi;
-        const q = search.toLowerCase();
-        return allSesi.filter(s =>
+        const q = search.trim().toLowerCase();
+        const list = !q ? [...allSesi] : allSesi.filter(s =>
             s.poLabel.toLowerCase().includes(q) ||
             s.rows.some(r => [r.customer, r.deskripsi].join(" ").toLowerCase().includes(q))
         );
-    }, [allSesi, search]);
+        list.sort((a, b) => {
+            if (sortBy === "customer") return (a.rows[0]?.customer || "").localeCompare(b.rows[0]?.customer || "");
+            if (sortBy === "lama") return a.printedAt.localeCompare(b.printedAt);
+            return b.printedAt.localeCompare(a.printedAt); // baru (default)
+        });
+        return list;
+    }, [allSesi, search, sortBy]);
 
     const selectedSesi = useMemo(() => filteredSesi.find(s => s.key === selectedKey) ?? null, [filteredSesi, selectedKey]);
 
@@ -377,10 +211,6 @@ export default function TabFinishing() {
 
     const selectStyle: React.CSSProperties = { border: "1.5px solid #E8DDD0", borderRadius: 8, padding: "6px 10px", fontSize: 12, color: "#5C4033", background: "#FAFAF8", height: 32, fontWeight: 600, outline: "none" };
 
-    if (operatorMode && selectedSesi) {
-        return <OperatorMode sesi={selectedSesi} onExit={isFinishingRole ? undefined : () => setOperatorMode(false)} />;
-    }
-
     return (
         <div style={{ display: "flex", flex: 1, overflow: "hidden", background: "#F8F4EF" }}>
 
@@ -396,6 +226,11 @@ export default function TabFinishing() {
                             {years.map(y => <option key={y} value={y}>{y}</option>)}
                         </select>
                     </div>
+                    <select value={sortBy} onChange={e => setSortBy(e.target.value as "baru" | "lama" | "customer")} style={{ ...selectStyle, width: "100%", marginBottom: 7 }}>
+                        <option value="baru">Urut: PO Terbaru ↓</option>
+                        <option value="lama">Urut: PO Terlama ↑</option>
+                        <option value="customer">Urut: Customer A-Z</option>
+                    </select>
                     <div style={{ position: "relative" }}>
                         <svg style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", opacity: 0.35 }} width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#5C4033" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                         <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari operator, customer..."
@@ -450,12 +285,6 @@ export default function TabFinishing() {
                                     {stats.operators.length > 0 && ` · Operator: ${stats.operators.join(", ")}`}
                                 </div>
                             </div>
-                            {!isFinishingRole && (
-                                <button onClick={() => setOperatorMode(true)}
-                                    style={{ padding: "7px 16px", borderRadius: 8, border: "none", background: "linear-gradient(135deg, #5C4033, #7C5A3C)", color: "white", fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0, boxShadow: "0 2px 8px rgba(92,64,51,0.25)" }}>
-                                    Mode Operator ▶
-                                </button>
-                            )}
                         </div>
 
                         {/* Stats: 6 cards */}

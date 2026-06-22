@@ -1,5 +1,6 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useMemo } from "react";
+import * as XLSX from "xlsx";
 import { usePesanan, PesananRow } from "@/lib/pesanan-store";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase-client";
@@ -19,8 +20,6 @@ const MN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt"
 const ML = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
 function fmtShort(d: string) { if (!d) return ""; const p = d.split("-"); return p.length === 3 ? `${p[2]} ${MN[parseInt(p[1]) - 1]}` : d; }
 function fmtFull(d: string) { if (!d) return ""; const p = d.split("-"); return p.length === 3 ? `${parseInt(p[2])} ${ML[parseInt(p[1]) - 1]} ${p[0]}` : d; }
-
-type LogEntry = { id: number; pesanan_id: number; action: string; from_status: string; to_status: string; note: string; user_name: string; created_at: string };
 
 async function addLog(pesanan_id: number, action: string, from_status: string, to_status: string, note: string, user_name: string) {
     try { await supabase.from("production_logs").insert({ pesanan_id, action, from_status, to_status, note, user_name }); } catch {}
@@ -44,9 +43,6 @@ const METODE_BADGE: Record<string, { label: string; bg: string; color: string }>
 };
 
 /* ── SVG Icons for tabs ── */
-function IconProduksi({ size = 16, color = "currentColor" }: { size?: number; color?: string }) {
-    return (<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>);
-}
 function IconGudang({ size = 16, color = "currentColor" }: { size?: number; color?: string }) {
     return (<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 2 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>);
 }
@@ -59,10 +55,6 @@ function IconKirim({ size = 16, color = "currentColor" }: { size?: number; color
 function IconRiwayat({ size = 16, color = "currentColor" }: { size?: number; color?: string }) {
     return (<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>);
 }
-function IconCheck({ size = 14 }: { size?: number }) {
-    return (<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>);
-}
-
 /* ── Shared: Empty state ── */
 function EmptyState({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle: string }) {
     return (
@@ -93,101 +85,44 @@ function SearchBar({ value, onChange, placeholder }: { value: string; onChange: 
 }
 
 /* ── Shared: Section header for content panels ── */
-function SectionHeader({ title, count, countBg, countColor, children }: { title: string; count: number; countBg: string; countColor: string; children?: React.ReactNode }) {
+function SectionHeader({ title, count, countBg, countColor, actions, children }: { title: string; count: number; countBg: string; countColor: string; actions?: React.ReactNode; children?: React.ReactNode }) {
     return (
         <div style={{ padding: "14px 16px 12px", background: "white", borderBottom: "1px solid #F0E6D8", flexShrink: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: children ? 10 : 0 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: children ? 10 : 0, flexWrap: "wrap" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ fontSize: 15, fontWeight: 800, color: "#3C2F2F" }}>{title}</span>
                     <span style={{ background: countBg, color: countColor, borderRadius: 99, padding: "2px 10px", fontSize: 11, fontWeight: 700 }}>{count}</span>
                 </div>
+                {actions}
             </div>
             {children}
         </div>
     );
 }
 
-/* ================================================================
-   TAB 1: PRODUKSI — PIC Produksi centang PO selesai
-================================================================ */
-function TabProduksi() {
-    const { rows, updateRow } = usePesanan();
-    const { user } = useAuth();
-    const [search, setSearch] = useState("");
-    const [flash, setFlash] = useState<number | null>(null);
-
-    const items = rows.filter(r => (r.customer || r.deskripsi) && r.printed_at && !r.di_produksi);
-    const filtered = items.filter(r => {
-        if (!search) return true;
-        return [r.customer, r.deskripsi, r.po_label].join(" ").toLowerCase().includes(search.toLowerCase());
-    });
-
-    const groups: Record<string, PesananRow[]> = {};
-    filtered.forEach(r => { const k = r.po_label || "(Tanpa PO)"; if (!groups[k]) groups[k] = []; groups[k].push(r); });
-
-    const markDone = (row: PesananRow) => {
-        updateRow(row.id, { di_produksi: true, di_warna: false, siap_kirim: false, di_kirim: false, metode_kirim: "" }, true);
-        addLog(row.id, "status_change", "pending", "di_produksi", "", user?.name || "");
-        pushNotify({
-            notificationType: "status_produksi",
-            title: "Pesanan Masuk Produksi",
-            body: `${row.customer || "—"} — ${row.deskripsi || "—"}`,
-            url: "/dashboard/produksi",
+/* ── Shared: Tombol Laporan WhatsApp (Salin + Share) ──
+   Format: *Updet [Judul]* (tanggal) lalu per baris
+   •Nama / No.Invoice / Deskripsi / Qty [emoji status]  (+ ekspedisi utk tab Kirim) */
+function WaButtons({ title, items, ekspedisi, statusOf }: { title: string; items: PesananRow[]; ekspedisi?: boolean; statusOf: (r: PesananRow) => string }) {
+    const build = () => {
+        const today = fmtFull(new Date().toISOString().slice(0, 10));
+        const lines = items.map(r => {
+            const eks = ekspedisi && r.ekspedisi ? ` / ${r.ekspedisi}` : "";
+            return `•${r.customer || "-"} / ${r.no_inv || "-"} / ${r.deskripsi || "-"} / ${r.qty || "-"}${eks} ${statusOf(r)}`;
         });
-        setFlash(row.id); setTimeout(() => setFlash(null), 1200);
+        return `*Updet ${title}* (${today})\n${lines.join("\n")}`;
     };
-
-    const markAll = (opRows: PesananRow[]) => {
-        opRows.forEach(r => {
-            updateRow(r.id, { di_produksi: true, di_warna: false, siap_kirim: false, di_kirim: false, metode_kirim: "" }, true);
-            addLog(r.id, "status_change", "pending", "di_produksi", "", user?.name || "");
-        });
+    const disabled = items.length === 0;
+    const onCopy = async () => {
+        try { await navigator.clipboard.writeText(build()); alert("Laporan disalin ke clipboard!"); }
+        catch { alert("Gagal menyalin laporan."); }
     };
-
+    const onShare = () => { window.open(`https://wa.me/?text=${encodeURIComponent(build())}`, "_blank"); };
+    const base: React.CSSProperties = { display: "flex", alignItems: "center", gap: 5, padding: "6px 11px", borderRadius: 8, border: "none", fontSize: 11, fontWeight: 700, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, whiteSpace: "nowrap" };
     return (
-        <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
-            <SectionHeader title="PO Berjalan" count={items.length} countBg="#FEF9C3" countColor="#A16207">
-                <SearchBar value={search} onChange={setSearch} placeholder="Cari customer, PO..." />
-            </SectionHeader>
-            <div style={{ flex: 1, overflow: "auto", padding: "12px 16px", background: "#F8F4EF" }}>
-                {Object.keys(groups).length === 0 ? (
-                    <EmptyState icon={<IconCheck size={48} />} title="Semua PO sudah selesai produksi!" subtitle="Tidak ada PO yang menunggu" />
-                ) : Object.entries(groups).sort(([a], [b]) => a.localeCompare(b)).map(([opKey, opRows]) => (
-                    <div key={opKey} style={{ marginBottom: 12, borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(92,64,51,0.06), 0 0 0 1px rgba(92,64,51,0.04)" }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "linear-gradient(135deg, #5C4033, #7C5A3C)" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                <span style={{ fontSize: 13, fontWeight: 700, color: "white", letterSpacing: 0.2 }}>PO {opKey}</span>
-                                <span style={{ background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.9)", borderRadius: 99, padding: "1px 8px", fontSize: 11, fontWeight: 600 }}>{opRows.length}</span>
-                            </div>
-                            <button onClick={() => markAll(opRows)} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.9)", fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "background 0.2s" }}
-                                onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.2)")}
-                                onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}>
-                                Selesai Semua ✓
-                            </button>
-                        </div>
-                        <div style={{ background: "white" }}>
-                            {opRows.map((row, idx) => (
-                                <div key={row.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 14px", borderBottom: idx < opRows.length - 1 ? "1px solid #F5F0EC" : "none", background: flash === row.id ? "#F0FFF4" : "white", transition: "background 0.4s" }}>
-                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{ fontWeight: 600, fontSize: 13, color: "#3C2F2F" }}>{row.customer || "—"}</div>
-                                        <div style={{ fontSize: 11.5, color: "#8A7B6E", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>{row.deskripsi || "—"}</div>
-                                        <div style={{ fontSize: 10.5, color: "#B89678", marginTop: 2 }}>UK: {row.ukuran || "—"} · Qty: {row.qty || "—"} · {fmtShort(row.tanggal)}</div>
-                                    </div>
-                                    <button onClick={() => markDone(row)} style={{
-                                        padding: "7px 14px", borderRadius: 8, border: "none", cursor: "pointer",
-                                        fontWeight: 700, fontSize: 12, whiteSpace: "nowrap",
-                                        background: "#15803D", color: "white",
-                                        transition: "transform 0.15s, opacity 0.15s",
-                                    }}
-                                        onMouseEnter={e => { e.currentTarget.style.opacity = "0.85"; }}
-                                        onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}
-                                    >Selesai ✓</button>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                ))}
-            </div>
+        <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={onCopy} disabled={disabled} style={{ ...base, background: "#F0ECE6", color: "#5C4033" }}>📋 Salin Laporan WA</button>
+            <button onClick={onShare} disabled={disabled} style={{ ...base, background: "#16a34a", color: "white" }}>Share WhatsApp</button>
         </div>
     );
 }
@@ -239,7 +174,8 @@ function TabCekGudang() {
 
     return (
         <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
-            <SectionHeader title="Cek Kelengkapan" count={items.length} countBg="#FFE4E6" countColor="#BE123C">
+            <SectionHeader title="Cek Kelengkapan" count={items.length} countBg="#FFE4E6" countColor="#BE123C"
+                actions={<WaButtons title="Ready Gudang" items={filtered} statusOf={r => r.siap_kirim ? "✅" : r.di_produksi ? "⏳" : "❌"} />}>
                 <SearchBar value={search} onChange={setSearch} placeholder="Cari customer, catatan..." />
             </SectionHeader>
             <div style={{ flex: 1, overflow: "auto", padding: "12px 16px", background: "#F8F4EF" }}>
@@ -327,7 +263,8 @@ function TabFollowUp() {
 
     return (
         <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
-            <SectionHeader title="Follow Up Customer" count={items.length} countBg="#FEF3C7" countColor="#D97706">
+            <SectionHeader title="Follow Up Customer" count={items.length} countBg="#FEF3C7" countColor="#D97706"
+                actions={<WaButtons title="Follow Up" items={filtered} statusOf={r => r.metode_kirim ? "✅" : "⏳"} />}>
                 <SearchBar value={search} onChange={setSearch} placeholder="Cari customer..." />
             </SectionHeader>
             <div style={{ flex: 1, overflow: "auto", padding: "12px 16px", background: "#F8F4EF" }}>
@@ -387,8 +324,6 @@ function TabPengiriman() {
     const groups: Record<string, PesananRow[]> = {};
     filtered.forEach(r => { const k = r.metode_kirim || "unknown"; if (!groups[k]) groups[k] = []; groups[k].push(r); });
 
-    const isEkspedisiMethod = (metode: string) => metode.includes("ekspedisi");
-
     const getEkspedisiValue = (row: PesananRow) => {
         if (ekspedisiInputs[row.id] !== undefined) return ekspedisiInputs[row.id];
         return row.ekspedisi || "";
@@ -400,9 +335,9 @@ function TabPengiriman() {
 
     const markDikirim = (row: PesananRow) => {
         const eks = getEkspedisiValue(row);
-        // If ekspedisi method, require ekspedisi name
-        if (isEkspedisiMethod(row.metode_kirim) && !eks.trim()) {
-            alert("Harap isi nama ekspedisi terlebih dahulu!");
+        // Ekspedisi WAJIB terisi sebelum item ditandai dikirim
+        if (!eks.trim()) {
+            alert("Harap isi ekspedisi terlebih dahulu (mis. JNE, SiCepat, Lalamove, Diambil)!");
             return;
         }
         const patch: Partial<PesananRow> = { di_kirim: true, shipped_at: new Date().toISOString() };
@@ -419,10 +354,10 @@ function TabPengiriman() {
     };
 
     const markAllDikirim = (rowList: PesananRow[]) => {
-        // Check all ekspedisi rows have the nama filled
-        const missing = rowList.filter(r => isEkspedisiMethod(r.metode_kirim) && !getEkspedisiValue(r).trim());
+        // Semua item wajib punya ekspedisi sebelum dikirim
+        const missing = rowList.filter(r => !getEkspedisiValue(r).trim());
         if (missing.length > 0) {
-            alert(`${missing.length} item belum diisi nama ekspedisinya!`);
+            alert(`${missing.length} item belum diisi ekspedisinya!`);
             return;
         }
         rowList.forEach(r => {
@@ -442,7 +377,8 @@ function TabPengiriman() {
 
     return (
         <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
-            <SectionHeader title="Proses Pengiriman" count={items.length} countBg="#DCFCE7" countColor="#15803D">
+            <SectionHeader title="Proses Pengiriman" count={items.length} countBg="#DCFCE7" countColor="#15803D"
+                actions={<WaButtons title="Barang Keluar" items={filtered} ekspedisi statusOf={r => r.di_kirim ? "✅" : "⏳"} />}>
                 <SearchBar value={search} onChange={setSearch} placeholder="Cari customer, metode..." />
             </SectionHeader>
             <div style={{ flex: 1, overflow: "auto", padding: "12px 16px", background: "#F8F4EF" }}>
@@ -451,7 +387,6 @@ function TabPengiriman() {
                 ) : sortedKeys.map(metodeKey => {
                     const metodeRows = groups[metodeKey];
                     const badge = METODE_BADGE[metodeKey] || { label: metodeKey, bg: "#F3F4F6", color: "#374151" };
-                    const showEkspedisi = isEkspedisiMethod(metodeKey);
                     return (
                         <div key={metodeKey} style={{ marginBottom: 12, borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.03)" }}>
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "linear-gradient(135deg, #166534, #22C55E)" }}>
@@ -485,25 +420,24 @@ function TabPengiriman() {
                                                 onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}
                                             >Dikirim ✓</button>
                                         </div>
-                                        {showEkspedisi && (
-                                            <div style={{ marginTop: 8 }}>
-                                                <input
-                                                    type="text"
-                                                    value={getEkspedisiValue(row)}
-                                                    onChange={e => { setEkspedisiInput(row.id, e.target.value); updateRow(row.id, { ekspedisi: e.target.value }, true); }}
-                                                    placeholder="Tulis nama ekspedisi (JNE, SiCepat, Indah Cargo, dll)..."
-                                                    style={{
-                                                        width: "100%", padding: "8px 12px", borderRadius: 8,
-                                                        border: getEkspedisiValue(row).trim() ? "1.5px solid #22C55E" : "1.5px solid #FCA5A5",
-                                                        fontSize: 12, color: "#3C2F2F", background: getEkspedisiValue(row).trim() ? "#F0FFF4" : "#FFF5F5",
-                                                        outline: "none", boxSizing: "border-box",
-                                                        transition: "border-color 0.2s, background 0.2s",
-                                                    }}
-                                                    onFocus={e => { e.target.style.borderColor = "#A67B5B"; e.target.style.boxShadow = "0 0 0 3px rgba(166,123,91,0.08)"; }}
-                                                    onBlur={e => { e.target.style.borderColor = getEkspedisiValue(row).trim() ? "#22C55E" : "#FCA5A5"; e.target.style.boxShadow = "none"; }}
-                                                />
-                                            </div>
-                                        )}
+                                        <div style={{ marginTop: 8 }}>
+                                            <label style={{ display: "block", fontSize: 9, fontWeight: 700, color: "#B89678", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 3 }}>Ekspedisi</label>
+                                            <input
+                                                type="text"
+                                                value={getEkspedisiValue(row)}
+                                                onChange={e => setEkspedisiInput(row.id, e.target.value)}
+                                                onBlur={e => { updateRow(row.id, { ekspedisi: e.target.value.trim() }, true); e.target.style.borderColor = e.target.value.trim() ? "#22C55E" : "#FCA5A5"; e.target.style.boxShadow = "none"; }}
+                                                placeholder="JNE, SiCepat, LION, Lalamove, Diambil..."
+                                                style={{
+                                                    width: "100%", padding: "8px 12px", borderRadius: 8,
+                                                    border: getEkspedisiValue(row).trim() ? "1.5px solid #22C55E" : "1.5px solid #FCA5A5",
+                                                    fontSize: 12, color: "#3C2F2F", background: getEkspedisiValue(row).trim() ? "#F0FFF4" : "#FFF5F5",
+                                                    outline: "none", boxSizing: "border-box",
+                                                    transition: "border-color 0.2s, background 0.2s",
+                                                }}
+                                                onFocus={e => { e.target.style.borderColor = "#A67B5B"; e.target.style.boxShadow = "0 0 0 3px rgba(166,123,91,0.08)"; }}
+                                            />
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -516,7 +450,7 @@ function TabPengiriman() {
 }
 
 /* ================================================================
-   TAB 5: RIWAYAT — Riwayat pengiriman & tracking
+   TAB 5: RIWAYAT KIRIM — rekap bulanan + breakdown per ekspedisi
 ================================================================ */
 function TabRiwayatPO() {
     const { rows } = usePesanan();
@@ -524,207 +458,150 @@ function TabRiwayatPO() {
     const [month, setMonth] = useState(now.getMonth() + 1);
     const [year, setYear] = useState(now.getFullYear());
     const [search, setSearch] = useState("");
-    const [filterStatus, setFilterStatus] = useState<"semua" | "dikirim" | "proses">("semua");
-    const [expanded, setExpanded] = useState<string | null>(null);
-    const [logs, setLogs] = useState<LogEntry[]>([]);
 
     const years: number[] = [];
     for (let y = 2023; y <= now.getFullYear() + 1; y++) years.push(y);
 
-    // Load logs on mount
-    useEffect(() => {
-        (async () => {
-            const since = new Date(); since.setDate(since.getDate() - 90);
-            const { data } = await supabase.from("production_logs").select("*").gte("created_at", since.toISOString()).order("created_at", { ascending: false }).limit(200);
-            if (data) setLogs(data as LogEntry[]);
-        })();
-    }, []);
+    const parseQ = (q: string) => parseFloat((q || "").replace(",", ".")) || 0;
+    const fmtQty = (n: number) => (n % 1 === 0 ? String(n) : n.toFixed(1));
+    const shipDate = (r: PesananRow) => (r.shipped_at ? r.shipped_at.slice(0, 10) : r.tanggal);
 
-    const baseRows = rows.filter(r => (r.customer || r.deskripsi));
-    const filtered = baseRows.filter(r => {
-        const d = r.printed_at || r.tanggal;
-        const matchDate = !d || (parseInt(d.slice(0, 4)) === year && parseInt(d.slice(5, 7)) === month);
-        const q = search.toLowerCase();
-        const matchSearch = !q || [r.customer, r.deskripsi, r.po_label, r.ekspedisi, r.metode_kirim].join(" ").toLowerCase().includes(q);
-        const matchStatus = filterStatus === "semua" ? true : filterStatus === "dikirim" ? r.di_kirim : !r.di_kirim;
-        return matchDate && matchSearch && matchStatus;
-    });
+    // Sumber data: baris yang SUDAH DIKIRIM (di_kirim), pada bulan/tahun terpilih.
+    const shipped = useMemo(() => rows.filter(r => {
+        if (!(r.customer || r.deskripsi) || !r.di_kirim) return false;
+        const d = shipDate(r);
+        if (!d) return false;
+        return parseInt(d.slice(0, 4)) === year && parseInt(d.slice(5, 7)) === month;
+    }), [rows, year, month]);
 
-    // Summary stats
-    const totalAll = baseRows.filter(r => {
-        const d = r.printed_at || r.tanggal;
-        return !d || (parseInt(d.slice(0, 4)) === year && parseInt(d.slice(5, 7)) === month);
-    });
-    const totalDikirim = totalAll.filter(r => r.di_kirim).length;
-    const totalProses = totalAll.filter(r => !r.di_kirim).length;
+    const filtered = useMemo(() => {
+        const q = search.toLowerCase().trim();
+        if (!q) return shipped;
+        return shipped.filter(r => [r.customer, r.no_inv, r.deskripsi, r.ekspedisi].join(" ").toLowerCase().includes(q));
+    }, [shipped, search]);
 
-    // Group: dikirim items by customer for shipping history
-    const dikirimRows = filtered.filter(r => r.di_kirim);
-    const prosesRows = filtered.filter(r => !r.di_kirim);
+    const totalPO = filtered.length;
+    const totalQty = filtered.reduce((a, r) => a + parseQ(r.qty), 0);
 
-    const getStatus = (r: PesananRow) => {
-        if (r.di_kirim) return { label: "Dikirim ✓", bg: "#DCFCE7", color: "#15803D" };
-        if (r.metode_kirim && r.siap_kirim) return { label: "Siap Kirim", bg: "#DBEAFE", color: "#1D4ED8" };
-        if (r.siap_kirim) return { label: "Follow Up", bg: "#FEF3C7", color: "#D97706" };
-        if (r.di_produksi) return { label: "Gudang", bg: "#FFE4E6", color: "#BE123C" };
-        return { label: "Produksi", bg: "#F3F4F6", color: "#6B7280" };
+    const perEks = useMemo(() => {
+        const m: Record<string, { po: number; qty: number }> = {};
+        filtered.forEach(r => {
+            const k = (r.ekspedisi || "").trim() || "(Tanpa Ekspedisi)";
+            if (!m[k]) m[k] = { po: 0, qty: 0 };
+            m[k].po += 1;
+            m[k].qty += parseQ(r.qty);
+        });
+        return Object.entries(m).sort((a, b) => b[1].qty - a[1].qty);
+    }, [filtered]);
+    const jenisEks = perEks.filter(([k]) => k !== "(Tanpa Ekspedisi)").length;
+
+    const exportExcel = () => {
+        if (filtered.length === 0) { alert("Tidak ada data untuk diekspor."); return; }
+        const data = filtered
+            .slice()
+            .sort((a, b) => shipDate(b).localeCompare(shipDate(a)))
+            .map(r => ({
+                Tanggal: fmtFull(shipDate(r)),
+                Customer: r.customer,
+                "No. Invoice": r.no_inv,
+                Deskripsi: r.deskripsi,
+                Qty: r.qty,
+                Ekspedisi: r.ekspedisi || "-",
+                Status: "Dikirim",
+            }));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), "Riwayat Kirim");
+        XLSX.writeFile(wb, `riwayat-kirim-${year}-${String(month).padStart(2, "0")}.xlsx`);
     };
 
-    const getLogsForRow = (rowId: number) => logs.filter(l => l.pesanan_id === rowId).slice(0, 10);
-
     const selectStyle: React.CSSProperties = { border: "1.5px solid #E8DDD0", borderRadius: 8, padding: "6px 10px", fontSize: 12, color: "#5C4033", background: "#FAFAF8", height: 32, fontWeight: 600, outline: "none" };
-
-    const pillStyle = (key: typeof filterStatus, active: boolean): React.CSSProperties => ({
-        padding: "5px 12px", borderRadius: 99, border: "none", cursor: "pointer",
-        fontSize: 11, fontWeight: 700, transition: "all 0.15s",
-        background: active ? (key === "dikirim" ? "#DCFCE7" : key === "proses" ? "#FEF3C7" : "#F0ECE6") : "transparent",
-        color: active ? (key === "dikirim" ? "#15803D" : key === "proses" ? "#D97706" : "#5C4033") : "#9CA3AF",
-    });
+    const detailRows = filtered.slice().sort((a, b) => shipDate(b).localeCompare(shipDate(a)));
 
     return (
         <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
-            {/* Header filter bar */}
-            <div style={{ padding: "12px 16px", background: "white", borderBottom: "1px solid #F0E6D8", flexShrink: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-                    <select value={month} onChange={e => setMonth(+e.target.value)} style={selectStyle}>{ML.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}</select>
-                    <select value={year} onChange={e => setYear(+e.target.value)} style={selectStyle}>{years.map(y => <option key={y} value={y}>{y}</option>)}</select>
-                    <div style={{ position: "relative", flex: 1, minWidth: 120 }}>
-                        <svg style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", opacity: 0.35 }} width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#5C4033" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                        <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari..."
-                            style={{ ...selectStyle, width: "100%", paddingLeft: 30, boxSizing: "border-box" }} />
-                    </div>
-                    <span style={{ fontSize: 11, color: "#B89678", fontWeight: 600 }}>{filtered.length} item</span>
+            {/* Filter bar */}
+            <div style={{ padding: "12px 16px", background: "white", borderBottom: "1px solid #F0E6D8", flexShrink: 0, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <select value={month} onChange={e => setMonth(+e.target.value)} style={selectStyle}>{ML.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}</select>
+                <select value={year} onChange={e => setYear(+e.target.value)} style={selectStyle}>{years.map(y => <option key={y} value={y}>{y}</option>)}</select>
+                <div style={{ position: "relative", flex: 1, minWidth: 140 }}>
+                    <svg style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", opacity: 0.35 }} width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#5C4033" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari customer, invoice, ekspedisi..."
+                        style={{ ...selectStyle, width: "100%", paddingLeft: 30, boxSizing: "border-box" }} />
                 </div>
-                {/* Status filter pills */}
-                <div style={{ display: "flex", gap: 4 }}>
-                    <button onClick={() => setFilterStatus("semua")} style={pillStyle("semua", filterStatus === "semua")}>Semua {totalAll.length}</button>
-                    <button onClick={() => setFilterStatus("dikirim")} style={pillStyle("dikirim", filterStatus === "dikirim")}>✓ Dikirim {totalDikirim}</button>
-                    <button onClick={() => setFilterStatus("proses")} style={pillStyle("proses", filterStatus === "proses")}>⏳ Proses {totalProses}</button>
-                </div>
+                <button onClick={exportExcel} style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 14px", height: 32, borderRadius: 8, border: "none", cursor: "pointer", background: "#15803D", color: "white", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>
+                    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    Export Excel
+                </button>
             </div>
 
             <div style={{ flex: 1, overflow: "auto", padding: "12px 16px", background: "#F8F4EF" }}>
-                {/* Summary cards */}
+                {/* Recap cards */}
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 14 }}>
-                    <div style={{ background: "white", borderRadius: 10, padding: "12px 14px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", textAlign: "center" }}>
-                        <div style={{ fontSize: 20, fontWeight: 800, color: "#3C2F2F" }}>{totalAll.length}</div>
-                        <div style={{ fontSize: 11, color: "#B89678", marginTop: 2 }}>Total PO</div>
+                    <div style={{ background: "white", borderRadius: 10, padding: "12px 14px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", textAlign: "center", borderTop: "3px solid #15803D" }}>
+                        <div style={{ fontSize: 22, fontWeight: 800, color: "#15803D" }}>{totalPO}</div>
+                        <div style={{ fontSize: 11, color: "#B89678", marginTop: 2 }}>Total PO Dikirim</div>
                     </div>
-                    <div style={{ background: "white", borderRadius: 10, padding: "12px 14px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", textAlign: "center" }}>
-                        <div style={{ fontSize: 20, fontWeight: 800, color: "#15803D" }}>{totalDikirim}</div>
-                        <div style={{ fontSize: 11, color: "#B89678", marginTop: 2 }}>Sudah Kirim</div>
+                    <div style={{ background: "white", borderRadius: 10, padding: "12px 14px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", textAlign: "center", borderTop: "3px solid #A67B5B" }}>
+                        <div style={{ fontSize: 22, fontWeight: 800, color: "#7C5A3C" }}>{fmtQty(totalQty)}</div>
+                        <div style={{ fontSize: 11, color: "#B89678", marginTop: 2 }}>Total Barang Dikirim</div>
                     </div>
-                    <div style={{ background: "white", borderRadius: 10, padding: "12px 14px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", textAlign: "center" }}>
-                        <div style={{ fontSize: 20, fontWeight: 800, color: "#D97706" }}>{totalProses}</div>
-                        <div style={{ fontSize: 11, color: "#B89678", marginTop: 2 }}>Dalam Proses</div>
+                    <div style={{ background: "white", borderRadius: 10, padding: "12px 14px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", textAlign: "center", borderTop: "3px solid #1D4ED8" }}>
+                        <div style={{ fontSize: 22, fontWeight: 800, color: "#1D4ED8" }}>{jenisEks}</div>
+                        <div style={{ fontSize: 11, color: "#B89678", marginTop: 2 }}>Jenis Ekspedisi</div>
                     </div>
                 </div>
 
                 {filtered.length === 0 ? (
-                    <EmptyState icon={<IconRiwayat size={48} color="#C5A882" />} title="Belum ada data" subtitle="Pilih bulan lain atau ubah filter" />
+                    <EmptyState icon={<IconKirim size={48} color="#C5A882" />} title="Belum ada pengiriman" subtitle="Tidak ada barang terkirim pada periode ini" />
                 ) : (
                     <>
-                        {/* Shipped items */}
-                        {dikirimRows.length > 0 && (filterStatus === "semua" || filterStatus === "dikirim") && (
-                            <div style={{ marginBottom: 14 }}>
-                                {filterStatus === "semua" && <div style={{ fontSize: 12, fontWeight: 700, color: "#15803D", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}><IconKirim size={14} color="#15803D" /> Riwayat Pengiriman ({dikirimRows.length})</div>}
-                                {dikirimRows.map(r => {
-                                    const metBadge = r.metode_kirim ? METODE_BADGE[r.metode_kirim] : null;
-                                    const isExp = expanded === `row-${r.id}`;
-                                    const rowLogs = getLogsForRow(r.id);
-                                    return (
-                                        <div key={r.id} style={{ background: "white", borderRadius: 10, marginBottom: 6, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
-                                            <div onClick={() => setExpanded(isExp ? null : `row-${r.id}`)} style={{ padding: "10px 14px", cursor: "pointer", transition: "background 0.15s" }}
-                                                onMouseEnter={e => (e.currentTarget.style.background = "#FAFAF8")}
-                                                onMouseLeave={e => (e.currentTarget.style.background = "white")}>
-                                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                                            <span style={{ fontWeight: 600, fontSize: 13, color: "#3C2F2F" }}>{r.customer}</span>
-                                                            <span style={{ background: "#DCFCE7", color: "#15803D", borderRadius: 99, padding: "1px 7px", fontSize: 9, fontWeight: 700 }}>Dikirim ✓</span>
-                                                        </div>
-                                                        <div style={{ fontSize: 11, color: "#8A7B6E", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2 }}>{r.deskripsi}</div>
-                                                    </div>
-                                                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, flexShrink: 0 }}>
-                                                        {metBadge && <span style={{ background: metBadge.bg, color: metBadge.color, borderRadius: 99, padding: "1px 7px", fontSize: 9, fontWeight: 700, whiteSpace: "nowrap" }}>{metBadge.label}</span>}
-                                                        {r.ekspedisi && <span style={{ fontSize: 10, color: "#5C4033", fontWeight: 600 }}>{r.ekspedisi}</span>}
-                                                    </div>
-                                                    <span style={{ fontSize: 11, color: "#B89678", transition: "transform 0.2s", transform: isExp ? "rotate(180deg)" : "none", display: "inline-block", marginLeft: 4 }}>▼</span>
-                                                </div>
-                                            </div>
-                                            {isExp && (
-                                                <div style={{ borderTop: "1px solid #F0E6D8", padding: "10px 14px", background: "#FAFAF8" }}>
-                                                    {/* Detail info */}
-                                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 11, marginBottom: 10 }}>
-                                                        <div><span style={{ color: "#B89678" }}>Ukuran:</span> <strong style={{ color: "#3C2F2F" }}>{r.ukuran || "—"}</strong></div>
-                                                        <div><span style={{ color: "#B89678" }}>Qty:</span> <strong style={{ color: "#3C2F2F" }}>{r.qty || "—"}</strong></div>
-                                                        <div><span style={{ color: "#B89678" }}>PO:</span> <strong style={{ color: "#3C2F2F" }}>{r.po_label || "—"}</strong></div>
-                                                        <div><span style={{ color: "#B89678" }}>Tanggal:</span> <strong style={{ color: "#3C2F2F" }}>{fmtFull(r.tanggal)}</strong></div>
-                                                        {r.shipped_at && <div><span style={{ color: "#B89678" }}>Dikirim:</span> <strong style={{ color: "#15803D" }}>{fmtFull(r.shipped_at.slice(0, 10))}</strong></div>}
-                                                        {r.metode_kirim && <div><span style={{ color: "#B89678" }}>Metode:</span> <strong style={{ color: "#3C2F2F" }}>{METODE_BADGE[r.metode_kirim]?.label || r.metode_kirim}</strong></div>}
-                                                        {r.ekspedisi && <div><span style={{ color: "#B89678" }}>Ekspedisi:</span> <strong style={{ color: "#3C2F2F" }}>{r.ekspedisi}</strong></div>}
-                                                    </div>
-                                                    {r.production_note && <div style={{ padding: "4px 8px", background: "#FFF9F0", borderRadius: 6, fontSize: 11, color: "#8A6D55", marginBottom: 10, border: "1px dashed #E8DDD0" }}>📝 {r.production_note}</div>}
-                                                    {/* Timeline from logs */}
-                                                    {rowLogs.length > 0 && (
-                                                        <div>
-                                                            <div style={{ fontSize: 11, fontWeight: 700, color: "#5C4033", marginBottom: 6 }}>📜 Riwayat Aktivitas</div>
-                                                            <div style={{ borderLeft: "2px solid #E8DDD0", paddingLeft: 12, marginLeft: 4 }}>
-                                                                {rowLogs.map(log => {
-                                                                    const time = new Date(log.created_at).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
-                                                                    let actionLabel = log.action;
-                                                                    if (log.action === "status_change") {
-                                                                        if (log.to_status === "di_produksi") actionLabel = "Selesai Produksi";
-                                                                        else if (log.to_status === "siap_kirim") actionLabel = "Siap Kirim (Gudang)";
-                                                                        else if (log.to_status === "di_kirim") actionLabel = "Dikirim";
-                                                                        else actionLabel = log.to_status;
-                                                                    } else if (log.action === "metode_kirim") {
-                                                                        actionLabel = `Metode: ${METODE_BADGE[log.to_status]?.label || log.to_status}`;
-                                                                    } else if (log.action === "note") {
-                                                                        actionLabel = `Catatan: "${log.note}"`;
-                                                                    }
-                                                                    return (
-                                                                        <div key={log.id} style={{ display: "flex", gap: 8, marginBottom: 6, fontSize: 11, position: "relative" }}>
-                                                                            <div style={{ position: "absolute", left: -17, top: 3, width: 8, height: 8, borderRadius: "50%", background: log.to_status === "di_kirim" ? "#22C55E" : "#A67B5B" }} />
-                                                                            <span style={{ color: "#B89678", minWidth: 70, whiteSpace: "nowrap" }}>{time}</span>
-                                                                            <span style={{ color: "#3C2F2F" }}>{actionLabel}</span>
-                                                                            {log.note && log.action !== "note" && <span style={{ color: "#8A6D55" }}>· {log.note}</span>}
-                                                                            {log.user_name && <span style={{ color: "#B89678" }}>· {log.user_name}</span>}
-                                                                        </div>
-                                                                    );
-                                                                })}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })}
+                        {/* Breakdown per Ekspedisi */}
+                        <div style={{ background: "white", borderRadius: 12, padding: "12px 14px", marginBottom: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+                            <div style={{ fontSize: 12, fontWeight: 800, color: "#5C4033", marginBottom: 10 }}>Rekap per Ekspedisi</div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                {perEks.map(([nama, v]) => (
+                                    <div key={nama} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 10px", background: "#FAF7F3", borderRadius: 8 }}>
+                                        <span style={{ fontSize: 12, fontWeight: 700, color: "#3C2F2F" }}>{nama}</span>
+                                        <span style={{ fontSize: 11, color: "#5C4033" }}>
+                                            <strong>{v.po}</strong> PO · <strong>{fmtQty(v.qty)}</strong> barang
+                                        </span>
+                                    </div>
+                                ))}
                             </div>
-                        )}
+                        </div>
 
-                        {/* In-progress items */}
-                        {prosesRows.length > 0 && (filterStatus === "semua" || filterStatus === "proses") && (
-                            <div>
-                                {filterStatus === "semua" && <div style={{ fontSize: 12, fontWeight: 700, color: "#D97706", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}><IconRiwayat size={14} color="#D97706" /> Dalam Proses ({prosesRows.length})</div>}
-                                {prosesRows.map(r => {
-                                    const st = getStatus(r);
-                                    return (
-                                        <div key={r.id} style={{ background: "white", borderRadius: 10, marginBottom: 6, padding: "10px 14px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
-                                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                                <div style={{ flex: 1, minWidth: 0 }}>
-                                                    <div style={{ fontWeight: 600, fontSize: 13, color: "#3C2F2F" }}>{r.customer}</div>
-                                                    <div style={{ fontSize: 11, color: "#8A7B6E", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>{r.deskripsi}</div>
-                                                    <div style={{ fontSize: 10, color: "#B89678", marginTop: 2 }}>UK: {r.ukuran || "—"} · Qty: {r.qty || "—"} · PO: {r.po_label || "—"}</div>
-                                                </div>
-                                                <span style={{ background: st.bg, color: st.color, borderRadius: 99, padding: "2px 10px", fontSize: 10, fontWeight: 700, whiteSpace: "nowrap" }}>{st.label}</span>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
+                        {/* Tabel detail */}
+                        <div style={{ background: "white", borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+                            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                                <thead>
+                                    <tr style={{ background: "#FAF7F3" }}>
+                                        {["Tanggal", "Customer", "No. Invoice", "Deskripsi", "Qty", "Ekspedisi", "Status"].map((h, i) => (
+                                            <th key={h} style={{ padding: "9px 10px", textAlign: i === 4 ? "center" : "left", fontSize: 9, fontWeight: 800, color: "#8A6D55", letterSpacing: "0.06em", textTransform: "uppercase", borderBottom: "1.5px solid #E8DDD0", whiteSpace: "nowrap" }}>{h}</th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {detailRows.map((r, idx) => (
+                                        <tr key={r.id} style={{ background: idx % 2 === 0 ? "white" : "#FAFAFA", borderBottom: "1px solid #F0E6D8" }}>
+                                            <td style={{ padding: "9px 10px", color: "#5C4033", whiteSpace: "nowrap" }}>{fmtShort(shipDate(r))}</td>
+                                            <td style={{ padding: "9px 10px", fontWeight: 700, color: "#3C2F2F", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.customer || "—"}</td>
+                                            <td style={{ padding: "9px 10px", color: "#8A7B6E", whiteSpace: "nowrap" }}>{r.no_inv || "—"}</td>
+                                            <td style={{ padding: "9px 10px", color: "#5C4033", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.deskripsi || "—"}</td>
+                                            <td style={{ padding: "9px 10px", textAlign: "center", fontWeight: 700, color: "#3C2F2F" }}>{r.qty || "—"}</td>
+                                            <td style={{ padding: "9px 10px", color: "#3C2F2F", fontWeight: 600, whiteSpace: "nowrap" }}>{r.ekspedisi || "—"}</td>
+                                            <td style={{ padding: "9px 10px" }}><span style={{ background: "#DCFCE7", color: "#15803D", borderRadius: 99, padding: "2px 9px", fontSize: 10, fontWeight: 700, whiteSpace: "nowrap" }}>Dikirim ✓</span></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                                <tfoot>
+                                    <tr style={{ background: "#FAF7F3", borderTop: "2px solid #E8DDD0" }}>
+                                        <td colSpan={4} style={{ padding: "9px 10px", fontWeight: 800, color: "#5C4033", textAlign: "right" }}>Total</td>
+                                        <td style={{ padding: "9px 10px", textAlign: "center", fontWeight: 800, color: "#3C2F2F" }}>{fmtQty(totalQty)}</td>
+                                        <td colSpan={2} style={{ padding: "9px 10px", fontWeight: 700, color: "#8A6D55" }}>{totalPO} PO</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
                     </>
                 )}
             </div>
