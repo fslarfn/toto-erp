@@ -521,7 +521,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }, [bankAccounts, cashFlow]);
 
     const reconcile = useCallback((opts?: { includeTest?: boolean }) => {
-        return reconcileAccounts(bankAccounts, cashFlow, opts);
+        // Saldo terhitung untuk rekonsiliasi: KECUALIKAN entri penyesuaian (is_adjustment)
+        // agar penyeimbang otomatis tidak menutupi selisih nyata.
+        return reconcileAccounts(bankAccounts, cashFlow, { includeAdjustment: false, ...opts });
     }, [bankAccounts, cashFlow]);
 
     // Recalc lokal: loop SELURUH akun via computeBalance (account_id, bukan nama),
@@ -562,16 +564,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }));
     }, [bankAccounts, cashFlow, recalculateBalances]);
 
-    // Auto-sync balances whenever cash_flow data changes (length or amounts)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    const cashFlowFingerprint = cashFlow.reduce((s, c) => s + c.amount * (c.type === "income" ? 1 : -1), 0);
-    useEffect(() => {
-        if (!loading && cashFlow.length > 0) {
-            recalculateBalances();
-        }
-    // cashFlowFingerprint captures both length and amount changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [loading, cashFlowFingerprint]);
+    // CATATAN: auto-sync saldo dihapus sengaja.
+    // Sebelumnya saldo "tersimpan" (bank_accounts.balance) ditimpa otomatis dengan
+    // saldo terhitung tiap load → rekonsiliasi selalu "Seimbang" & tak pernah
+    // mendeteksi selisih. Kini saldo tersimpan dibiarkan apa adanya (record akun);
+    // saldo terhitung dihitung independen; sinkronisasi hanya lewat tombol
+    // "Sinkronkan Saldo" (syncAllBalances) saat finance memang ingin menyamakan.
 
     return (
         <StoreContext.Provider value={{

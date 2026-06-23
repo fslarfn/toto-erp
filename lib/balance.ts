@@ -8,12 +8,15 @@
 import type { CashFlow, BankAccount, AccountReconciliation } from "@/types";
 
 // Subset minimal yang dibutuhkan perhitungan (memudahkan pengujian).
-export type CashFlowLike = Pick<CashFlow, "accountId" | "type" | "amount" | "isTest">;
+export type CashFlowLike = Pick<CashFlow, "accountId" | "type" | "amount" | "isTest" | "isAdjustment" | "category" | "transferGroup">;
 export type AccountLike = Pick<BankAccount, "id" | "name" | "initialBalance">;
 
 export interface BalanceOptions {
   /** Sertakan entri is_test dalam perhitungan (default: false). */
   includeTest?: boolean;
+  /** Sertakan entri penyesuaian (is_adjustment) (default: true).
+   *  Untuk rekonsiliasi, set false agar penyeimbang otomatis tidak menutupi selisih nyata. */
+  includeAdjustment?: boolean;
 }
 
 /** Normalisasi nama kas: trim + lowercase (+ alias tunai → cash). */
@@ -68,6 +71,7 @@ export function computeBalance(
   for (const c of cashFlow) {
     if (c.accountId !== accountId) continue;
     if (!opts.includeTest && c.isTest) continue;
+    if (opts.includeAdjustment === false && c.isAdjustment) continue;
     balance += c.type === "income" ? c.amount : -c.amount;
   }
   return balance;
