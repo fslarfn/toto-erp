@@ -4,7 +4,7 @@ import { useStore } from "@/lib/store";
 import { CashFlow } from "@/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import ReconciliationPanel from "@/components/ReconciliationPanel";
-import { computeTotals } from "@/lib/balance";
+import { computeTotals, isTransfer } from "@/lib/balance";
 
 const BANK_ACCOUNTS = ["Bank BCA Toto", "Bank BCA Yanto", "Cash"];
 const CATEGORIES_IN = ["Pembayaran Invoice", "DP Invoice", "Penjualan", "Lainnya"];
@@ -387,10 +387,12 @@ export default function KeuanganPage() {
                                 <tr key={c.id}>
                                     <td style={{ fontSize: 13 }}>{formatDate(c.date)}</td>
                                     <td style={{ fontWeight: 500 }}>
-                                        {c.description}
-                                        {c.isTest && <span className="badge" style={{ marginLeft: 6, background: "#FEF3C7", color: "#B45309", fontSize: 10 }}>TEST</span>}
-                                        {c.isAdjustment && <span className="badge" style={{ marginLeft: 6, background: "#E0E7FF", color: "#4338CA", fontSize: 10 }}>ADJ</span>}
-                                        {c.transferGroup && <span className="badge" style={{ marginLeft: 6, background: "#DBEAFE", color: "#1D4ED8", fontSize: 10 }}>MUTASI</span>}
+                                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                                            <span>{c.description}</span>
+                                            {c.isTest && <span className="badge" style={{ background: "#FEF3C7", color: "#B45309", fontSize: 10 }}>TEST</span>}
+                                            {c.isAdjustment && <span className="badge" style={{ background: "#E0E7FF", color: "#4338CA", fontSize: 10 }}>ADJ</span>}
+                                            {isTransfer(c) && <span className="badge" style={{ background: "#DBEAFE", color: "#1D4ED8", fontSize: 10 }}>MUTASI</span>}
+                                        </div>
                                     </td>
                                     <td>
                                         <span className="badge" style={{ background: "#FDF3E7", color: "#B89678" }}>{c.category}</span>
