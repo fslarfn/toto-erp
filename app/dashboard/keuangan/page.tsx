@@ -4,6 +4,7 @@ import { useStore } from "@/lib/store";
 import { CashFlow } from "@/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import ReconciliationPanel from "@/components/ReconciliationPanel";
+import { computeTotals } from "@/lib/balance";
 
 const BANK_ACCOUNTS = ["Bank BCA Toto", "Bank BCA Yanto", "Cash"];
 const CATEGORIES_IN = ["Pembayaran Invoice", "DP Invoice", "Penjualan", "Lainnya"];
@@ -67,8 +68,9 @@ export default function KeuanganPage() {
         .filter((c) => filterMonth === "semua" || c.date.startsWith(filterMonth))
         .filter((c) => !searchKeterangan.trim() || c.description.toLowerCase().includes(searchKeterangan.toLowerCase().trim()));
 
-    const totalIn = filtered.filter((c) => c.type === "income").reduce((s, c) => s + c.amount, 0);
-    const totalOut = filtered.filter((c) => c.type === "expense").reduce((s, c) => s + c.amount, 0);
+    // Masuk/Keluar: KECUALIKAN mutasi antar-kas (transfer internal bukan omzet/biaya).
+    // `filtered` sudah menerapkan toggle test → pakai includeTest:true di sini.
+    const { income: totalIn, expense: totalOut } = computeTotals(filtered, { includeTest: true });
 
     // Saldo TERHITUNG (sumber kebenaran) — bukan field tersimpan.
     const computedFor = (id: string) => getComputedBalance(id, { includeTest: showTest });
@@ -78,6 +80,16 @@ export default function KeuanganPage() {
     // ── Form Input handlers ────────────────────────────────────
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        // Peringatan: transfer internal harus lewat "Mutasi Antar Kas", bukan transaksi biasa.
+        if (/mutasi/i.test(form.keterangan)) {
+            const tetap = confirm(
+                "Sepertinya ini transfer antar kas (\"MUTASI\").\n\n" +
+                "Sebaiknya gunakan fitur \"🔁 Mutasi Antar Kas\" agar tercatat sebagai pasangan " +
+                "dan TIDAK terhitung sebagai pemasukan/pengeluaran operasional.\n\n" +
+                "Tetap simpan sebagai transaksi biasa?"
+            );
+            if (!tetap) return;
+        }
         setSaving(true);
         addCashFlow({
             type: form.type,

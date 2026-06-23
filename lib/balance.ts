@@ -86,7 +86,18 @@ export function computeTotalBalance(
   return accounts.reduce((sum, a) => sum + computeBalance(a.id, accounts, cashFlow, opts), 0);
 }
 
-/** Ringkasan Masuk/Keluar global (mengecualikan is_test secara default). */
+/** Kategori baku untuk mutasi antar-kas. */
+export const TRANSFER_CATEGORY = "Mutasi Kas";
+
+/** Apakah entri ini mutasi antar-kas (uang pindah kas, bukan omzet/biaya riil)?
+ *  Dikenali dari kategori "Mutasi Kas" ATAU adanya transferGroup. */
+export function isTransfer(c: Pick<CashFlow, "category" | "transferGroup">): boolean {
+  return c.category === TRANSFER_CATEGORY || !!c.transferGroup;
+}
+
+/** Ringkasan Masuk/Keluar global.
+ *  KECUALIKAN: entri is_test (default) & SEMUA mutasi antar-kas — agar transfer
+ *  internal tidak terhitung sebagai pemasukan/pengeluaran operasional. */
 export function computeTotals(
   cashFlow: CashFlowLike[],
   opts: BalanceOptions = {}
@@ -95,6 +106,7 @@ export function computeTotals(
   let expense = 0;
   for (const c of cashFlow) {
     if (!opts.includeTest && c.isTest) continue;
+    if (isTransfer(c)) continue; // mutasi internal bukan omzet/biaya
     if (c.type === "income") income += c.amount;
     else expense += c.amount;
   }
