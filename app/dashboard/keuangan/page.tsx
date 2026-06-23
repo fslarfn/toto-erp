@@ -10,6 +10,27 @@ const BANK_ACCOUNTS = ["Bank BCA Toto", "Bank BCA Yanto", "Cash"];
 const CATEGORIES_IN = ["Pembayaran Invoice", "DP Invoice", "Penjualan", "Lainnya"];
 const CATEGORIES_OUT = ["Bahan Baku", "Gaji", "Operasional", "Transportasi", "Perawatan Mesin", "Lainnya"];
 
+// Saran auto-kategori berdasarkan kata kunci keterangan → konsistensi laporan.
+const CATEGORY_KEYWORDS: { kws: string[]; category: string; type: "income" | "expense" }[] = [
+    { kws: ["bensin", "solar", "bbm", "ongkir", "ongkos", "transport", "tol", "parkir", "grab", "gojek", "ekspedisi"], category: "Transportasi", type: "expense" },
+    { kws: ["makan", "konsumsi", "snack", "galon", "atk", "listrik", "air", "internet", "pulsa", "sewa", "kebersihan"], category: "Operasional", type: "expense" },
+    { kws: ["gaji", "upah", "thr", "bonus", "lembur", "honor"], category: "Gaji", type: "expense" },
+    { kws: ["aluminium", "alumunium", "kaca", "material", "besi", "engsel", "kunci", "kusen", "bahan baku"], category: "Bahan Baku", type: "expense" },
+    { kws: ["service", "servis", "perawatan", "perbaikan", "mesin", "sparepart", "spare part", "oli"], category: "Perawatan Mesin", type: "expense" },
+    { kws: ["pelunasan", "lunas", "pembayaran invoice", "bayar invoice"], category: "Pembayaran Invoice", type: "income" },
+    { kws: ["dp ", "down payment", "uang muka", "panjar"], category: "DP Invoice", type: "income" },
+    { kws: ["penjualan", "omzet"], category: "Penjualan", type: "income" },
+];
+
+function suggestCategory(desc: string, type: "income" | "expense"): string | null {
+    const d = desc.toLowerCase();
+    if (d.trim().length < 3) return null;
+    for (const r of CATEGORY_KEYWORDS) {
+        if (r.type === type && r.kws.some((k) => d.includes(k))) return r.category;
+    }
+    return null;
+}
+
 type FormState = {
     tanggal: string;
     type: "income" | "expense";
@@ -314,6 +335,19 @@ export default function KeuanganPage() {
                                     placeholder="Keterangan transaksi..."
                                     className="form-input"
                                 />
+                                {(() => {
+                                    const saran = suggestCategory(form.keterangan, form.type);
+                                    if (!saran || saran === form.category) return null;
+                                    return (
+                                        <button
+                                            type="button"
+                                            onClick={() => setForm((p) => ({ ...p, category: saran }))}
+                                            style={{ marginTop: 6, background: "#FEF9C3", color: "#A16207", border: "1px solid #FDE68A", borderRadius: 6, padding: "3px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}
+                                        >
+                                            💡 Saran kategori: <strong>{saran}</strong> — klik untuk pakai
+                                        </button>
+                                    );
+                                })()}
                             </div>
                             <button type="submit" disabled={saving} className="btn btn-primary" style={{ padding: "0.625rem 1.5rem" }}>
                                 {saving ? "Menyimpan..." : "💾 Simpan Transaksi"}

@@ -8,6 +8,7 @@ import {
   buildTransferPair,
   resolveAccountId,
   normalizeAccountName,
+  isTransfer,
 } from "./balance";
 
 // ── Helpers ──────────────────────────────────────────────
@@ -32,6 +33,59 @@ function cf(p: Partial<CashFlow> & { type: CashFlow["type"]; amount: number; acc
 }
 
 const accounts = [acc("ba-1", "Bank BCA Toto"), acc("ba-2", "Bank BCA Yanto"), acc("ba-3", "Cash", 100000)];
+
+// ── Masalah 1: mutasi antar-kas dikecualikan dari Masuk/Keluar ──
+describe("computeTotals — kecualikan mutasi antar-kas (Masalah 1)", () => {
+  it("transfer (kategori Mutasi Kas / transferGroup) tidak dihitung sbg income/expense", () => {
+    const flows = [
+      cf({ type: "income", amount: 5_000_000, accountId: "ba-1", category: "Pembayaran Invoice" }),
+      cf({ type: "expense", amount: 1_000_000, accountId: "ba-1", category: "Operasional" }),
+      // pasangan mutasi 10jt — HARUS diabaikan di Masuk/Keluar
+      cf({ type: "expense", amount: 10_000_000, accountId: "ba-1", category: "Mutasi Kas", transferGroup: "t1" }),
+      cf({ type: "income", amount: 10_000_000, accountId: "ba-3", category: "Mutasi Kas", transferGroup: "t1" }),
+    ];
+    expect(computeTotals(flows)).toEqual({ income: 5_000_000, expense: 1_000_000, net: 4_000_000 });
+  });
+
+  it("isTransfer mengenali kategori Mutasi Kas maupun transferGroup", () => {
+    expect(isTransfer({ category: "Mutasi Kas", transferGroup: null })).toBe(true);
+    expect(isTransfer({ category: "Operasional", transferGroup: "t9" })).toBe(true);
+    expect(isTransfer({ category: "Operasional", transferGroup: null })).toBe(false);
+  });
+
+  it("saldo per akun TETAP memperhitungkan mutasi (uang memang pindah)", () => {
+    const flows = [
+      cf({ type: "expense", amount: 10_000_000, accountId: "ba-1", category: "Mutasi Kas", transferGroup: "t1" }),
+      cf({ type: "income", amount: 10_000_000, accountId: "ba-3", category: "Mutasi Kas", transferGroup: "t1" }),
+    ];
+    expect(computeBalance("ba-1", accounts, flows)).toBe(-10_000_000);
+    expect(computeBalance("ba-3", accounts, flows)).toBe(100000 + 10_000_000);
+  });
+});
+
+// ── Masalah 2: saldo terhitung independen; adjustment tidak menutupi selisih ──
+describe("reconcile — independen & abaikan adjustment (Masalah 2)", () => {
+  it("includeAdjustment:false → entri penyesuaian tidak menutupi selisih", () => {
+    const flows = [
+      cf({ type: "income", amount: 1_000_000, accountId: "ba-1", category: "Penjualan" }),
+      // adjustment 200rb yang dibuat utk 'menyeimbangkan'
+      cf({ type: "income", amount: 200_000, accountId: "ba-1", isAdjustment: true, category: "Lainnya" }),
+    ];
+    // dgn adjustment (saldo aktual)
+    expect(computeBalance("ba-1", accounts, flows)).toBe(1_200_000);
+    // tanpa adjustment (utk rekonsiliasi) → ungkap selisih
+    expect(computeBalance("ba-1", accounts, flows, { includeAdjustment: false })).toBe(1_000_000);
+  });
+
+  it("reconcile menampilkan selisih nyata bila stored != computed", () => {
+    const a = [{ ...acc("ba-1", "Bank BCA Toto"), balance: 1_200_000 }];
+    const flows = [cf({ type: "income", amount: 1_000_000, accountId: "ba-1" })];
+    const [rec] = reconcileAccounts(a, flows, { includeAdjustment: false });
+    expect(rec.computedBalance).toBe(1_000_000);
+    expect(rec.storedBalance).toBe(1_200_000);
+    expect(rec.diff).toBe(200_000);
+  });
+});
 
 describe("computeBalance", () => {
   it("initial_balance + income - expense per akun", () => {
