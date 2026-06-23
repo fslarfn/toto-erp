@@ -34,6 +34,8 @@ interface AppStore {
     updateBankBalance: (id: string, delta: number) => void;
     /** Saldo terhitung (sumber kebenaran) untuk satu akun. */
     getComputedBalance: (accountId: string, opts?: { includeTest?: boolean }) => number;
+    /** Rekonsiliasi: catat entri PENYESUAIAN agar saldo terhitung = saldo riil. */
+    addAdjustment: (accountId: string, realBalance: number, note?: string) => void;
     /** Rekonsiliasi seluruh akun: stored vs computed vs diff. */
     reconcile: (opts?: { includeTest?: boolean }) => AccountReconciliation[];
     recalculateBalances: () => void;
@@ -520,6 +522,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return computeBalance(accountId, bankAccounts, cashFlow, opts);
     }, [bankAccounts, cashFlow]);
 
+    // Rekonsiliasi (Opsi B): catat 1 entri PENYESUAIAN sebesar selisih agar
+    // saldo terhitung = saldo riil. TIDAK mengubah/menghapus transaksi lain.
+    const addAdjustment = useCallback((accountId: string, realBalance: number, note?: string) => {
+        const acc = bankAccounts.find(b => b.id === accountId);
+        if (!acc) return;
+        // Saldo app saat ini (termasuk penyesuaian sebelumnya, kecuali test).
+        const current = computeBalance(accountId, bankAccounts, cashFlow, { includeTest: false });
+        const selisih = Math.round((realBalance - current) * 100) / 100;
+        if (Math.abs(selisih) < 0.01) return; // sudah sama, tak perlu penyesuaian
+        const id = String(Date.now());
+        const entry: CashFlow = {
+            id,
+            type: selisih > 0 ? "income" : "expense",
+            category: "Penyesuaian Saldo",
+            amount: Math.abs(selisih),
+            description: note?.trim() || `Penyesuaian rekonsiliasi ${acc.name} → Rp ${realBalance.toLocaleString("id-ID")}`,
+            date: new Date().toISOString().slice(0, 10),
+            bankAccount: acc.name,
+            accountId,
+            createdBy: "finance",
+            isTest: false,
+            isAdjustment: true,
+            transferGroup: null,
+        };
+        setCashFlow(prev => [entry, ...prev]);
+        supabase.from("cash_flow").insert(cashFlowToDb(entry)).then();
+    }, [bankAccounts, cashFlow]);
+
     const reconcile = useCallback((opts?: { includeTest?: boolean }) => {
         // Saldo terhitung untuk rekonsiliasi: KECUALIKAN entri penyesuaian (is_adjustment)
         // agar penyeimbang otomatis tidak menutupi selisih nyata.
@@ -577,7 +607,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             addOrder, updateOrder, deleteOrder,
             addMaterial, updateMaterial, deleteMaterial,
             addCashFlow, updateCashFlow, deleteCashFlow, addTransfer, addPayment, updateBankBalance,
-            getComputedBalance, reconcile, recalculateBalances, syncAllBalances,
+            getComputedBalance, addAdjustment, reconcile, recalculateBalances, syncAllBalances,
         }}>
             {children}
         </StoreContext.Provider>

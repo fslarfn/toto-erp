@@ -43,7 +43,7 @@ type FormState = {
 };
 
 export default function KeuanganPage() {
-    const { cashFlow, bankAccounts, addCashFlow, updateCashFlow, deleteCashFlow, addTransfer, getComputedBalance, reconcile, syncAllBalances } = useStore();
+    const { cashFlow, bankAccounts, addCashFlow, updateCashFlow, deleteCashFlow, addTransfer, getComputedBalance, addAdjustment, syncAllBalances } = useStore();
 
     const now = new Date();
     const thisMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -96,7 +96,8 @@ export default function KeuanganPage() {
     // Saldo TERHITUNG (sumber kebenaran) — bukan field tersimpan.
     const computedFor = (id: string) => getComputedBalance(id, { includeTest: showTest });
     const netSaldo = bankAccounts.reduce((s, b) => s + computedFor(b.id), 0);
-    const recRows = reconcile();
+    // Rekonsiliasi: saldo riil dibandingkan ke saldo app non-test (includeTest:false).
+    const recRows = bankAccounts.map((b) => ({ id: b.id, name: b.name, appBalance: getComputedBalance(b.id, { includeTest: false }) }));
 
     // ── Form Input handlers ────────────────────────────────────
     const handleSubmit = async (e: React.FormEvent) => {
@@ -246,8 +247,8 @@ export default function KeuanganPage() {
                 </div>
             </div>
 
-            {/* Panel Rekonsiliasi: stored vs computed vs selisih */}
-            <ReconciliationPanel rows={recRows} syncing={syncing} onSync={handleSync} />
+            {/* Panel Rekonsiliasi: input saldo riil → catat penyesuaian */}
+            <ReconciliationPanel rows={recRows} onAdjust={addAdjustment} />
 
             {/* Mutasi Antar Kas (pasangan income+expense, total tetap balance) */}
             <div className="card">

@@ -106,7 +106,8 @@ export function computeTotals(
   let expense = 0;
   for (const c of cashFlow) {
     if (!opts.includeTest && c.isTest) continue;
-    if (isTransfer(c)) continue; // mutasi internal bukan omzet/biaya
+    if (isTransfer(c)) continue;   // mutasi internal bukan omzet/biaya
+    if (c.isAdjustment) continue;  // penyesuaian saldo = koreksi, bukan operasional
     if (c.type === "income") income += c.amount;
     else expense += c.amount;
   }
