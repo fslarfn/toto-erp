@@ -69,6 +69,21 @@ type Ctx = {
 
 const KaryawanCtx = createContext<Ctx | null>(null);
 
+/** Ambil semua baris dgn paginasi .range (hindari cap 1000). */
+async function fetchAllPaged(
+    page: (from: number, to: number) => PromiseLike<{ data: Record<string, unknown>[] | null; error: unknown }>
+): Promise<Record<string, unknown>[]> {
+    const all: Record<string, unknown>[] = [];
+    let from = 0;
+    while (true) {
+        const { data, error } = await page(from, from + 999);
+        if (error) throw error;
+        if (data && data.length) { all.push(...data); if (data.length < 1000) break; from += 1000; }
+        else break;
+    }
+    return all;
+}
+
 export function KaryawanProvider({ children }: { children: ReactNode }) {
     const [karyawan, setKaryawan] = useState<DataKaryawan[]>([]);
     const [gaji, setGaji] = useState<GajiRecord[]>([]);
@@ -80,15 +95,15 @@ export function KaryawanProvider({ children }: { children: ReactNode }) {
         let cancelled = false;
         (async () => {
             try {
-                const [kRes, gRes, bRes] = await Promise.all([
-                    supabase.from("karyawan").select("*").order("id"),
-                    supabase.from("gaji").select("*").order("id"),
-                    supabase.from("kasbon").select("*").order("id"),
+                const [k, g, b] = await Promise.all([
+                    fetchAllPaged((f, t) => supabase.from("karyawan").select("*").order("id").range(f, t)),
+                    fetchAllPaged((f, t) => supabase.from("gaji").select("*").order("id").range(f, t)),
+                    fetchAllPaged((f, t) => supabase.from("kasbon").select("*").order("id").range(f, t)),
                 ]);
                 if (!cancelled) {
-                    if (kRes.data) setKaryawan(kRes.data as DataKaryawan[]);
-                    if (gRes.data) setGaji(gRes.data as GajiRecord[]);
-                    if (bRes.data) setKasbon(bRes.data as KasbonRecord[]);
+                    setKaryawan(k as unknown as DataKaryawan[]);
+                    setGaji(g as unknown as GajiRecord[]);
+                    setKasbon(b as unknown as KasbonRecord[]);
                 }
             } catch {
                 // keep empty

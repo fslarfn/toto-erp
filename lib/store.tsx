@@ -197,6 +197,21 @@ function dbToBankAccount(r: Record<string, unknown>): BankAccount {
     };
 }
 
+/** Ambil SEMUA baris dgn paginasi .range (hindari cap 1000 baris Supabase). */
+async function fetchAllPaged(
+    page: (from: number, to: number) => PromiseLike<{ data: Record<string, unknown>[] | null; error: unknown }>
+): Promise<Record<string, unknown>[]> {
+    const all: Record<string, unknown>[] = [];
+    let from = 0;
+    while (true) {
+        const { data, error } = await page(from, from + 999);
+        if (error) throw error;
+        if (data && data.length) { all.push(...data); if (data.length < 1000) break; from += 1000; }
+        else break;
+    }
+    return all;
+}
+
 export function StoreProvider({ children }: { children: ReactNode }) {
     const [orders, setOrders] = useState<Order[]>([]);
     const [materials, setMaterials] = useState<Material[]>([]);
@@ -205,27 +220,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
     const [loading, setLoading] = useState(true);
 
-    // Load all data on mount
+    // Load all data on mount (paginasi → hindari cap 1000 baris / "data hilang")
     useEffect(() => {
         let cancelled = false;
         (async () => {
             try {
-                const [ordersRes, matsRes, cfRes, paysRes, baRes] = await Promise.all([
-                    supabase.from("orders").select("*").order("created_at", { ascending: false }),
-                    supabase.from("materials").select("*").order("code"),
-                    supabase.from("cash_flow").select("*").order("date", { ascending: false }),
-                    supabase.from("payments").select("*").order("payment_date", { ascending: false }),
-                    supabase.from("bank_accounts").select("*"),
+                const [orders, mats, cf, pays, ba] = await Promise.all([
+                    fetchAllPaged((f, t) => supabase.from("orders").select("*").order("created_at", { ascending: false }).range(f, t)),
+                    fetchAllPaged((f, t) => supabase.from("materials").select("*").order("code").range(f, t)),
+                    fetchAllPaged((f, t) => supabase.from("cash_flow").select("*").order("date", { ascending: false }).range(f, t)),
+                    fetchAllPaged((f, t) => supabase.from("payments").select("*").order("payment_date", { ascending: false }).range(f, t)),
+                    fetchAllPaged((f, t) => supabase.from("bank_accounts").select("*").range(f, t)),
                 ]);
                 if (!cancelled) {
-                    if (ordersRes.data) setOrders(ordersRes.data.map(dbToOrder));
-                    if (matsRes.data) setMaterials(matsRes.data.map(dbToMaterial));
-                    if (cfRes.data) setCashFlow(cfRes.data.map(dbToCashFlow));
-                    if (paysRes.data) setPayments(paysRes.data.map(dbToPayment));
-                    if (baRes.data) setBankAccounts(baRes.data.map(dbToBankAccount));
+                    setOrders(orders.map(dbToOrder));
+                    setMaterials(mats.map(dbToMaterial));
+                    setCashFlow(cf.map(dbToCashFlow));
+                    setPayments(pays.map(dbToPayment));
+                    setBankAccounts(ba.map(dbToBankAccount));
                 }
-            } catch {
-                // Supabase unavailable — keep empty
+            } catch (e) {
+                console.error("Store fetch error:", e);
             } finally {
                 if (!cancelled) setLoading(false);
             }
