@@ -19,9 +19,9 @@ interface AuthContextType {
  * - sales/produksi/barang: Restricted access
  */
 const roleAccess: Record<UserRole, string[]> = {
-    owner: ["dashboard", "pesanan", "status-barang", "keuangan", "stok-bahan", "produksi", "admin"],
-    finance: ["dashboard", "pesanan", "status-barang", "keuangan", "stok-bahan", "produksi", "admin"],
-    sales: ["pesanan", "status-barang"],
+    owner: ["dashboard", "pesanan", "status-barang", "keuangan", "stok-bahan", "produksi", "admin", "crm"],
+    finance: ["dashboard", "pesanan", "status-barang", "keuangan", "stok-bahan", "produksi", "admin", "crm"],
+    sales: ["pesanan", "status-barang", "crm"],
     produksi: ["dashboard", "pesanan", "status-barang", "stok-bahan", "produksi"],
     barang: ["dashboard", "pesanan", "status-barang", "stok-bahan", "produksi"],
     finishing: ["produksi"],

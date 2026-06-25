@@ -127,3 +127,18 @@ export interface NotificationRecord {
 
 // Kategori tab pada NotificationPanel
 export type NotificationCategory = 'keuangan' | 'produksi' | 'stok';
+
+// ── CRM (master customer) ──
+export type CustomerType = 'retail' | 'proyek' | 'kontraktor' | 'reseller' | 'lainnya';
+
+export interface Customer {
+  id: string;
+  name: string;
+  phone: string;       // nomor WA/HP
+  address: string;
+  type: CustomerType;
+  pic: string;         // nama kontak / PIC
+  notes: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
