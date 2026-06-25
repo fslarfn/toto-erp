@@ -1,6 +1,8 @@
 "use client";
 import React, { useState, useMemo } from "react";
 import { usePesanan } from "@/lib/pesanan-store";
+import { useCrm, normalizeName } from "@/lib/crm-store";
+import { waUrl } from "@/lib/wa";
 import { pushNotify } from "@/lib/notify";
 
 /* ================================================================
@@ -37,6 +39,7 @@ function parseIdNum(s: string | undefined): number {
 
 export default function TagihanPage() {
     const { rows, updateRow } = usePesanan();
+    const { customers } = useCrm();
     const now = new Date();
     const [year, setYear] = useState(now.getFullYear());
     const [month, setMonth] = useState<number | "all">("all");
@@ -219,6 +222,19 @@ export default function TagihanPage() {
                                                 {custBelum > 0 && <span style={{ color: "#B91C1C" }}>Sisa: <strong>{fmtRp(custBelum)}</strong></span>}
                                             </div>
                                         </div>
+                                        {custBelum > 0 && (() => {
+                                            const cust = customers.find((c) => normalizeName(c.name) === normalizeName(customer));
+                                            const unpaidInvs = (invoices as typeof Array.prototype).filter((inv: { is_paid: boolean }) => !inv.is_paid).map((inv: { no_inv: string }) => inv.no_inv);
+                                            const msg = `Halo ${cust?.pic || customer}, mohon maaf mengganggu.\n\nKami dari *CV TOTO Aluminium Manufacture* ingin mengingatkan tagihan yang masih belum lunas sebesar *${fmtRp(custBelum)}*${unpaidInvs.length ? ` (invoice: ${unpaidInvs.join(", ")})` : ""}.\n\nMohon konfirmasi pembayarannya ya. Terima kasih.`;
+                                            const wa = cust?.phone ? waUrl(cust.phone, msg) : null;
+                                            return wa ? (
+                                                <a href={wa} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+                                                    style={{ background: "#16a34a", color: "white", borderRadius: 7, padding: "6px 12px", fontSize: 12, fontWeight: 700, textDecoration: "none", whiteSpace: "nowrap" }}>💬 Ingatkan</a>
+                                            ) : (
+                                                <a href="/dashboard/crm" onClick={(e) => e.stopPropagation()}
+                                                    style={{ background: "#FEF9C3", color: "#A16207", border: "1px solid #FDE68A", borderRadius: 7, padding: "6px 10px", fontSize: 11, fontWeight: 600, textDecoration: "none", whiteSpace: "nowrap" }}>+ WA di CRM</a>
+                                            );
+                                        })()}
                                         <div style={{ fontSize: 16, color: "#A67B5B" }}>{isExp ? "▲" : "▼"}</div>
                                     </div>
 
