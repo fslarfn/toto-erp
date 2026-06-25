@@ -59,6 +59,7 @@ export default function CrmPage() {
     const { rows } = usePesanan();
 
     const [tab, setTab] = useState<"direktori" | "piutang" | "reengage">("direktori");
+    const [waFilter, setWaFilter] = useState<"all" | "with" | "without">("all");
     const [search, setSearch] = useState("");
     const [form, setForm] = useState<FormState>(emptyForm);
     const [showAdd, setShowAdd] = useState(false);
@@ -107,11 +108,13 @@ export default function CrmPage() {
     };
 
     const filtered = useMemo(() => {
+        let list = customers;
+        if (waFilter === "with") list = list.filter((c) => c.phone.trim());
+        else if (waFilter === "without") list = list.filter((c) => !c.phone.trim());
         const q = search.toLowerCase().trim();
-        const list = !q ? customers : customers.filter((c) =>
-            [c.name, c.phone, c.pic, c.address].join(" ").toLowerCase().includes(q));
+        if (q) list = list.filter((c) => [c.name, c.phone, c.pic, c.address].join(" ").toLowerCase().includes(q));
         return list;
-    }, [customers, search]);
+    }, [customers, search, waFilter]);
 
     const withWa = customers.filter((c) => c.phone.trim()).length;
 
@@ -200,17 +203,35 @@ export default function CrmPage() {
             </div>
 
             {tab === "direktori" && (<>
-            {/* Ringkasan */}
+            {/* Ringkasan — klik untuk filter */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.875rem" }}>
-                <div className="stat-card"><div style={{ fontSize: 11, fontWeight: 600, color: "#B89678" }}>Total Customer</div><div style={{ fontSize: "1.3rem", fontWeight: 800, color: "var(--text-dark)" }}>{customers.length}</div></div>
-                <div className="stat-card"><div style={{ fontSize: 11, fontWeight: 600, color: "#B89678" }}>Punya No. WA</div><div style={{ fontSize: "1.3rem", fontWeight: 800, color: "#15803D" }}>{withWa}</div></div>
-                <div className="stat-card"><div style={{ fontSize: 11, fontWeight: 600, color: "#B89678" }}>Belum Ada WA</div><div style={{ fontSize: "1.3rem", fontWeight: 800, color: "#B91C1C" }}>{customers.length - withWa}</div></div>
+                {([
+                    { key: "all" as const, label: "Total Customer", val: customers.length, color: "var(--text-dark)" },
+                    { key: "with" as const, label: "Punya No. WA", val: withWa, color: "#15803D" },
+                    { key: "without" as const, label: "Belum Ada WA", val: customers.length - withWa, color: "#B91C1C" },
+                ]).map((c) => {
+                    const active = waFilter === c.key;
+                    return (
+                        <button key={c.key} onClick={() => setWaFilter(c.key)} className="stat-card"
+                            style={{ textAlign: "left", cursor: "pointer", border: active ? "2px solid #A67B5B" : "2px solid transparent", boxShadow: active ? "0 0 0 3px rgba(166,123,91,0.12)" : undefined, transition: "all .15s" }}>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: "#B89678" }}>{c.label}{active ? " • aktif" : ""}</div>
+                            <div style={{ fontSize: "1.3rem", fontWeight: 800, color: c.color }}>{c.val}</div>
+                        </button>
+                    );
+                })}
             </div>
 
             {/* Tabel */}
             <div className="card">
                 <div className="card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                    <span>Daftar Customer ({filtered.length})</span>
+                    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        Daftar Customer ({filtered.length})
+                        {waFilter !== "all" && (
+                            <button onClick={() => setWaFilter("all")} style={{ fontSize: 11, fontWeight: 600, color: "#A16207", background: "#FEF9C3", border: "1px solid #FDE68A", borderRadius: 99, padding: "2px 10px", cursor: "pointer" }}>
+                                Filter: {waFilter === "without" ? "Belum ada WA" : "Punya WA"} ✕
+                            </button>
+                        )}
+                    </span>
                     <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="🔍 Cari nama / WA / PIC..." style={{ ...inputSt, width: 260 }} />
                 </div>
                 <div className="table-container">
