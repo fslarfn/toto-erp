@@ -61,9 +61,29 @@ export function useStatusBarangRows(year: number, month: number | "all") {
             .on(
                 "postgres_changes",
                 { event: "*", schema: "public", table: "pesanan_rows" },
-                () => {
-                    console.log("Status Barang: Realtime update detected, re-fetching...");
-                    mutate();
+                (payload) => {
+                    // Tambal dari payload (TANPA refetch seluruh tabel) → hemat egress.
+                    const { eventType, new: n, old: o } = payload;
+                    const newRow = n as unknown as PesananRow;
+                    const oldId = (o as { id?: number })?.id;
+                    mutate((current?: PesananRow[]) => {
+                        const list = current ? [...current] : [];
+                        if (eventType === "DELETE") {
+                            return oldId != null ? list.filter((r) => r.id !== oldId) : list;
+                        }
+                        if (eventType === "UPDATE") {
+                            return list.map((r) => (r.id === newRow.id ? { ...r, ...newRow } : r));
+                        }
+                        if (eventType === "INSERT") {
+                            if (newRow.id == null || list.some((r) => r.id === newRow.id)) return list;
+                            const d = newRow.tanggal || "";
+                            const inScope = month === "all"
+                                ? d.startsWith(String(year))
+                                : d.startsWith(`${year}-${String(month).padStart(2, "0")}`);
+                            return inScope ? [...list, newRow] : list;
+                        }
+                        return list;
+                    }, false);
                 }
             )
             .subscribe();

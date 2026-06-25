@@ -70,7 +70,7 @@ type ActiveTab = "rekap" | "mingguan" | "bulanan" | "izin" | "link";
 
 export default function AbsensiPage() {
     const { karyawan } = useKaryawan();
-    const { absensi, izin, deleteAbsensi, refreshFromLS, addIzin, deleteIzin } = useAbsensi();
+    const { absensi, izin, deleteAbsensi, getAbsensiFoto, refreshFromLS, addIzin, deleteIzin } = useAbsensi();
     const { license } = useLicense();
 
     const [activeTab, setActiveTab] = useState<ActiveTab>("rekap");
@@ -78,7 +78,20 @@ export default function AbsensiPage() {
     const [selectedMonth, setSelectedMonth] = useState(getWIBThisMonth());
     const [selectedWeekDate, setSelectedWeekDate] = useState(getWIBToday());
     const [fotoModal, setFotoModal] = useState<{ record: AbsensiRecord; type: "masuk" | "keluar" } | null>(null);
+    const [fotoSrc, setFotoSrc] = useState<string>("");
+    const [fotoLoading, setFotoLoading] = useState(false);
     const [linkCopied, setLinkCopied] = useState(false);
+
+    // Muat foto base64 ON-DEMAND saat modal dibuka (tidak ikut di-fetch di daftar).
+    useEffect(() => {
+        if (!fotoModal) { setFotoSrc(""); return; }
+        let cancelled = false;
+        setFotoSrc(""); setFotoLoading(true);
+        getAbsensiFoto(fotoModal.record.id)
+            .then((f) => { if (!cancelled) setFotoSrc(fotoModal.type === "masuk" ? f.masuk : f.keluar); })
+            .finally(() => { if (!cancelled) setFotoLoading(false); });
+        return () => { cancelled = true; };
+    }, [fotoModal, getAbsensiFoto]);
 
     // Izin form
     const [izinForm, setIzinForm] = useState({
@@ -439,10 +452,10 @@ export default function AbsensiPage() {
                                         </td>
                                         <td style={{ ...td, textAlign: "center" }}>
                                             <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
-                                                {row.absensi?.foto_masuk_base64 && (
+                                                {row.absensi?.jam_masuk && (
                                                     <button onClick={() => setFotoModal({ record: row.absensi!, type: "masuk" })} style={fotoBtn} title="Foto Masuk">📷</button>
                                                 )}
-                                                {row.absensi?.foto_keluar_base64 && (
+                                                {row.absensi?.jam_keluar && (
                                                     <button onClick={() => setFotoModal({ record: row.absensi!, type: "keluar" })} style={fotoBtn} title="Foto Pulang">🏠</button>
                                                 )}
                                                 {!row.absensi && <span style={{ color: "#CBD5E1" }}>-</span>}
@@ -885,11 +898,13 @@ export default function AbsensiPage() {
                                 )}
                             </p>
                         </div>
-                        <img
-                            src={fotoModal.type === "masuk" ? fotoModal.record.foto_masuk_base64 : fotoModal.record.foto_keluar_base64}
-                            alt="Selfie"
-                            style={{ width: "100%", display: "block" }}
-                        />
+                        {fotoLoading ? (
+                            <div style={{ padding: "48px 0", textAlign: "center", color: "#64748B", fontSize: 13 }}>Memuat foto…</div>
+                        ) : fotoSrc ? (
+                            <img src={fotoSrc} alt="Selfie" style={{ width: "100%", display: "block" }} />
+                        ) : (
+                            <div style={{ padding: "48px 0", textAlign: "center", color: "#94A3B8", fontSize: 13 }}>Tidak ada foto.</div>
+                        )}
                         <div style={{ padding: 16, textAlign: "center" }}>
                             <button
                                 onClick={() => setFotoModal(null)}

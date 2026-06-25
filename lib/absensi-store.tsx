@@ -42,6 +42,8 @@ type AbsensiCtx = {
     sudahAbsenMasuk: (karyawan_id: number, tanggal: string) => boolean;
     sudahAbsenPulang: (karyawan_id: number, tanggal: string) => boolean;
     deleteAbsensi: (id: number) => void;
+    /** Ambil foto base64 satu record on-demand (tidak ikut di-fetch di daftar). */
+    getAbsensiFoto: (id: number) => Promise<{ masuk: string; keluar: string }>;
     refreshFromLS: () => void;
     addIzin: (i: Omit<IzinRecord, "id" | "created_at">) => void;
     deleteIzin: (id: number) => void;
@@ -98,6 +100,10 @@ function absensiToDb(a: Partial<AbsensiRecord>): Record<string, unknown> {
     return d;
 }
 
+// Kolom absensi TANPA foto base64 (hemat egress di fetch daftar/riwayat).
+// Foto (foto_masuk_url/foto_keluar_url) diambil on-demand via getAbsensiFoto.
+const ABSENSI_COLS = "id, karyawan_id, nama_karyawan, tanggal, jam_masuk, jam_keluar, is_telat, selisih_menit, total_jam_kerja, catatan, overtime_hours, status_kehadiran";
+
 const AbsensiContext = createContext<AbsensiCtx | null>(null);
 
 export function AbsensiProvider({ children }: { children: ReactNode }) {
@@ -118,7 +124,7 @@ export function AbsensiProvider({ children }: { children: ReactNode }) {
             try {
                 // ── FASE 1: Hanya data hari ini (fast path untuk /absen) ──
                 const [{ data: todayAbs }, { data: todayIzin }] = await Promise.all([
-                    supabase.from("absensi").select("*").eq("tanggal", today),
+                    supabase.from("absensi").select(ABSENSI_COLS).eq("tanggal", today),
                     supabase.from("izin_absensi").select("*").gte("tanggal", today),
                 ]);
 
@@ -130,7 +136,7 @@ export function AbsensiProvider({ children }: { children: ReactNode }) {
 
                 // ── FASE 2: 90 hari terakhir (background, untuk dashboard) ──
                 const [{ data: histAbs }, { data: histIzin }] = await Promise.all([
-                    supabase.from("absensi").select("*").gte("tanggal", cutoff).order("tanggal", { ascending: false }),
+                    supabase.from("absensi").select(ABSENSI_COLS).gte("tanggal", cutoff).order("tanggal", { ascending: false }),
                     supabase.from("izin_absensi").select("*").gte("tanggal", cutoff).order("tanggal", { ascending: false }),
                 ]);
 
@@ -150,7 +156,7 @@ export function AbsensiProvider({ children }: { children: ReactNode }) {
                                     await supabase.from("absensi").insert(lsData.slice(i, i + 50).map(a => absensiToDb(a)));
                                 }
                                 const { data: freshData } = await supabase
-                                    .from("absensi").select("*").gte("tanggal", cutoff).order("tanggal", { ascending: false });
+                                    .from("absensi").select(ABSENSI_COLS).gte("tanggal", cutoff).order("tanggal", { ascending: false });
                                 if (!cancelled && freshData) setAbsensi(freshData.map(dbToAbsensi));
                                 localStorage.removeItem("totobaru_absensi");
                             }
@@ -288,11 +294,19 @@ export function AbsensiProvider({ children }: { children: ReactNode }) {
         supabase.from("absensi").delete().eq("id", id).then();
     }, []);
 
+    const getAbsensiFoto = useCallback(async (id: number) => {
+        const { data } = await supabase.from("absensi").select("foto_masuk_url, foto_keluar_url").eq("id", id).single();
+        return {
+            masuk: (data?.foto_masuk_url as string) || "",
+            keluar: (data?.foto_keluar_url as string) || "",
+        };
+    }, []);
+
     const refreshFromLS = useCallback(() => {
         const cutoff = getNinetyDaysAgo();
         (async () => {
             const [{ data }, { data: izinData }] = await Promise.all([
-                supabase.from("absensi").select("*").gte("tanggal", cutoff).order("tanggal", { ascending: false }),
+                supabase.from("absensi").select(ABSENSI_COLS).gte("tanggal", cutoff).order("tanggal", { ascending: false }),
                 supabase.from("izin_absensi").select("*").gte("tanggal", cutoff).order("tanggal", { ascending: false }),
             ]);
             if (data) setAbsensi(data.map(dbToAbsensi));
@@ -315,7 +329,7 @@ export function AbsensiProvider({ children }: { children: ReactNode }) {
                 absensi, izin, loading,
                 addAbsensi, updateAbsensiPulang,
                 getAbsensiByDate, getAbsensiByKaryawan, getAbsensiHariIni,
-                sudahAbsenMasuk, sudahAbsenPulang, deleteAbsensi, refreshFromLS,
+                sudahAbsenMasuk, sudahAbsenPulang, deleteAbsensi, getAbsensiFoto, refreshFromLS,
                 addIzin, deleteIzin,
             }}
         >
