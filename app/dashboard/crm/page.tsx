@@ -23,12 +23,21 @@ function parseIdNum(s: string | undefined): number {
 }
 
 // Sapaan WA default (re-engagement: tanya kabar → tawarkan order lagi).
-// Emoji pakai escape Unicode agar tidak rusak encoding.
+// Tanpa emoji — beberapa klien WhatsApp merusak emoji yang dikirim via wa.me.
 function waGreeting(name: string, pic: string): string {
     const sapaan = (pic || name || "Bapak/Ibu").trim();
-    return `Halo ${sapaan}, apa kabar? Semoga sehat selalu dan usahanya lancar \u{1F64F}\n\n`
+    return `Halo ${sapaan}, apa kabar? Semoga sehat selalu dan usahanya lancar.\n\n`
         + `Kami dari *CV TOTO Aluminium Manufacture*. Apakah ada kebutuhan pesanan aluminium lagi yang bisa kami bantu? `
-        + `Kami siap melayani \u{1F60A}`;
+        + `Kami siap melayani.`;
+}
+
+// Pesan pengingat piutang.
+function waPiutang(name: string, pic: string, amount: number, invoices: string[]): string {
+    const sapaan = (pic || name || "Bapak/Ibu").trim();
+    const inv = invoices.length ? ` (invoice: ${invoices.join(", ")})` : "";
+    return `Halo ${sapaan}, mohon maaf mengganggu.\n\n`
+        + `Kami dari *CV TOTO Aluminium Manufacture* ingin mengingatkan tagihan yang masih belum lunas sebesar *${formatCurrency(amount)}*${inv}.\n\n`
+        + `Mohon konfirmasi pembayarannya ya. Terima kasih.`;
 }
 
 function waLink(phone: string, text: string): string | null {
@@ -42,10 +51,14 @@ function waLink(phone: string, text: string): string | null {
 type FormState = { name: string; phone: string; type: CustomerType; pic: string; address: string; notes: string };
 const emptyForm: FormState = { name: "", phone: "", type: "retail", pic: "", address: "", notes: "" };
 
+type Agg = { name: string; count: number; total: number; unpaid: number; last: string; oldestUnpaid: string; invoices: Set<string>; unpaidInvoices: Set<string> };
+const emptyAgg = (name = ""): Agg => ({ name, count: 0, total: 0, unpaid: 0, last: "", oldestUnpaid: "", invoices: new Set(), unpaidInvoices: new Set() });
+
 export default function CrmPage() {
     const { customers, loading, addCustomer, updateCustomer, deleteCustomer, importNames } = useCrm();
     const { rows } = usePesanan();
 
+    const [tab, setTab] = useState<"direktori" | "piutang" | "reengage">("direktori");
     const [search, setSearch] = useState("");
     const [form, setForm] = useState<FormState>(emptyForm);
     const [showAdd, setShowAdd] = useState(false);
@@ -58,24 +71,40 @@ export default function CrmPage() {
 
     // Agregasi order per customer (cocok via nama ternormalisasi).
     const agg = useMemo(() => {
-        const map = new Map<string, { count: number; total: number; unpaid: number; last: string; invoices: Set<string> }>();
+        const map = new Map<string, Agg>();
         for (const r of rows) {
             if (!(r.customer || r.deskripsi) || !r.customer) continue;
             const key = normalizeName(r.customer);
             if (!key) continue;
             const val = parseIdNum(r.harga) * parseIdNum(r.ukuran) * parseIdNum(r.qty);
-            const e = map.get(key) ?? { count: 0, total: 0, unpaid: 0, last: "", invoices: new Set<string>() };
+            const e = map.get(key) ?? emptyAgg(r.customer.trim());
             e.count += 1;
             e.total += val;
-            if (!r.is_paid) e.unpaid += val;
             if (r.no_inv) e.invoices.add(r.no_inv.trim());
+            if (!r.is_paid) {
+                e.unpaid += val;
+                if (r.no_inv) e.unpaidInvoices.add(r.no_inv.trim());
+                if (r.tanggal && (!e.oldestUnpaid || r.tanggal < e.oldestUnpaid)) e.oldestUnpaid = r.tanggal;
+            }
             if (r.tanggal && r.tanggal > e.last) e.last = r.tanggal;
             map.set(key, e);
         }
         return map;
     }, [rows]);
 
-    const statOf = (name: string) => agg.get(normalizeName(name)) ?? { count: 0, total: 0, unpaid: 0, last: "", invoices: new Set<string>() };
+    const statOf = (name: string) => agg.get(normalizeName(name)) ?? emptyAgg(name);
+
+    // Lookup customer master by nama ternormalisasi (untuk ambil no WA/PIC).
+    const byName = useMemo(() => {
+        const m = new Map<string, Customer>();
+        customers.forEach((c) => m.set(normalizeName(c.name), c));
+        return m;
+    }, [customers]);
+
+    const daysSince = (d: string) => {
+        if (!d) return 0;
+        return Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
+    };
 
     const filtered = useMemo(() => {
         const q = search.toLowerCase().trim();
@@ -163,6 +192,14 @@ export default function CrmPage() {
                 </div>
             </div>
 
+            {/* Tab bar */}
+            <div style={{ display: "flex", gap: 4, borderBottom: "1px solid #E8DDD0" }}>
+                {([["direktori", "Direktori"], ["piutang", "Pengingat Piutang"], ["reengage", "Re-engagement"]] as const).map(([k, label]) => (
+                    <button key={k} onClick={() => setTab(k)} style={{ padding: "8px 16px", border: "none", background: "transparent", borderBottom: tab === k ? "2.5px solid #A67B5B" : "2.5px solid transparent", color: tab === k ? "#A67B5B" : "#9CA3AF", fontWeight: tab === k ? 700 : 500, fontSize: 13, cursor: "pointer" }}>{label}</button>
+                ))}
+            </div>
+
+            {tab === "direktori" && (<>
             {/* Ringkasan */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.875rem" }}>
                 <div className="stat-card"><div style={{ fontSize: 11, fontWeight: 600, color: "#B89678" }}>Total Customer</div><div style={{ fontSize: "1.3rem", fontWeight: 800, color: "var(--text-dark)" }}>{customers.length}</div></div>
@@ -219,6 +256,101 @@ export default function CrmPage() {
                     </table>
                 </div>
             </div>
+            </>)}
+
+            {/* ── Tab: PENGINGAT PIUTANG ── */}
+            {tab === "piutang" && (() => {
+                const list = Array.from(agg.values()).filter((a) => a.unpaid > 0.01).sort((x, y) => y.unpaid - x.unpaid);
+                const totalPiutang = list.reduce((s, a) => s + a.unpaid, 0);
+                return (
+                    <>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "0.875rem" }}>
+                            <div className="stat-card"><div style={{ fontSize: 11, fontWeight: 600, color: "#B89678" }}>Total Piutang</div><div style={{ fontSize: "1.3rem", fontWeight: 800, color: "#B91C1C" }}>{formatCurrency(totalPiutang)}</div></div>
+                            <div className="stat-card"><div style={{ fontSize: 11, fontWeight: 600, color: "#B89678" }}>Customer Menunggak</div><div style={{ fontSize: "1.3rem", fontWeight: 800, color: "var(--text-dark)" }}>{list.length}</div></div>
+                        </div>
+                        <div className="card">
+                            <div className="card-header">Customer dengan Piutang ({list.length})</div>
+                            <div className="table-container">
+                                <table className="data-table">
+                                    <thead><tr><th>Customer</th><th style={{ textAlign: "right" }}>Piutang</th><th style={{ textAlign: "center" }}>Umur</th><th>Invoice Belum Lunas</th><th style={{ width: 150, textAlign: "center" }}>Aksi</th></tr></thead>
+                                    <tbody>
+                                        {list.length === 0 ? (
+                                            <tr><td colSpan={5} style={{ textAlign: "center", padding: 30, color: "#15803D" }}>🎉 Tidak ada piutang. Semua lunas!</td></tr>
+                                        ) : list.map((a) => {
+                                            const c = byName.get(normalizeName(a.name));
+                                            const umur = daysSince(a.oldestUnpaid);
+                                            const invs = Array.from(a.unpaidInvoices);
+                                            const wa = c?.phone ? waLink(c.phone, waPiutang(a.name, c.pic, a.unpaid, invs)) : null;
+                                            return (
+                                                <tr key={a.name}>
+                                                    <td style={{ fontWeight: 600 }}>{a.name}{c?.pic && <div style={{ fontSize: 11, color: "#8A7B6E" }}>{c.pic}</div>}</td>
+                                                    <td style={{ textAlign: "right", fontWeight: 700, color: "#B91C1C" }}>{formatCurrency(a.unpaid)}</td>
+                                                    <td style={{ textAlign: "center", fontSize: 12, color: umur > 60 ? "#B91C1C" : umur > 30 ? "#A16207" : "#6B7280", fontWeight: 600 }}>{umur > 0 ? `${umur} hr` : "—"}</td>
+                                                    <td style={{ fontSize: 12, color: "#5C4033" }}>{invs.length ? invs.join(", ") : "—"}</td>
+                                                    <td style={{ textAlign: "center" }}>
+                                                        {wa ? (
+                                                            <a href={wa} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ background: "#16a34a", fontSize: 12, padding: "5px 10px", whiteSpace: "nowrap" }}>💬 Ingatkan</a>
+                                                        ) : (
+                                                            <span style={{ fontSize: 11, color: "#C5A882" }}>{c ? "Belum ada WA" : "Tak di master"}</span>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div className="card-body" style={{ fontSize: 11.5, color: "#8A7B6E" }}>{'💡 Tombol Ingatkan butuh No. WA di master customer. Yang "Tak di master" → Import/Tambah dulu di tab Direktori.'}</div>
+                        </div>
+                    </>
+                );
+            })()}
+
+            {/* ── Tab: RE-ENGAGEMENT ── */}
+            {tab === "reengage" && (() => {
+                const CUTOFF = 90;
+                const list = Array.from(agg.values()).filter((a) => a.last && daysSince(a.last) >= CUTOFF).sort((x, y) => daysSince(y.last) - daysSince(x.last));
+                return (
+                    <>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "0.875rem" }}>
+                            <div className="stat-card"><div style={{ fontSize: 11, fontWeight: 600, color: "#B89678" }}>Perlu Di-follow-up (≥ {CUTOFF} hari)</div><div style={{ fontSize: "1.3rem", fontWeight: 800, color: "#A16207" }}>{list.length}</div></div>
+                            <div className="stat-card"><div style={{ fontSize: 11, fontWeight: 600, color: "#B89678" }}>Potensi Nilai (total historis)</div><div style={{ fontSize: "1.3rem", fontWeight: 800, color: "var(--text-dark)" }}>{formatCurrency(list.reduce((s, a) => s + a.total, 0))}</div></div>
+                        </div>
+                        <div className="card">
+                            <div className="card-header">Customer Lama Tidak Order ({list.length})</div>
+                            <div className="table-container">
+                                <table className="data-table">
+                                    <thead><tr><th>Customer</th><th>Order Terakhir</th><th style={{ textAlign: "center" }}>Lama Tidak Order</th><th style={{ textAlign: "right" }}>Total Nilai</th><th style={{ width: 150, textAlign: "center" }}>Aksi</th></tr></thead>
+                                    <tbody>
+                                        {list.length === 0 ? (
+                                            <tr><td colSpan={5} style={{ textAlign: "center", padding: 30, color: "#15803D" }}>Semua customer aktif (order &lt; {CUTOFF} hari). 👍</td></tr>
+                                        ) : list.map((a) => {
+                                            const c = byName.get(normalizeName(a.name));
+                                            const lama = daysSince(a.last);
+                                            const wa = c?.phone ? waLink(c.phone, waGreeting(a.name, c.pic)) : null;
+                                            return (
+                                                <tr key={a.name}>
+                                                    <td style={{ fontWeight: 600 }}>{a.name}{c?.pic && <div style={{ fontSize: 11, color: "#8A7B6E" }}>{c.pic}</div>}</td>
+                                                    <td style={{ fontSize: 13 }}>{a.last ? formatDate(a.last) : "—"}</td>
+                                                    <td style={{ textAlign: "center", fontSize: 12, fontWeight: 600, color: lama > 180 ? "#B91C1C" : "#A16207" }}>{lama} hr</td>
+                                                    <td style={{ textAlign: "right", fontWeight: 600 }}>{formatCurrency(a.total)}</td>
+                                                    <td style={{ textAlign: "center" }}>
+                                                        {wa ? (
+                                                            <a href={wa} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ background: "#16a34a", fontSize: 12, padding: "5px 10px", whiteSpace: "nowrap" }}>💬 Sapa</a>
+                                                        ) : (
+                                                            <span style={{ fontSize: 11, color: "#C5A882" }}>{c ? "Belum ada WA" : "Tak di master"}</span>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </>
+                );
+            })()}
 
             {/* Modal Tambah / Edit */}
             {(showAdd || editing) && (
