@@ -22,24 +22,9 @@ export async function POST(req: Request) {
   try {
     const supabase = getServiceSupabase();
 
-    const { data: config, error: configErr } = await supabase
-      .from("app_config")
-      .select("license_expired_at, is_setup_completed")
-      .eq("id", 1)
-      .single();
-    if (configErr) throw configErr;
-
-    const isInitial = !config.is_setup_completed;
-    const daysToAdd = isInitial ? 90 : 30;
-
-    let baseDate = new Date();
-    if (config.license_expired_at) {
-      const currentExpired = new Date(config.license_expired_at);
-      if (currentExpired > baseDate) baseDate = currentExpired;
-    }
-
-    const newExpiredAt = new Date(baseDate);
-    newExpiredAt.setDate(newExpiredAt.getDate() + daysToAdd);
+    // Aktivasi Manual: set masa aktif LANGSUNG ke 10 Januari 2027
+    // (skema bayar di muka 5 bulan s/d Desember 2026), bukan menambah X hari.
+    const newExpiredAt = new Date("2027-01-10T23:59:59+07:00");
 
     const { error: updateErr } = await supabase
       .from("app_config")
@@ -47,10 +32,11 @@ export async function POST(req: Request) {
       .eq("id", 1);
     if (updateErr) throw updateErr;
 
+    // Invoice/riwayat: pembayaran di muka 5 bulan = Rp 30.000.000
     const { error: historyErr } = await supabase.from("billing_history").insert({
       order_id: `ADMIN-MANUAL-${Date.now()}`,
-      amount: isInitial ? 20800000 : 6200000,
-      payment_type: isInitial ? "initial" : "monthly",
+      amount: 30000000,
+      payment_type: "extend_5m",
       status: "settlement",
       payment_method: "ADMIN_DIRECT",
       created_at: new Date().toISOString(),

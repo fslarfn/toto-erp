@@ -153,10 +153,7 @@ export default function BillingPage() {
     };
 
     const manualExtend = async () => {
-        const isInitial = !license?.is_setup_completed;
-        const daysToAdd = isInitial ? 90 : 30;
-        
-        if (!confirm(`Lakukan Aktivasi Manual? \nIni akan menambah masa aktif ${daysToAdd} hari ${isInitial ? '(Setiap Awal)' : '(Bulanan)'} secara instan.`)) return;
+        if (!confirm("Lakukan Aktivasi Manual?\nMasa aktif akan di-set ke 10 Januari 2027 (skema bayar di muka 5 bulan).")) return;
         
         setLoading(true);
         try {
@@ -498,7 +495,7 @@ export default function BillingPage() {
                                 <tr key={item.order_id} style={{ borderBottom: "1px solid #f5f3f0" }}>
                                     <td style={{ padding: "14px 16px", fontSize: 13, fontWeight: 500 }}>{format(new Date(item.created_at), 'dd MMM yyyy')}</td>
                                     <td style={{ padding: "14px 16px", fontSize: 11, textTransform: "uppercase", fontWeight: 700, color: item.payment_type === 'absensi_activation' ? "#1D4ED8" : "#8a7e72" }}>
-                                        {item.payment_type === 'initial' ? 'Setup + Lisensi' : item.payment_type === 'absensi_activation' ? '📋 Aktivasi Absensi' : 'Langganan Bulanan'}
+                                        {item.payment_type === 'initial' ? 'Setup + Lisensi' : item.payment_type === 'absensi_activation' ? '📋 Aktivasi Absensi' : item.payment_type === 'extend_5m' ? '🗓️ Langganan 5 Bulan' : 'Langganan Bulanan'}
                                     </td>
                                     <td style={{ padding: "14px 16px", fontSize: 13, fontWeight: 700, fontFamily: "'Playfair Display', serif" }}>{formatCurrency(item.amount)}</td>
                                     <td style={{ padding: "14px 16px", textAlign: "center" }}>
@@ -728,6 +725,26 @@ export default function BillingPage() {
                                         <div className="cert-row !border-none !mt-2 pt-2 border-t border-gray-100">
                                             <span style={{ fontSize: 10, fontWeight: "bold" }}>Setelah Diskon</span>
                                             <span style={{ fontSize: 11, fontWeight: "bold" }}>Rp 3.600.000 + Rp 2.500.000</span>
+                                        </div>
+                                    </div>
+                                ) : selectedInvoice.payment_type === 'extend_5m' ? (
+                                    <div className="mt-4 pt-4 border-t border-dashed border-gray-200">
+                                        <div className="cert-row">
+                                            <span className="cert-label">Jenis Lisensi</span>
+                                            <span className="cert-value uppercase">TOTO ERP - LANGGANAN 5 BULAN</span>
+                                        </div>
+                                        <div className="cert-row">
+                                            <span className="cert-label">Masa Aktif</span>
+                                            <span className="cert-value">s/d 10 Januari 2027</span>
+                                        </div>
+                                        <p className="cert-label mb-2 mt-2">Rincian Biaya:</p>
+                                        <div className="cert-row !border-none !mb-1">
+                                            <span style={{ fontSize: 10, color: "#6b7280" }}>Biaya layanan per bulan</span>
+                                            <span style={{ fontSize: 11, fontWeight: "bold" }}>Rp 6.000.000</span>
+                                        </div>
+                                        <div className="cert-row !border-none !mb-1">
+                                            <span style={{ fontSize: 10, color: "#6b7280" }}>Jumlah periode</span>
+                                            <span style={{ fontSize: 11, fontWeight: "bold" }}>5 (lima) bulan</span>
                                         </div>
                                     </div>
                                 ) : (
