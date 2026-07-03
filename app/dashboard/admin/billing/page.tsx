@@ -775,11 +775,19 @@ export default function BillingPage() {
                                         <p className="cert-label mb-2 mt-2">Rincian Biaya:</p>
                                         <div className="cert-row !border-none !mb-1">
                                             <span style={{ fontSize: 10, color: "#6b7280" }}>Biaya layanan per bulan</span>
-                                            <span style={{ fontSize: 11, fontWeight: "bold" }}>Rp 6.000.000</span>
+                                            <span style={{ fontSize: 11, fontWeight: "bold" }}>Rp 6.200.000</span>
                                         </div>
                                         <div className="cert-row !border-none !mb-1">
                                             <span style={{ fontSize: 10, color: "#6b7280" }}>Jumlah periode</span>
                                             <span style={{ fontSize: 11, fontWeight: "bold" }}>5 (lima) bulan</span>
+                                        </div>
+                                        <div className="cert-row !border-none !mt-2 pt-2 border-t border-gray-100">
+                                            <span style={{ fontSize: 10, fontWeight: "bold" }}>Subtotal (6.200.000 x 5)</span>
+                                            <span style={{ fontSize: 11, fontWeight: "bold" }}>Rp 31.000.000</span>
+                                        </div>
+                                        <div className="cert-row !border-none !mb-1">
+                                            <span style={{ fontSize: 10, fontStyle: "italic", fontWeight: 900, color: "#059669" }}>Diskon Bayar 5 Bulan di Muka</span>
+                                            <span style={{ fontSize: 11, fontWeight: 900, color: "#059669" }}>- Rp 1.000.000</span>
                                         </div>
                                     </div>
                                 ) : (
