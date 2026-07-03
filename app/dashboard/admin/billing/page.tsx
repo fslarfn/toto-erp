@@ -647,7 +647,42 @@ export default function BillingPage() {
                             }
                         `}</style>
 
-                        <div className="cert-container">
+                        {/* Print isolation: only the certificate is printed, full color */}
+                        <style jsx global>{`
+                            @media print {
+                                @page { size: A4 portrait; margin: 14mm; }
+                                html, body { background: #ffffff !important; margin: 0 !important; padding: 0 !important; }
+                                /* Hide everything, then reveal only the certificate subtree */
+                                body * { visibility: hidden !important; }
+                                #print-invoice, #print-invoice * { visibility: visible !important; }
+                                #print-invoice {
+                                    position: absolute !important;
+                                    left: 0 !important;
+                                    top: 0 !important;
+                                    width: 100% !important;
+                                    margin: 0 !important;
+                                    padding: 24px !important;
+                                    border: none !important;
+                                    outline: none !important;
+                                    box-shadow: none !important;
+                                    border-radius: 0 !important;
+                                    background: #ffffff !important;
+                                    /* Force backgrounds & colors to print */
+                                    -webkit-print-color-adjust: exact !important;
+                                    print-color-adjust: exact !important;
+                                }
+                                #print-invoice *,
+                                #print-invoice *::before,
+                                #print-invoice *::after {
+                                    -webkit-print-color-adjust: exact !important;
+                                    print-color-adjust: exact !important;
+                                }
+                                #print-invoice::before { display: none !important; }
+                                .no-print { display: none !important; }
+                            }
+                        `}</style>
+
+                        <div id="print-invoice" className="cert-container">
                             <div className="watermark">T O T O</div>
 
                             <div className="cert-header">
