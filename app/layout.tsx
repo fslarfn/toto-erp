@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { StoreProvider } from "@/lib/store";
 import { AuthProvider } from "@/lib/auth";
+import { WorkspaceProvider } from "@/lib/workspace-store";
 import { KaryawanProvider } from "@/lib/karyawan-store";
 import { AbsensiProvider } from "@/lib/absensi-store";
 import { LicenseProvider } from "@/lib/license-store";
@@ -29,17 +30,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <html lang="id">
             <body className={inter.className}>
                 <AuthProvider>
-                    <StoreProvider>
-                        <KaryawanProvider>
-                            <AbsensiProvider>
-                                <LicenseProvider>
-                                    <LicenseGuard>
-                                        {children}
-                                    </LicenseGuard>
-                                </LicenseProvider>
-                            </AbsensiProvider>
-                        </KaryawanProvider>
-                    </StoreProvider>
+                    <WorkspaceProvider>
+                        <StoreProvider>
+                            <KaryawanProvider>
+                                <AbsensiProvider>
+                                    <LicenseProvider>
+                                        <LicenseGuard>
+                                            {children}
+                                        </LicenseGuard>
+                                    </LicenseProvider>
+                                </AbsensiProvider>
+                            </KaryawanProvider>
+                        </StoreProvider>
+                    </WorkspaceProvider>
                 </AuthProvider>
             </body>
         </html>

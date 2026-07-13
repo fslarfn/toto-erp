@@ -27,6 +27,8 @@ export default function LoginPage() {
             const role = stored ? JSON.parse(stored).role : null;
             if (role === "finishing") {
                 router.push("/dashboard/produksi");
+            } else if (role === "alucurv") {
+                router.push("/dashboard/alucurv");
             } else {
                 router.push("/dashboard");
             }
