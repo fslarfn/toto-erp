@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS user_workspaces (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
     workspace TEXT NOT NULL CHECK (workspace IN ('toto', 'alucurv')),
-    role TEXT NOT NULL CHECK (role IN ('owner', 'manager', 'finance', 'sales', 'produksi', 'barang')),
+    role TEXT NOT NULL CHECK (role IN ('owner', 'manager', 'finance', 'sales', 'produksi', 'barang', 'finishing')),
     created_at TIMESTAMPTZ DEFAULT now(),
     UNIQUE (user_id, workspace)
 );
