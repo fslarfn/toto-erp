@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+@theme {
+  /* Palet "aluminium hitam doff" */
+  --color-alu-bg: #f2f3f1;        /* abu aluminium terang */
+  --color-alu-surface: #ffffff;
+  --color-alu-ink: #21252c;       /* hitam doff */
+  --color-alu-muted: #6d7480;
+  --color-alu-line: #e2e4e0;
+  --color-alu-dark: #24282f;      /* sidebar - profil hitam doff */
+  --color-alu-dark2: #2d323b;
+  --color-steel: #2e5d8c;         /* biru baja - aksi utama */
+  --color-steel-soft: #e8eff7;
+  --color-amber: #b7791f;
+  --color-amber-soft: #fdf3e0;
+  --color-green: #1f7a4d;
+  --color-green-soft: #e5f4ec;
+  --color-red: #b3382f;
+  --color-red-soft: #fbeae8;
+
+  --font-sans: "Archivo", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+html { background: var(--color-alu-bg); }
+body { color: var(--color-alu-ink); }
+
+/* angka rata & mudah dibandingkan di tabel */
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* lengkungan khas Alucurv: sisi atas kartu melengkung penuh */
+.arch { border-radius: 999px 999px 14px 14px; }
+
+::selection { background: var(--color-steel); color: white; }
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
