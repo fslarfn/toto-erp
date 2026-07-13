@@ -6,6 +6,8 @@ export interface CrudField {
     label: string;
     type?: "text" | "number" | "date" | "select" | "checkbox";
     options?: string[];
+    /** Tampilkan field ini di form tambah hanya kalau kondisi terpenuhi (mis. tergantung field lain). */
+    showIf?: (form: Record<string, unknown>) => boolean;
 }
 
 export default function AlucurvCrudTable<T extends { id: string }>({
@@ -40,7 +42,7 @@ export default function AlucurvCrudTable<T extends { id: string }>({
     return (
         <div>
             <form onSubmit={submit} style={formStyle}>
-                {fields.map((f) => (
+                {fields.filter((f) => !f.showIf || f.showIf(form)).map((f) => (
                     <div key={f.key} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                         <label style={labelStyle}>{f.label}</label>
                         {f.type === "select" ? (

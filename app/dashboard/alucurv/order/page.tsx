@@ -12,6 +12,7 @@ interface AlucurvOrder {
     channel: string;
     deadline: string | null;
     price: number;
+    received_amount: number | null;
     expedition: string | null;
     produksi: boolean;
     perakitan: boolean;
@@ -27,6 +28,12 @@ const fields: CrudField[] = [
     { key: "channel", label: "Channel", type: "select", options: ["Shopee", "TikTokShop", "Offline"] },
     { key: "deadline", label: "Deadline", type: "date" },
     { key: "price", label: "Harga", type: "number" },
+    {
+        key: "received_amount",
+        label: "Harga Setelah Barang Datang",
+        type: "number",
+        showIf: (form) => form.channel === "Shopee" || form.channel === "TikTokShop",
+    },
     { key: "expedition", label: "Ekspedisi", type: "text" },
     { key: "produksi", label: "Produksi", type: "checkbox" },
     { key: "perakitan", label: "Perakitan", type: "checkbox" },
@@ -42,6 +49,7 @@ const excelColumns: ExcelColumn[] = [
     { key: "channel", header: "Channel", type: "text" },
     { key: "deadline", header: "Deadline", type: "date" },
     { key: "price", header: "Harga", type: "number" },
+    { key: "received_amount", header: "Harga Setelah Barang Datang", type: "number" },
     { key: "expedition", header: "Ekspedisi", type: "text" },
 ];
 
@@ -53,6 +61,7 @@ export default function AlucurvOrderPage() {
             <h1 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-dark)", marginBottom: 4 }}>Order</h1>
             <p style={{ fontSize: 13, color: "var(--text-med)", marginBottom: 16 }}>
                 Pipeline order per channel Shopee/TikTok/Offline. Centang tahap produksi–perakitan–packing–kirim–sampai untuk tracking.
+                Untuk order Shopee/TikTok, isi &quot;Harga Setelah Barang Datang&quot; — itu nominal bersih yang benar-benar diterima Alucurv setelah settlement marketplace (beda dengan Harga yang cuma harga jual di listing).
             </p>
             <div style={{ marginBottom: 16 }}>
                 <ExcelImportButton columns={excelColumns} onImport={(rows) => insertRows(rows)} />
