@@ -21,6 +21,30 @@
 }
 
 /* ============================================ */
+/* WORKSPACE ALUCURV - HIJAU TOSCA THEME         */
+/* Scoped ke #app-container.workspace-alucurv,   */
+/* override var yang sama supaya seluruh UI      */
+/* (header, sidebar-link active, tombol, dll)    */
+/* otomatis ikut tanpa sentuh komponen lain.      */
+/* ============================================ */
+.workspace-alucurv {
+  --primary: #14B8A6;
+  --primary-dark: #0F766E;
+  --primary-light: #5EEAD4;
+  --bg: #F0FDFA;
+  --bg-secondary: #E6FFFA;
+  --text-dark: #134E4A;
+  --text-med: #0F766E;
+  --border: #99F6E4;
+  --border-light: #CCFBF1;
+  --accent: #CCFBF1;
+}
+
+.workspace-alucurv .sidebar-link:hover {
+  background-color: var(--bg-secondary);
+}
+
+/* ============================================ */
 /* BASE                                          */
 /* ============================================ */
 * {
