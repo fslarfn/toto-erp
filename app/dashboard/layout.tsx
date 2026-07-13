@@ -4,6 +4,8 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useAuth, roleLabels, getRoleDisplay } from "@/lib/auth";
 import { useLicense } from "@/lib/license-store";
+import { useWorkspace } from "@/lib/workspace-store";
+import WorkspaceSwitcher from "@/components/layout/WorkspaceSwitcher";
 import { PesananProvider } from "@/lib/pesanan-store";
 import { SuratJalanProvider } from "@/lib/surat-jalan-store";
 import { SJBahanProvider } from "@/lib/sj-bahan-store";
@@ -67,6 +69,7 @@ const NAV_ITEMS = [
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
     const { user, logout, hasAccess } = useAuth();
     const { license } = useLicense();
+    const { hasWorkspace, canViewGabungan } = useWorkspace();
     const router = useRouter();
     const pathname = usePathname();
     const [collapsed, setCollapsed] = useState(false);
@@ -187,6 +190,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             </div>
                             <span className="brand-text" style={{ fontSize: "0.95rem" }}>ERP TOTO</span>
                         </div>
+                        <div className="sidebar-text" style={{ padding: "0 12px" }}>
+                            <WorkspaceSwitcher />
+                        </div>
 
                         <div className="sidebar-content">
                             {NAV_ITEMS.map((group) => {
@@ -216,6 +222,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                     </div>
                                 );
                             })}
+                            {hasWorkspace("alucurv") && (
+                                <div>
+                                    <div className="section-label">Multi-Bisnis</div>
+                                    <Link
+                                        href="/dashboard/alucurv"
+                                        className={`sidebar-link ${pathname.startsWith("/dashboard/alucurv") ? "active" : ""}`}
+                                        onClick={() => setMobileOpen(false)}
+                                    >
+                                        <BuildingIcon size={18} />
+                                        <span className="sidebar-text">Workspace Alucurv</span>
+                                    </Link>
+                                    {canViewGabungan && (
+                                        <Link
+                                            href="/dashboard/gabungan"
+                                            className={`sidebar-link ${pathname.startsWith("/dashboard/gabungan") ? "active" : ""}`}
+                                            onClick={() => setMobileOpen(false)}
+                                        >
+                                            <GabunganIcon size={18} />
+                                            <span className="sidebar-text">Dashboard Gabungan</span>
+                                        </Link>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
                         <div className="sidebar-footer">
@@ -441,3 +470,5 @@ function CustomerIcon({ size = 18 }: { size?: number }) { return ( <svg width={s
 function PenawaranIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /><path d="M16 13H8" /><path d="M16 17H8" /><path d="M10 9H9H8" /><path d="M12 2v6" /></svg> ); }
 function BarChartIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /><line x1="3" y1="20" x2="21" y2="20" /></svg> ); }
 function CockpitIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 12L16 10" /><path d="M12 12L8 10" /><path d="M12 12V7" /><path d="M12 17V17.01" /></svg> ); }
+function BuildingIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="1" /><line x1="9" y1="6" x2="9" y2="6.01" /><line x1="15" y1="6" x2="15" y2="6.01" /><line x1="9" y1="10" x2="9" y2="10.01" /><line x1="15" y1="10" x2="15" y2="10.01" /><line x1="9" y1="14" x2="9" y2="14.01" /><line x1="15" y1="14" x2="15" y2="14.01" /><line x1="9" y1="18" x2="15" y2="18" /></svg> ); }
+function GabunganIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="12" r="5" /><circle cx="16" cy="12" r="5" /></svg> ); }
