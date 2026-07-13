@@ -118,7 +118,7 @@ const GABUNGAN_NAV_ITEMS = [
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
     const { user, logout, hasAccess } = useAuth();
     const { license } = useLicense();
-    const { activeWorkspace } = useWorkspace();
+    const { activeWorkspace, hasWorkspace, memberships } = useWorkspace();
     const router = useRouter();
     const pathname = usePathname();
     const [collapsed, setCollapsed] = useState(false);
@@ -142,15 +142,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     const isAdmin = ["faisal", "vira", "toto", "fauzi", "yuni"].includes(user?.username || "");
     const isFinishing = user?.role === "finishing";
+    // Fail-open: hanya blokir kalau memberships sudah pasti ke-fetch (>0 baris) dan
+    // memang tidak ada baris 'toto' — kalau tabel belum ada/query gagal, memberships
+    // tetap [] dan user TIDAK diblokir (perilaku lama tetap jalan, lihat workspace-store.tsx).
+    const isAlucurvOnly = memberships.length > 0 && !hasWorkspace("toto");
 
     useEffect(() => {
         if (!user) router.replace("/login");
         else if (isFinishing && pathname !== "/dashboard/produksi") {
             router.replace("/dashboard/produksi");
-        } else if (!isFinishing && license && !license.is_setup_completed) {
+        } else if (isAlucurvOnly && !pathname.startsWith("/dashboard/alucurv") && !pathname.startsWith("/dashboard/gabungan")) {
+            router.replace("/dashboard/alucurv");
+        } else if (!isFinishing && !isAlucurvOnly && license && !license.is_setup_completed) {
             setShowTrialModal(true);
         }
-    }, [user, router, license, isFinishing, pathname]);
+    }, [user, router, license, isFinishing, isAlucurvOnly, pathname]);
 
     if (!user) return null;
     // Tahan render sampai redirect selesai agar tidak crash di provider
@@ -395,7 +401,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         {/* Page content */}
                         <main style={{ flex: 1, display: "flex", flexDirection: "column", overflowX: "hidden", background: isCockpit ? "#F5EBDD" : "var(--bg)" }}>
                             {/* Trial Banner */}
-                            {license && !license.is_setup_completed && !isCockpit && (
+                            {!isAlucurvOnly && license && !license.is_setup_completed && !isCockpit && (
                                 <div style={{ background: "linear-gradient(90deg, #FFFBEB 0%, #FEF3C7 100%)", borderBottom: "1px solid #FDE68A", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", fontSize: "13px", color: "#92400E", fontWeight: 500 }}>
                                     <span style={{ fontSize: "16px" }}>✨</span><span>Aplikasi dalam masa <strong>Free Trial</strong> sampai <strong>25 April 2026</strong>. Silakan lakukan aktivasi untuk akses penuh.</span>
                                     <Link href="/dashboard/admin/billing" style={{ marginLeft: "10px", padding: "4px 12px", background: "#B45309", color: "white", borderRadius: "6px", textDecoration: "none", fontSize: "11px", fontWeight: 700 }}>AKTIVASI</Link>

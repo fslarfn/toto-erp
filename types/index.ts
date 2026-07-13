@@ -1,4 +1,4 @@
-export type UserRole = 'owner' | 'finance' | 'sales' | 'produksi' | 'barang' | 'finishing';
+export type UserRole = 'owner' | 'finance' | 'sales' | 'produksi' | 'barang' | 'finishing' | 'alucurv';
 
 // Matches toto-backend reference exactly
 export type ProductionStatus =

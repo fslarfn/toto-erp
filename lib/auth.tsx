@@ -25,6 +25,9 @@ const roleAccess: Record<UserRole, string[]> = {
     produksi: ["dashboard", "pesanan", "status-barang", "stok-bahan", "produksi"],
     barang: ["dashboard", "pesanan", "status-barang", "stok-bahan", "produksi"],
     finishing: ["produksi"],
+    // User khusus workspace Alucurv — tidak dapat modul Toto sama sekali.
+    // Akses sesungguhnya ditegakkan lewat workspace guard di app/dashboard/layout.tsx.
+    alucurv: [],
 };
 
 const roleLabels: Record<UserRole, string> = {
@@ -34,6 +37,7 @@ const roleLabels: Record<UserRole, string> = {
     produksi: "PIC Produksi",
     barang: "PIC Barang",
     finishing: "Operator Finishing",
+    alucurv: "Admin Alucurv",
 };
 
 export function getRoleDisplay(user: User | null) {
