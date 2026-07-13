@@ -151,7 +151,7 @@ body {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
-  color: #B89678;
+  color: var(--text-med);
   padding: 1rem 1.25rem 0.25rem;
   text-transform: uppercase;
 }

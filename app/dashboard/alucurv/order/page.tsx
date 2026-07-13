@@ -1,10 +1,63 @@
-import ModulePlaceholder from "@/components/layout/ModulePlaceholder";
+"use client";
+import { useAlucurvTable } from "@/lib/alucurv/useAlucurvTable";
+import AlucurvCrudTable, { type CrudField } from "@/components/layout/AlucurvCrudTable";
+import ExcelImportButton, { type ExcelColumn } from "@/components/layout/ExcelImportButton";
+
+interface AlucurvOrder {
+    id: string;
+    date: string;
+    invoice_id: string | null;
+    customer: string;
+    description: string | null;
+    channel: string;
+    deadline: string | null;
+    price: number;
+    expedition: string | null;
+    produksi: boolean;
+    perakitan: boolean;
+    packing: boolean;
+    dikirim: boolean;
+    sampai: boolean;
+}
+
+const fields: CrudField[] = [
+    { key: "date", label: "Tanggal", type: "date" },
+    { key: "customer", label: "Customer", type: "text" },
+    { key: "description", label: "Deskripsi", type: "text" },
+    { key: "channel", label: "Channel", type: "select", options: ["Shopee", "TikTokShop", "Offline"] },
+    { key: "deadline", label: "Deadline", type: "date" },
+    { key: "price", label: "Harga", type: "number" },
+    { key: "expedition", label: "Ekspedisi", type: "text" },
+    { key: "produksi", label: "Produksi", type: "checkbox" },
+    { key: "perakitan", label: "Perakitan", type: "checkbox" },
+    { key: "packing", label: "Packing", type: "checkbox" },
+    { key: "dikirim", label: "Dikirim", type: "checkbox" },
+    { key: "sampai", label: "Sampai", type: "checkbox" },
+];
+
+const excelColumns: ExcelColumn[] = [
+    { key: "date", header: "Tanggal", type: "date" },
+    { key: "customer", header: "Customer", type: "text" },
+    { key: "description", header: "Deskripsi", type: "text" },
+    { key: "channel", header: "Channel", type: "text" },
+    { key: "deadline", header: "Deadline", type: "date" },
+    { key: "price", header: "Harga", type: "number" },
+    { key: "expedition", header: "Ekspedisi", type: "text" },
+];
 
 export default function AlucurvOrderPage() {
+    const { rows, loading, insertRow, insertRows, deleteRow } = useAlucurvTable<AlucurvOrder>("alu_orders", "date");
+
     return (
-        <ModulePlaceholder
-            title="Order — Alucurv"
-            description="Pipeline order (Produksi → Perakitan → Packing → Kirim → Sampai) per channel Shopee/TikTok/Offline. Diporting dari alucurv-legacy/app/order."
-        />
+        <div style={{ padding: 24 }}>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-dark)", marginBottom: 4 }}>Order</h1>
+            <p style={{ fontSize: 13, color: "var(--text-med)", marginBottom: 16 }}>
+                Pipeline order per channel Shopee/TikTok/Offline. Centang tahap produksi–perakitan–packing–kirim–sampai untuk tracking.
+            </p>
+            <div style={{ marginBottom: 16 }}>
+                <ExcelImportButton columns={excelColumns} onImport={(rows) => insertRows(rows)} />
+            </div>
+            <AlucurvCrudTable fields={fields} rows={rows} loading={loading} onAdd={insertRow} onDelete={deleteRow} />
+        </div>
     );
 }

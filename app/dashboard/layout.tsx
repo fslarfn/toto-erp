@@ -299,7 +299,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
                         <div className="sidebar-footer">
                             {!collapsed && (
-                                <div className="text-xs mb-2 px-1 truncate flex items-center gap-2" style={{ color: "#B89678" }}>
+                                <div className="text-xs mb-2 px-1 truncate flex items-center gap-2" style={{ color: "var(--text-med)" }}>
                                     <div className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 bg-slate-200">
                                         {user?.avatar ? <img src={user.avatar} alt="P" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center bg-primary text-white text-[10px]">{user?.name?.[0].toUpperCase()}</div>}
                                     </div>

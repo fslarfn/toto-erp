@@ -1,0 +1,107 @@
+"use client";
+import { useRef, useState } from "react";
+import * as XLSX from "xlsx";
+
+export interface ExcelColumn {
+    key: string;
+    header: string;
+    type?: "text" | "number" | "date" | "boolean";
+}
+
+export default function ExcelImportButton({
+    columns,
+    onImport,
+    label = "Import Excel",
+}: {
+    columns: ExcelColumn[];
+    onImport: (rows: Record<string, unknown>[]) => Promise<unknown>;
+    label?: string;
+}) {
+    const inputRef = useRef<HTMLInputElement>(null);
+    const [busy, setBusy] = useState(false);
+    const [message, setMessage] = useState<string | null>(null);
+
+    const handleFile = async (file: File) => {
+        setBusy(true);
+        setMessage(null);
+        try {
+            const buf = await file.arrayBuffer();
+            const wb = XLSX.read(buf, { type: "array" });
+            const sheet = wb.Sheets[wb.SheetNames[0]];
+            const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+
+            if (raw.length === 0) {
+                setMessage("File kosong atau format tidak sesuai template.");
+                return;
+            }
+
+            const mapped = raw.map((r) => {
+                const row: Record<string, unknown> = {};
+                for (const col of columns) {
+                    let val = r[col.header];
+                    if (col.type === "number") val = val === "" ? 0 : Number(val);
+                    else if (col.type === "boolean") val = val === true || val === "TRUE" || val === "true" || val === 1 || val === "1";
+                    else if (col.type === "date" && val instanceof Date) val = val.toISOString().slice(0, 10);
+                    else val = val === "" || val === undefined ? null : String(val);
+                    row[col.key] = val;
+                }
+                return row;
+            });
+
+            const err = await onImport(mapped);
+            if (err) throw err instanceof Error ? err : new Error(String(err));
+            setMessage(`${mapped.length} baris berhasil diimport.`);
+        } catch (err) {
+            setMessage(err instanceof Error ? `Gagal: ${err.message}` : "Gagal import file.");
+        } finally {
+            setBusy(false);
+            if (inputRef.current) inputRef.current.value = "";
+        }
+    };
+
+    const downloadTemplate = () => {
+        const ws = XLSX.utils.aoa_to_sheet([columns.map((c) => c.header)]);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Template");
+        XLSX.writeFile(wb, "template-import.xlsx");
+    };
+
+    return (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <button
+                type="button"
+                onClick={downloadTemplate}
+                style={{
+                    fontSize: 12, padding: "7px 12px", borderRadius: 6,
+                    border: "1px solid var(--border)", background: "white",
+                    color: "var(--text-med)", fontWeight: 600, cursor: "pointer",
+                }}
+            >
+                Unduh Template
+            </button>
+            <button
+                type="button"
+                onClick={() => inputRef.current?.click()}
+                disabled={busy}
+                style={{
+                    fontSize: 12, padding: "7px 14px", borderRadius: 6, border: "none",
+                    background: "var(--primary)", color: "white", fontWeight: 600,
+                    cursor: busy ? "default" : "pointer", opacity: busy ? 0.7 : 1,
+                }}
+            >
+                {busy ? "Mengimpor..." : label}
+            </button>
+            <input
+                ref={inputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleFile(f);
+                }}
+            />
+            {message && <span style={{ fontSize: 11, color: "var(--text-med)" }}>{message}</span>}
+        </div>
+    );
+}
