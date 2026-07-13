@@ -66,10 +66,59 @@ const NAV_ITEMS = [
     },
 ];
 
+const ALUCURV_NAV_ITEMS = [
+    {
+        section: "Menu Utama",
+        items: [
+            { href: "/dashboard/alucurv", label: "Dashboard", icon: HomeIcon },
+            { href: "/dashboard/alucurv/order", label: "Order", icon: FactoryIcon },
+        ],
+    },
+    {
+        section: "Keuangan",
+        items: [
+            { href: "/dashboard/alucurv/invoice", label: "Invoice", icon: InvoiceIcon },
+            { href: "/dashboard/alucurv/keuangan", label: "Keuangan", icon: WalletIcon },
+            { href: "/dashboard/alucurv/laporan", label: "Laporan", icon: BarChartIcon },
+            { href: "/dashboard/alucurv/hpp", label: "Kalkulator HPP", icon: TagihanIcon },
+        ],
+    },
+    {
+        section: "Gudang & Produksi",
+        items: [
+            { href: "/dashboard/alucurv/stok", label: "Stok Barang", icon: BoxIcon },
+            { href: "/dashboard/alucurv/pengadaan", label: "Pengadaan Bahan Baku", icon: ColorPaletteIcon },
+            { href: "/dashboard/alucurv/surat-jalan", label: "Surat Jalan", icon: TruckIcon },
+            { href: "/dashboard/alucurv/bending", label: "Bending CV Toto", icon: PrinterIcon },
+        ],
+    },
+    {
+        section: "SDM",
+        items: [
+            { href: "/dashboard/alucurv/karyawan", label: "Karyawan", icon: KaryawanIcon },
+        ],
+    },
+    {
+        section: "Administrasi",
+        items: [
+            { href: "/dashboard/alucurv/pengaturan", label: "Pengaturan", icon: UserCircleIcon },
+        ],
+    },
+];
+
+const GABUNGAN_NAV_ITEMS = [
+    {
+        section: "Gabungan",
+        items: [
+            { href: "/dashboard/gabungan", label: "Dashboard Gabungan", icon: GabunganIcon },
+        ],
+    },
+];
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
     const { user, logout, hasAccess } = useAuth();
     const { license } = useLicense();
-    const { hasWorkspace, canViewGabungan } = useWorkspace();
+    const { activeWorkspace } = useWorkspace();
     const router = useRouter();
     const pathname = usePathname();
     const [collapsed, setCollapsed] = useState(false);
@@ -195,7 +244,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         </div>
 
                         <div className="sidebar-content">
-                            {NAV_ITEMS.map((group) => {
+                            {activeWorkspace === "toto" && NAV_ITEMS.map((group) => {
                                 const allowedUsers = ["faisal", "vira", "toto", "fauzi", "yuni"];
                                 const visibleItems = group.items.filter((item) => {
                                     if (item.href === "/dashboard/cockpit") return user?.role === 'owner' || user?.username === 'faisal';
@@ -222,29 +271,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                     </div>
                                 );
                             })}
-                            {hasWorkspace("alucurv") && (
-                                <div>
-                                    <div className="section-label">Multi-Bisnis</div>
-                                    <Link
-                                        href="/dashboard/alucurv"
-                                        className={`sidebar-link ${pathname.startsWith("/dashboard/alucurv") ? "active" : ""}`}
-                                        onClick={() => setMobileOpen(false)}
-                                    >
-                                        <BuildingIcon size={18} />
-                                        <span className="sidebar-text">Workspace Alucurv</span>
-                                    </Link>
-                                    {canViewGabungan && (
-                                        <Link
-                                            href="/dashboard/gabungan"
-                                            className={`sidebar-link ${pathname.startsWith("/dashboard/gabungan") ? "active" : ""}`}
-                                            onClick={() => setMobileOpen(false)}
-                                        >
-                                            <GabunganIcon size={18} />
-                                            <span className="sidebar-text">Dashboard Gabungan</span>
-                                        </Link>
-                                    )}
+                            {activeWorkspace !== "toto" && (activeWorkspace === "alucurv" ? ALUCURV_NAV_ITEMS : GABUNGAN_NAV_ITEMS).map((group) => (
+                                <div key={group.section}>
+                                    <div className="section-label">{group.section}</div>
+                                    {group.items.map((item) => {
+                                        const isActive = pathname === item.href || (item.href !== "/dashboard/alucurv" && item.href !== "/dashboard/gabungan" && pathname.startsWith(item.href));
+                                        const Icon = item.icon;
+                                        return (
+                                            <Link key={item.href} href={item.href} className={`sidebar-link ${isActive ? "active" : ""}`} onClick={() => setMobileOpen(false)}>
+                                                <Icon size={18} />
+                                                <span className="sidebar-text">{item.label}</span>
+                                            </Link>
+                                        );
+                                    })}
                                 </div>
-                            )}
+                            ))}
                         </div>
 
                         <div className="sidebar-footer">
@@ -292,9 +333,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                             </svg>
                                         </button>
                                         <span className="page-title">
-                                            {NAV_ITEMS.flatMap((g) => g.items).find(
-                                                (it) => pathname === it.href || (it.href !== "/dashboard" && pathname.startsWith(it.href))
-                                            )?.label ?? "Dashboard"}
+                                            {(activeWorkspace === "toto" ? NAV_ITEMS : activeWorkspace === "alucurv" ? ALUCURV_NAV_ITEMS : GABUNGAN_NAV_ITEMS)
+                                                .flatMap((g) => g.items)
+                                                .find((it) => pathname === it.href || (it.href !== "/dashboard" && it.href !== "/dashboard/alucurv" && it.href !== "/dashboard/gabungan" && pathname.startsWith(it.href)))
+                                                ?.label ?? "Dashboard"}
                                         </span>
                                     </div>
 
@@ -470,5 +512,4 @@ function CustomerIcon({ size = 18 }: { size?: number }) { return ( <svg width={s
 function PenawaranIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /><path d="M16 13H8" /><path d="M16 17H8" /><path d="M10 9H9H8" /><path d="M12 2v6" /></svg> ); }
 function BarChartIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /><line x1="3" y1="20" x2="21" y2="20" /></svg> ); }
 function CockpitIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 12L16 10" /><path d="M12 12L8 10" /><path d="M12 12V7" /><path d="M12 17V17.01" /></svg> ); }
-function BuildingIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="1" /><line x1="9" y1="6" x2="9" y2="6.01" /><line x1="15" y1="6" x2="15" y2="6.01" /><line x1="9" y1="10" x2="9" y2="10.01" /><line x1="15" y1="10" x2="15" y2="10.01" /><line x1="9" y1="14" x2="9" y2="14.01" /><line x1="15" y1="14" x2="15" y2="14.01" /><line x1="9" y1="18" x2="15" y2="18" /></svg> ); }
 function GabunganIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="12" r="5" /><circle cx="16" cy="12" r="5" /></svg> ); }
