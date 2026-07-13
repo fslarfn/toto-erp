@@ -25,9 +25,9 @@ export default function WorkspaceSwitcher() {
                 fontSize: 11,
                 padding: "5px 8px",
                 borderRadius: 6,
-                border: "1px solid rgba(255,255,255,0.15)",
-                background: "rgba(255,255,255,0.08)",
-                color: "white",
+                border: "1px solid var(--border)",
+                background: "var(--bg-secondary)",
+                color: "var(--text-dark)",
                 fontWeight: 600,
                 width: "100%",
                 marginTop: 8,
@@ -35,7 +35,7 @@ export default function WorkspaceSwitcher() {
             }}
         >
             {options.map((o) => (
-                <option key={o} value={o} style={{ color: "#111" }}>
+                <option key={o} value={o}>
                     {LABELS[o]}
                 </option>
             ))}
