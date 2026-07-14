@@ -15,27 +15,28 @@ export interface WorkspaceMembership {
 interface WorkspaceCtx {
     memberships: WorkspaceMembership[];
     loading: boolean;
-    activeWorkspace: ActiveWorkspace;
-    setActiveWorkspace: (w: ActiveWorkspace) => void;
     hasWorkspace: (w: Workspace) => boolean;
     canViewGabungan: boolean;
 }
 
 const WorkspaceContext = createContext<WorkspaceCtx | null>(null);
-const LS_KEY = "totobaru_active_workspace";
+
+/**
+ * Workspace aktif SELALU diturunkan dari URL, bukan dari state/localStorage
+ * terpisah — supaya sidebar tidak pernah desync dari halaman yang benar-benar
+ * sedang dibuka (mis. baru login pertama kali di device baru, localStorage
+ * masih kosong tapi URL sudah di /dashboard/alucurv).
+ */
+export function getWorkspaceFromPath(pathname: string): ActiveWorkspace {
+    if (pathname.startsWith("/dashboard/alucurv")) return "alucurv";
+    if (pathname.startsWith("/dashboard/gabungan")) return "gabungan";
+    return "toto";
+}
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
     const { user } = useAuth();
     const [memberships, setMemberships] = useState<WorkspaceMembership[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeWorkspace, setActiveWorkspaceState] = useState<ActiveWorkspace>("toto");
-
-    useEffect(() => {
-        try {
-            const stored = localStorage.getItem(LS_KEY) as ActiveWorkspace | null;
-            if (stored) setActiveWorkspaceState(stored);
-        } catch { /* ignore */ }
-    }, []);
 
     useEffect(() => {
         if (!user) {
@@ -63,18 +64,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         return () => { cancelled = true; };
     }, [user]);
 
-    const setActiveWorkspace = (w: ActiveWorkspace) => {
-        setActiveWorkspaceState(w);
-        try { localStorage.setItem(LS_KEY, w); } catch { /* ignore */ }
-    };
-
     const hasWorkspace = (w: Workspace) => memberships.some((m) => m.workspace === w);
     const canViewGabungan = hasWorkspace("toto") && hasWorkspace("alucurv");
 
     return (
-        <WorkspaceContext.Provider
-            value={{ memberships, loading, activeWorkspace, setActiveWorkspace, hasWorkspace, canViewGabungan }}
-        >
+        <WorkspaceContext.Provider value={{ memberships, loading, hasWorkspace, canViewGabungan }}>
             {children}
         </WorkspaceContext.Provider>
     );

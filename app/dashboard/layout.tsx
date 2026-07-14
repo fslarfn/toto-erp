@@ -4,7 +4,7 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useAuth, roleLabels, getRoleDisplay } from "@/lib/auth";
 import { useLicense } from "@/lib/license-store";
-import { useWorkspace } from "@/lib/workspace-store";
+import { useWorkspace, getWorkspaceFromPath } from "@/lib/workspace-store";
 import WorkspaceSwitcher from "@/components/layout/WorkspaceSwitcher";
 import { PesananProvider } from "@/lib/pesanan-store";
 import { SuratJalanProvider } from "@/lib/surat-jalan-store";
@@ -118,9 +118,10 @@ const GABUNGAN_NAV_ITEMS = [
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
     const { user, logout, hasAccess } = useAuth();
     const { license } = useLicense();
-    const { activeWorkspace, hasWorkspace, memberships } = useWorkspace();
+    const { hasWorkspace, memberships } = useWorkspace();
     const router = useRouter();
     const pathname = usePathname();
+    const activeWorkspace = getWorkspaceFromPath(pathname);
     const [collapsed, setCollapsed] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
     const [chatOpen, setChatOpen] = useState(false);
