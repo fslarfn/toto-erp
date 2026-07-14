@@ -1,6 +1,6 @@
 "use client";
-import { useRouter } from "next/navigation";
-import { useWorkspace, type ActiveWorkspace } from "@/lib/workspace-store";
+import { useRouter, usePathname } from "next/navigation";
+import { useWorkspace, getWorkspaceFromPath, type ActiveWorkspace } from "@/lib/workspace-store";
 
 const LABELS: Record<ActiveWorkspace, string> = {
     toto: "Toto",
@@ -16,7 +16,9 @@ const HOME_ROUTE: Record<ActiveWorkspace, string> = {
 
 export default function WorkspaceSwitcher() {
     const router = useRouter();
-    const { memberships, activeWorkspace, setActiveWorkspace, canViewGabungan, loading } = useWorkspace();
+    const pathname = usePathname();
+    const { memberships, canViewGabungan, loading } = useWorkspace();
+    const activeWorkspace = getWorkspaceFromPath(pathname);
 
     // Mayoritas user cuma punya 1 workspace (perilaku lama) — switcher tidak tampil sama sekali.
     if (loading || memberships.length <= 1) return null;
@@ -24,15 +26,10 @@ export default function WorkspaceSwitcher() {
     const options: ActiveWorkspace[] = [...memberships.map((m) => m.workspace)];
     if (canViewGabungan) options.push("gabungan");
 
-    const handleChange = (w: ActiveWorkspace) => {
-        setActiveWorkspace(w);
-        router.push(HOME_ROUTE[w]);
-    };
-
     return (
         <select
             value={activeWorkspace}
-            onChange={(e) => handleChange(e.target.value as ActiveWorkspace)}
+            onChange={(e) => router.push(HOME_ROUTE[e.target.value as ActiveWorkspace])}
             title="Pilih Workspace"
             style={{
                 fontSize: 11,
