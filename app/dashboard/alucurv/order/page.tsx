@@ -28,11 +28,12 @@ const fields: CrudField[] = [
     { key: "description", label: "Deskripsi", type: "text" },
     { key: "channel", label: "Channel", type: "select", options: ["Shopee", "TikTokShop", "Offline"] },
     { key: "deadline", label: "Deadline", type: "date" },
-    { key: "price", label: "Harga", type: "number" },
+    { key: "price", label: "Harga", type: "number", format: "currency" },
     {
         key: "received_amount",
         label: "Harga Setelah Barang Datang",
         type: "number",
+        format: "currency",
         showIf: (form) => form.channel === "Shopee" || form.channel === "TikTokShop",
     },
     { key: "expedition", label: "Ekspedisi", type: "text" },
