@@ -70,9 +70,13 @@ export default function AlucurvWorkspacePage() {
     const totalUangBeredar = accounts.rows.reduce((s, acc) => s + accountBalance(acc), 0);
 
     // Omset = nominal yang benar-benar diterima Alucurv: received_amount untuk Shopee/TikTok
-    // (setelah potongan marketplace), atau price langsung untuk Offline.
-    const effectiveOmset = (o: AlucurvOrder) =>
-        o.channel === "Offline" ? Number(o.price || 0) : Number(o.received_amount ?? o.price ?? 0);
+    // (setelah potongan marketplace), atau price langsung untuk Offline. Pakai `||` bukan `??`
+    // karena banyak order lama punya received_amount tersimpan sebagai 0 (belum diisi), bukan
+    // null — kalau pakai `??` order itu ikut kehitung Rp 0 alih-alih fallback ke price.
+    const effectiveOmset = (o: AlucurvOrder) => {
+        if (o.channel === "Offline") return Number(o.price || 0);
+        return Number(o.received_amount || 0) || Number(o.price || 0);
+    };
     // Keseluruhan: semua order dihitung begitu order masuk, tidak peduli status kirim.
     const omsetKeseluruhan = orders.rows.reduce((s, o) => s + effectiveOmset(o), 0);
     // Terkirim: hanya order yang sudah dicentang "Dikirim".

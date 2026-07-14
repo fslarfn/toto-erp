@@ -51,7 +51,7 @@ const excelColumns: ExcelColumn[] = [
     { key: "channel", header: "Channel", type: "text", options: ["Shopee", "TikTokShop", "Offline"] },
     { key: "deadline", header: "Deadline", type: "date" },
     { key: "price", header: "Harga", type: "number" },
-    { key: "received_amount", header: "Harga Setelah Barang Datang", type: "number" },
+    { key: "received_amount", header: "Harga Setelah Barang Datang", type: "number", nullable: true },
     { key: "expedition", header: "Ekspedisi", type: "text" },
 ];
 
