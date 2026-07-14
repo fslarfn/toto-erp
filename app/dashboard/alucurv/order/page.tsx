@@ -34,6 +34,7 @@ const fields: CrudField[] = [
         label: "Harga Setelah Barang Datang",
         type: "number",
         format: "currency",
+        nullable: true,
         showIf: (form) => form.channel === "Shopee" || form.channel === "TikTokShop",
     },
     { key: "expedition", label: "Ekspedisi", type: "text" },
