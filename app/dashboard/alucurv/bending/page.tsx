@@ -29,7 +29,7 @@ const excelColumns: ExcelColumn[] = [
 ];
 
 export default function AlucurvBendingPage() {
-    const { rows, loading, insertRow, insertRows, deleteRow } = useAlucurvTable<AlucurvBendingOrder>("alu_bending_orders", "date");
+    const { rows, loading, insertRow, insertRows, updateRow, deleteRow } = useAlucurvTable<AlucurvBendingOrder>("alu_bending_orders", "date");
 
     const belumLunas = rows.filter((r) => r.status === "BELUM").reduce((s, r) => s + Number(r.amount || 0), 0);
 
@@ -46,7 +46,7 @@ export default function AlucurvBendingPage() {
             <div style={{ marginBottom: 16 }}>
                 <ExcelImportButton columns={excelColumns} onImport={(rows) => insertRows(rows)} />
             </div>
-            <AlucurvCrudTable fields={fields} rows={rows} loading={loading} onAdd={insertRow} onDelete={deleteRow} />
+            <AlucurvCrudTable fields={fields} rows={rows} loading={loading} onAdd={insertRow} onDelete={deleteRow} onUpdate={updateRow} />
         </div>
     );
 }

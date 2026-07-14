@@ -33,7 +33,7 @@ const excelColumns: ExcelColumn[] = [
 ];
 
 export default function AlucurvKeuanganPage() {
-    const { rows, loading, insertRow, insertRows, deleteRow } = useAlucurvTable<AlucurvTransaction>("alu_transactions", "date");
+    const { rows, loading, insertRow, insertRows, updateRow, deleteRow } = useAlucurvTable<AlucurvTransaction>("alu_transactions", "date");
 
     const totalMasuk = rows.filter((r) => r.type === "Pemasukan").reduce((s, r) => s + Number(r.amount || 0), 0);
     const totalKeluar = rows.filter((r) => r.type === "Pengeluaran").reduce((s, r) => s + Number(r.amount || 0), 0);
@@ -57,7 +57,7 @@ export default function AlucurvKeuanganPage() {
             <div style={{ marginBottom: 16 }}>
                 <ExcelImportButton columns={excelColumns} onImport={(rows) => insertRows(rows)} />
             </div>
-            <AlucurvCrudTable fields={fields} rows={rows} loading={loading} onAdd={insertRow} onDelete={deleteRow} />
+            <AlucurvCrudTable fields={fields} rows={rows} loading={loading} onAdd={insertRow} onDelete={deleteRow} onUpdate={updateRow} />
         </div>
     );
 }

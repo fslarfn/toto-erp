@@ -29,7 +29,7 @@ const excelColumns: ExcelColumn[] = [
 ];
 
 export default function AlucurvStokPage() {
-    const { rows, loading, insertRow, insertRows, deleteRow } = useAlucurvTable<AlucurvStockItem>("alu_stock_items", "name");
+    const { rows, loading, insertRow, insertRows, updateRow, deleteRow } = useAlucurvTable<AlucurvStockItem>("alu_stock_items", "name");
 
     return (
         <div style={{ padding: 24 }}>
@@ -40,7 +40,7 @@ export default function AlucurvStokPage() {
             <div style={{ marginBottom: 16 }}>
                 <ExcelImportButton columns={excelColumns} onImport={(rows) => insertRows(rows)} />
             </div>
-            <AlucurvCrudTable fields={fields} rows={rows} loading={loading} onAdd={insertRow} onDelete={deleteRow} />
+            <AlucurvCrudTable fields={fields} rows={rows} loading={loading} onAdd={insertRow} onDelete={deleteRow} onUpdate={updateRow} />
         </div>
     );
 }
