@@ -19,6 +19,7 @@ interface AlucurvOrder {
     packing: boolean;
     dikirim: boolean;
     sampai: boolean;
+    created_at?: string;
 }
 
 const fields: CrudField[] = [
@@ -54,19 +55,19 @@ const excelColumns: ExcelColumn[] = [
 ];
 
 export default function AlucurvOrderPage() {
-    const { rows, loading, insertRow, insertRows, deleteRow } = useAlucurvTable<AlucurvOrder>("alu_orders", "date");
+    const { rows, loading, insertRow, insertRows, updateRow, deleteRow } = useAlucurvTable<AlucurvOrder>("alu_orders", "created_at", true);
 
     return (
         <div style={{ padding: 24 }}>
             <h1 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-dark)", marginBottom: 4 }}>Order</h1>
             <p style={{ fontSize: 13, color: "var(--text-med)", marginBottom: 16 }}>
-                Pipeline order per channel Shopee/TikTok/Offline. Centang tahap produksi–perakitan–packing–kirim–sampai untuk tracking.
+                Pipeline order per channel Shopee/TikTok/Offline. Klik langsung checkbox produksi–perakitan–packing–kirim–sampai di tabel untuk update progres, atau klik &quot;Ubah&quot; untuk edit field lain. Urutan mengikuti input pertama.
                 Untuk order Shopee/TikTok, isi &quot;Harga Setelah Barang Datang&quot; — itu nominal bersih yang benar-benar diterima Alucurv setelah settlement marketplace (beda dengan Harga yang cuma harga jual di listing).
             </p>
             <div style={{ marginBottom: 16 }}>
                 <ExcelImportButton columns={excelColumns} onImport={(rows) => insertRows(rows)} />
             </div>
-            <AlucurvCrudTable fields={fields} rows={rows} loading={loading} onAdd={insertRow} onDelete={deleteRow} />
+            <AlucurvCrudTable fields={fields} rows={rows} loading={loading} onAdd={insertRow} onDelete={deleteRow} onUpdate={updateRow} />
         </div>
     );
 }

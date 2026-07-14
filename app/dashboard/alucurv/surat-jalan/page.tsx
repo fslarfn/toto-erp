@@ -23,7 +23,7 @@ const excelColumns: ExcelColumn[] = [
 ];
 
 export default function AlucurvSuratJalanPage() {
-    const { rows, loading, insertRow, insertRows, deleteRow } = useAlucurvTable<AlucurvDeliveryNote>("alu_delivery_notes", "date");
+    const { rows, loading, insertRow, insertRows, updateRow, deleteRow } = useAlucurvTable<AlucurvDeliveryNote>("alu_delivery_notes", "date");
 
     return (
         <div style={{ padding: 24 }}>
@@ -34,7 +34,7 @@ export default function AlucurvSuratJalanPage() {
             <div style={{ marginBottom: 16 }}>
                 <ExcelImportButton columns={excelColumns} onImport={(rows) => insertRows(rows)} />
             </div>
-            <AlucurvCrudTable fields={fields} rows={rows} loading={loading} onAdd={insertRow} onDelete={deleteRow} />
+            <AlucurvCrudTable fields={fields} rows={rows} loading={loading} onAdd={insertRow} onDelete={deleteRow} onUpdate={updateRow} />
         </div>
     );
 }

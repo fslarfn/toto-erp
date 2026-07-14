@@ -47,17 +47,17 @@ export default function AlucurvPengaturanPage() {
 
             <section>
                 <h2 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-dark)", marginBottom: 10 }}>Akun Kas / Bank / Marketplace</h2>
-                <AlucurvCrudTable fields={accountFields} rows={accounts.rows} loading={accounts.loading} onAdd={accounts.insertRow} onDelete={accounts.deleteRow} />
+                <AlucurvCrudTable fields={accountFields} rows={accounts.rows} loading={accounts.loading} onAdd={accounts.insertRow} onDelete={accounts.deleteRow} onUpdate={accounts.updateRow} />
             </section>
 
             <section>
                 <h2 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-dark)", marginBottom: 10 }}>Kategori Transaksi</h2>
-                <AlucurvCrudTable fields={subCategoryFields} rows={subCategories.rows} loading={subCategories.loading} onAdd={subCategories.insertRow} onDelete={subCategories.deleteRow} />
+                <AlucurvCrudTable fields={subCategoryFields} rows={subCategories.rows} loading={subCategories.loading} onAdd={subCategories.insertRow} onDelete={subCategories.deleteRow} onUpdate={subCategories.updateRow} />
             </section>
 
             <section>
                 <h2 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-dark)", marginBottom: 10 }}>Supplier</h2>
-                <AlucurvCrudTable fields={supplierFields} rows={suppliers.rows} loading={suppliers.loading} onAdd={suppliers.insertRow} onDelete={suppliers.deleteRow} />
+                <AlucurvCrudTable fields={supplierFields} rows={suppliers.rows} loading={suppliers.loading} onAdd={suppliers.insertRow} onDelete={suppliers.deleteRow} onUpdate={suppliers.updateRow} />
             </section>
         </div>
     );

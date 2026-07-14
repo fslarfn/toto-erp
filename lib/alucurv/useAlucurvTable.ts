@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase-client";
 
-export function useAlucurvTable<T extends { id: string }>(table: string, orderBy?: string) {
+export function useAlucurvTable<T extends { id: string }>(table: string, orderBy?: string, ascending = false) {
     const [rows, setRows] = useState<T[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -10,7 +10,7 @@ export function useAlucurvTable<T extends { id: string }>(table: string, orderBy
     const refresh = useCallback(async () => {
         setLoading(true);
         let query = supabase.from(table).select("*");
-        if (orderBy) query = query.order(orderBy, { ascending: false });
+        if (orderBy) query = query.order(orderBy, { ascending });
         const { data, error: err } = await query;
         if (err) setError(err.message);
         else {
@@ -18,7 +18,7 @@ export function useAlucurvTable<T extends { id: string }>(table: string, orderBy
             setRows((data ?? []) as T[]);
         }
         setLoading(false);
-    }, [table, orderBy]);
+    }, [table, orderBy, ascending]);
 
     useEffect(() => {
         refresh();
