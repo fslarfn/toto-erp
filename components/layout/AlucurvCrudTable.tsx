@@ -82,6 +82,14 @@ export default function AlucurvCrudTable<T extends { id: string }>({
     const [editId, setEditId] = useState<string | null>(null);
     const [editForm, setEditForm] = useState<Record<string, unknown>>({});
     const [editSaving, setEditSaving] = useState(false);
+    const [search, setSearch] = useState("");
+
+    const query = search.trim().toLowerCase();
+    const visibleRows = query
+        ? rows.filter((row) =>
+            fields.some((f) => displayValue(f, (row as unknown as Record<string, unknown>)[f.key]).toLowerCase().includes(query))
+          )
+        : rows;
 
     const submit = async (e: FormEvent) => {
         e.preventDefault();
@@ -128,6 +136,15 @@ export default function AlucurvCrudTable<T extends { id: string }>({
                 </button>
             </form>
 
+            <div style={{ marginBottom: 10, position: "relative", maxWidth: 320 }}>
+                <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Cari..."
+                    style={{ ...inputStyle, width: "100%", minWidth: 0 }}
+                />
+            </div>
+
             <div style={{ overflowX: "auto", border: "1px solid var(--border)", borderRadius: 10 }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                     <thead>
@@ -141,10 +158,10 @@ export default function AlucurvCrudTable<T extends { id: string }>({
                     <tbody>
                         {loading ? (
                             <tr><td colSpan={fields.length + 1} style={tdEmptyStyle}>Memuat...</td></tr>
-                        ) : rows.length === 0 ? (
-                            <tr><td colSpan={fields.length + 1} style={tdEmptyStyle}>Belum ada data.</td></tr>
+                        ) : visibleRows.length === 0 ? (
+                            <tr><td colSpan={fields.length + 1} style={tdEmptyStyle}>{query ? "Tidak ada hasil untuk pencarian ini." : "Belum ada data."}</td></tr>
                         ) : (
-                            rows.map((row) => (
+                            visibleRows.map((row) => (
                                 <tr key={row.id}>
                                     {fields.map((f) => {
                                         const rowVal = (row as unknown as Record<string, unknown>)[f.key];
