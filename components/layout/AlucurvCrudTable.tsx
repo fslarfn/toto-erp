@@ -16,6 +16,8 @@ export interface CrudField {
      * -> 0) karena kebanyakan kolom numerik NOT NULL DEFAULT 0 — kirim null ke situ akan gagal.
      */
     nullable?: boolean;
+    /** Validasi sebelum simpan: tampilkan pesan ramah kalau kosong, alih-alih error mentah dari database. */
+    required?: boolean;
 }
 
 function errorMessage(err: unknown): string {
@@ -101,17 +103,23 @@ export default function AlucurvCrudTable<T extends { id: string }>({
     const [formError, setFormError] = useState<string | null>(null);
     const [editError, setEditError] = useState<string | null>(null);
 
-    // Field number yang kosong ("") harus jadi null/0, bukan string kosong — Postgres menolak
-    // "" untuk kolom numerik. `field.nullable` menentukan fallback-nya null vs 0.
+    // Field number/date yang kosong ("") harus jadi null/0, bukan string kosong — Postgres
+    // menolak "" untuk kolom numerik maupun tanggal apa pun statusnya nullable atau tidak.
+    // `field.nullable` menentukan fallback number-nya null vs 0 (date selalu -> null).
     const sanitize = (values: Record<string, unknown>) => {
         const out = { ...values };
         for (const f of fields) {
             if (f.type === "number" && out[f.key] === "") {
                 out[f.key] = f.nullable ? null : 0;
+            } else if (f.type === "date" && out[f.key] === "") {
+                out[f.key] = null;
             }
         }
         return out;
     };
+
+    const missingRequired = (values: Record<string, unknown>) =>
+        fields.filter((f) => f.required && (!f.showIf || f.showIf(values)) && (values[f.key] === "" || values[f.key] == null));
 
     const query = search.trim().toLowerCase();
     const visibleRows = query
@@ -122,8 +130,13 @@ export default function AlucurvCrudTable<T extends { id: string }>({
 
     const submit = async (e: FormEvent) => {
         e.preventDefault();
-        setSaving(true);
         setFormError(null);
+        const missing = missingRequired(form);
+        if (missing.length > 0) {
+            setFormError(`Wajib diisi: ${missing.map((f) => f.label).join(", ")}`);
+            return;
+        }
+        setSaving(true);
         try {
             const err = await onAdd(sanitize(form));
             if (err) setFormError(errorMessage(err));
@@ -141,8 +154,13 @@ export default function AlucurvCrudTable<T extends { id: string }>({
 
     const saveEdit = async () => {
         if (!editId || !onUpdate) return;
-        setEditSaving(true);
         setEditError(null);
+        const missing = missingRequired(editForm);
+        if (missing.length > 0) {
+            setEditError(`Wajib diisi: ${missing.map((f) => f.label).join(", ")}`);
+            return;
+        }
+        setEditSaving(true);
         try {
             const err = await onUpdate(editId, sanitize(editForm));
             if (err) setEditError(errorMessage(err));
