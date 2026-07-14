@@ -8,6 +8,30 @@ export interface ExcelColumn {
     type?: "text" | "number" | "date" | "boolean";
 }
 
+function errorMessage(err: unknown): string {
+    if (err instanceof Error) return err.message;
+    if (err && typeof err === "object" && "message" in err) {
+        const m = (err as { message?: unknown }).message;
+        if (typeof m === "string" && m) return m;
+    }
+    return "Terjadi kesalahan.";
+}
+
+/** Konversi cell tanggal Excel (Date object, angka serial, atau string) ke YYYY-MM-DD. */
+function toDateString(val: unknown): string | null {
+    if (val instanceof Date) return val.toISOString().slice(0, 10);
+    if (typeof val === "number") {
+        const parsed = XLSX.SSF.parse_date_code(val);
+        if (!parsed) return null;
+        return `${parsed.y}-${String(parsed.m).padStart(2, "0")}-${String(parsed.d).padStart(2, "0")}`;
+    }
+    if (typeof val === "string" && val.trim()) {
+        const parsed = new Date(val.trim());
+        if (!isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+    }
+    return null;
+}
+
 export default function ExcelImportButton({
     columns,
     onImport,
@@ -26,7 +50,7 @@ export default function ExcelImportButton({
         setMessage(null);
         try {
             const buf = await file.arrayBuffer();
-            const wb = XLSX.read(buf, { type: "array" });
+            const wb = XLSX.read(buf, { type: "array", cellDates: true });
             const sheet = wb.Sheets[wb.SheetNames[0]];
             const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
 
@@ -41,18 +65,18 @@ export default function ExcelImportButton({
                     let val = r[col.header];
                     if (col.type === "number") val = val === "" ? 0 : Number(val);
                     else if (col.type === "boolean") val = val === true || val === "TRUE" || val === "true" || val === 1 || val === "1";
-                    else if (col.type === "date" && val instanceof Date) val = val.toISOString().slice(0, 10);
-                    else val = val === "" || val === undefined ? null : String(val);
+                    else if (col.type === "date") val = toDateString(val);
+                    else val = val === "" || val === undefined ? null : String(val).trim();
                     row[col.key] = val;
                 }
                 return row;
             });
 
             const err = await onImport(mapped);
-            if (err) throw err instanceof Error ? err : new Error(String(err));
+            if (err) throw new Error(errorMessage(err));
             setMessage(`${mapped.length} baris berhasil diimport.`);
         } catch (err) {
-            setMessage(err instanceof Error ? `Gagal: ${err.message}` : "Gagal import file.");
+            setMessage(`Gagal: ${errorMessage(err)}`);
         } finally {
             setBusy(false);
             if (inputRef.current) inputRef.current.value = "";
