@@ -8,6 +8,13 @@ export interface ExcelColumn {
     type?: "text" | "number" | "date" | "boolean";
     /** Kalau diisi, value dicocokkan case-insensitive lalu dinormalisasi ke ejaan persis di sini (mis. CHECK constraint enum di database). */
     options?: string[];
+    /**
+     * Untuk type "number": cell kosong -> null (bukan 0). Pakai untuk kolom opsional yang
+     * kolomnya nullable di database (mis. dp_amount, received_amount) — supaya "belum diisi"
+     * tidak tertukar dengan "memang nol", karena banyak kode lain fallback berdasarkan null.
+     * Default false (cell kosong -> 0) karena kebanyakan kolom numerik NOT NULL DEFAULT 0.
+     */
+    nullable?: boolean;
 }
 
 /** Cocokkan value ke salah satu options tanpa peduli besar-kecil huruf/spasi, kembalikan ejaan persis dari options. */
@@ -71,7 +78,7 @@ export default function ExcelImportButton({
                 const row: Record<string, unknown> = {};
                 for (const col of columns) {
                     let val = r[col.header];
-                    if (col.type === "number") val = val === "" ? 0 : Number(val);
+                    if (col.type === "number") val = val === "" ? (col.nullable ? null : 0) : Number(val);
                     else if (col.type === "boolean") val = val === true || val === "TRUE" || val === "true" || val === 1 || val === "1";
                     else if (col.type === "date") val = toDateString(val);
                     else {
