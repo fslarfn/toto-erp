@@ -10,6 +10,21 @@ export interface CrudField {
     showIf?: (form: Record<string, unknown>) => boolean;
     /** Format tampilan di tabel (input tetap angka biasa). "currency" -> "Rp 1.234.567". */
     format?: "currency";
+    /**
+     * Untuk type "number": kosong -> null (bukan 0) saat disimpan. Pakai untuk kolom yang
+     * memang nullable di database (mis. field opsional dengan showIf). Default false (kosong
+     * -> 0) karena kebanyakan kolom numerik NOT NULL DEFAULT 0 — kirim null ke situ akan gagal.
+     */
+    nullable?: boolean;
+}
+
+function errorMessage(err: unknown): string {
+    if (err instanceof Error) return err.message;
+    if (err && typeof err === "object" && "message" in err) {
+        const m = (err as { message?: unknown }).message;
+        if (typeof m === "string" && m) return m;
+    }
+    return "Gagal menyimpan data.";
 }
 
 function displayValue(field: CrudField, val: unknown): string {
@@ -83,6 +98,20 @@ export default function AlucurvCrudTable<T extends { id: string }>({
     const [editForm, setEditForm] = useState<Record<string, unknown>>({});
     const [editSaving, setEditSaving] = useState(false);
     const [search, setSearch] = useState("");
+    const [formError, setFormError] = useState<string | null>(null);
+    const [editError, setEditError] = useState<string | null>(null);
+
+    // Field number yang kosong ("") harus jadi null/0, bukan string kosong — Postgres menolak
+    // "" untuk kolom numerik. `field.nullable` menentukan fallback-nya null vs 0.
+    const sanitize = (values: Record<string, unknown>) => {
+        const out = { ...values };
+        for (const f of fields) {
+            if (f.type === "number" && out[f.key] === "") {
+                out[f.key] = f.nullable ? null : 0;
+            }
+        }
+        return out;
+    };
 
     const query = search.trim().toLowerCase();
     const visibleRows = query
@@ -94,9 +123,11 @@ export default function AlucurvCrudTable<T extends { id: string }>({
     const submit = async (e: FormEvent) => {
         e.preventDefault();
         setSaving(true);
+        setFormError(null);
         try {
-            await onAdd(form);
-            setForm(emptyForm());
+            const err = await onAdd(sanitize(form));
+            if (err) setFormError(errorMessage(err));
+            else setForm(emptyForm());
         } finally {
             setSaving(false);
         }
@@ -105,14 +136,17 @@ export default function AlucurvCrudTable<T extends { id: string }>({
     const openEdit = (row: T) => {
         setEditId(row.id);
         setEditForm({ ...(row as unknown as Record<string, unknown>) });
+        setEditError(null);
     };
 
     const saveEdit = async () => {
         if (!editId || !onUpdate) return;
         setEditSaving(true);
+        setEditError(null);
         try {
-            await onUpdate(editId, editForm);
-            setEditId(null);
+            const err = await onUpdate(editId, sanitize(editForm));
+            if (err) setEditError(errorMessage(err));
+            else setEditId(null);
         } finally {
             setEditSaving(false);
         }
@@ -134,6 +168,7 @@ export default function AlucurvCrudTable<T extends { id: string }>({
                 <button type="submit" disabled={saving} style={btnStyle}>
                     {saving ? "Menyimpan..." : "+ Tambah"}
                 </button>
+                {formError && <span style={errorTextStyle}>{formError}</span>}
             </form>
 
             <div style={{ marginBottom: 10, position: "relative", maxWidth: 320 }}>
@@ -206,6 +241,7 @@ export default function AlucurvCrudTable<T extends { id: string }>({
                                 </div>
                             ))}
                         </div>
+                        {editError && <div style={{ ...errorTextStyle, display: "block", marginTop: 10 }}>{editError}</div>}
                         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
                             <button onClick={() => setEditId(null)} style={ghostBtnStyle}>Batal</button>
                             <button onClick={saveEdit} disabled={editSaving} style={btnStyle}>{editSaving ? "Menyimpan..." : "Simpan"}</button>
@@ -230,6 +266,7 @@ const thStyle: CSSProperties = { textAlign: "left", padding: "8px 10px", fontSiz
 const tdStyle: CSSProperties = { padding: "8px 10px", borderBottom: "1px solid var(--border-light)", color: "var(--text-dark)" };
 const tdEmptyStyle: CSSProperties = { ...tdStyle, textAlign: "center", color: "var(--text-med)", padding: "20px 10px" };
 const deleteBtnStyle: CSSProperties = { color: "#DC2626", background: "none", border: "none", cursor: "pointer", fontSize: 11, fontWeight: 600 };
+const errorTextStyle: CSSProperties = { fontSize: 11.5, color: "#DC2626", fontWeight: 600 };
 const editBtnStyle: CSSProperties = { color: "var(--primary-dark)", background: "none", border: "none", cursor: "pointer", fontSize: 11, fontWeight: 600, marginRight: 12 };
 const overlayStyle: CSSProperties = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 };
 const modalStyle: CSSProperties = { background: "white", borderRadius: 16, padding: 24, width: "100%", maxWidth: 640, maxHeight: "90vh", overflowY: "auto" };
