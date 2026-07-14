@@ -15,7 +15,7 @@ interface AlucurvBendingOrder {
 const fields: CrudField[] = [
     { key: "date", label: "Tanggal", type: "date" },
     { key: "inv_no", label: "No. Invoice", type: "text" },
-    { key: "amount", label: "Nominal", type: "number" },
+    { key: "amount", label: "Nominal", type: "number", format: "currency" },
     { key: "status", label: "Status", type: "select", options: ["LUNAS", "BELUM"] },
     { key: "note", label: "Catatan", type: "text" },
 ];

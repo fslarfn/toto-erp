@@ -22,10 +22,10 @@ const fields: CrudField[] = [
     { key: "supplier_id", label: "Supplier", type: "text" },
     { key: "item_name", label: "Nama Barang", type: "text" },
     { key: "size", label: "Ukuran", type: "text" },
-    { key: "unit_price", label: "Harga Satuan", type: "number" },
+    { key: "unit_price", label: "Harga Satuan", type: "number", format: "currency" },
     { key: "qty", label: "Qty", type: "number" },
     { key: "qty_label", label: "Satuan", type: "text" },
-    { key: "total", label: "Total", type: "number" },
+    { key: "total", label: "Total", type: "number", format: "currency" },
 ];
 
 const excelColumns: ExcelColumn[] = [

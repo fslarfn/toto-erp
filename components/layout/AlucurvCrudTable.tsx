@@ -8,6 +8,16 @@ export interface CrudField {
     options?: string[];
     /** Tampilkan field ini di form tambah hanya kalau kondisi terpenuhi (mis. tergantung field lain). */
     showIf?: (form: Record<string, unknown>) => boolean;
+    /** Format tampilan di tabel (input tetap angka biasa). "currency" -> "Rp 1.234.567". */
+    format?: "currency";
+}
+
+function displayValue(field: CrudField, val: unknown): string {
+    if (field.format === "currency") {
+        const n = Number(val);
+        return val === "" || val === null || val === undefined || isNaN(n) ? "" : `Rp ${n.toLocaleString("id-ID")}`;
+    }
+    return String(val ?? "");
 }
 
 function FieldInput({
@@ -149,7 +159,7 @@ export default function AlucurvCrudTable<T extends { id: string }>({
                                                         style={{ width: 16, height: 16, cursor: onUpdate ? "pointer" : "default" }}
                                                     />
                                                 ) : (
-                                                    String(rowVal ?? "")
+                                                    displayValue(f, rowVal)
                                                 )}
                                             </td>
                                         );

@@ -16,7 +16,7 @@ const fields: CrudField[] = [
     { key: "name", label: "Nama", type: "text" },
     { key: "role", label: "Jabatan", type: "text" },
     { key: "division", label: "Divisi", type: "select", options: ["Produksi", "Admin", "Marketing"] },
-    { key: "weekly_base", label: "Gaji Mingguan", type: "number" },
+    { key: "weekly_base", label: "Gaji Mingguan", type: "number", format: "currency" },
     { key: "active", label: "Aktif", type: "checkbox" },
 ];
 

@@ -21,7 +21,7 @@ interface AlucurvSupplier {
 const accountFields: CrudField[] = [
     { key: "name", label: "Nama Akun", type: "text" },
     { key: "type", label: "Tipe", type: "select", options: ["cash", "bank", "marketplace"] },
-    { key: "opening_balance", label: "Saldo Awal", type: "number" },
+    { key: "opening_balance", label: "Saldo Awal", type: "number", format: "currency" },
 ];
 const subCategoryFields: CrudField[] = [
     { key: "type", label: "Tipe", type: "select", options: ["Pemasukan", "Pengeluaran"] },
