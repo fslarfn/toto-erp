@@ -50,6 +50,7 @@ export default function AlucurvHppPage() {
     const [currentPrice, setCurrentPrice] = useState(0);
     const [components, setComponents] = useState<ComponentForm[]>(defaultComponents());
     const [saving, setSaving] = useState(false);
+    const [search, setSearch] = useState("");
 
     const componentsByCalc = useMemo(() => {
         const map = new Map<string, HppComponentRow[]>();
@@ -60,6 +61,10 @@ export default function AlucurvHppPage() {
         }
         return map;
     }, [comps.rows]);
+
+    const visibleCalcs = search.trim()
+        ? calcs.rows.filter((h) => h.product_name.toLowerCase().includes(search.trim().toLowerCase()))
+        : calcs.rows;
 
     const openNew = () => {
         setEditId(null);
@@ -131,15 +136,28 @@ export default function AlucurvHppPage() {
                 <button onClick={openNew} style={primaryBtn}>+ Hitung Produk Baru</button>
             </div>
 
+            <div style={{ marginBottom: 16, maxWidth: 320 }}>
+                <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Cari nama produk..."
+                    style={inputStyle}
+                />
+            </div>
+
             {calcs.loading ? (
                 <p style={{ fontSize: 13, color: "var(--text-med)" }}>Memuat...</p>
             ) : calcs.rows.length === 0 ? (
                 <div style={cardStyle}>
                     <p style={{ fontSize: 13, color: "var(--text-med)" }}>Belum ada perhitungan HPP. Klik tombol di atas untuk mulai.</p>
                 </div>
+            ) : visibleCalcs.length === 0 ? (
+                <div style={cardStyle}>
+                    <p style={{ fontSize: 13, color: "var(--text-med)" }}>Tidak ada hasil untuk pencarian ini.</p>
+                </div>
             ) : (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 16 }}>
-                    {calcs.rows.map((h) => {
+                    {visibleCalcs.map((h) => {
                         const list = componentsByCalc.get(h.id) ?? [];
                         const t = calcTotals(list, Number(h.market_cut_percent), Number(h.current_price));
                         return (

@@ -59,6 +59,7 @@ export default function AlucurvInvoicePage() {
     const [note, setNote] = useState("");
     const [itemForms, setItemForms] = useState<ItemForm[]>([emptyItem()]);
     const [saving, setSaving] = useState(false);
+    const [search, setSearch] = useState("");
 
     const itemsByInvoice = useMemo(() => {
         const map = new Map<string, InvoiceItemRow[]>();
@@ -72,6 +73,11 @@ export default function AlucurvInvoicePage() {
 
     const totalOf = (invId: string) =>
         (itemsByInvoice.get(invId) ?? []).reduce((s, it) => s + Number(it.qty) * Number(it.unit_price), 0);
+
+    const query = search.trim().toLowerCase();
+    const visibleInvoices = query
+        ? invoices.rows.filter((inv) => [inv.number, inv.customer, inv.status].some((v) => v.toLowerCase().includes(query)))
+        : invoices.rows;
 
     const resetForm = () => {
         setNumber(""); setDate(""); setOrderDate(""); setCustomer(""); setStatus("BELUM");
@@ -152,6 +158,15 @@ export default function AlucurvInvoicePage() {
                 <ExcelImportButton columns={excelColumns} onImport={(rows) => invoices.insertRows(rows)} label="Import Excel (header saja)" />
             </div>
 
+            <div style={{ marginBottom: 10, maxWidth: 320 }}>
+                <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Cari no. invoice, customer, status..."
+                    style={inputStyle}
+                />
+            </div>
+
             <div style={{ overflowX: "auto", border: "1px solid var(--border)", borderRadius: 10 }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                     <thead>
@@ -167,10 +182,10 @@ export default function AlucurvInvoicePage() {
                     <tbody>
                         {invoices.loading ? (
                             <tr><td colSpan={6} style={tdEmptyStyle}>Memuat...</td></tr>
-                        ) : invoices.rows.length === 0 ? (
-                            <tr><td colSpan={6} style={tdEmptyStyle}>Belum ada invoice.</td></tr>
+                        ) : visibleInvoices.length === 0 ? (
+                            <tr><td colSpan={6} style={tdEmptyStyle}>{query ? "Tidak ada hasil untuk pencarian ini." : "Belum ada invoice."}</td></tr>
                         ) : (
-                            invoices.rows.map((inv) => (
+                            visibleInvoices.map((inv) => (
                                 <tr key={inv.id}>
                                     <td style={tdStyle}>{inv.number}</td>
                                     <td style={tdStyle}>{inv.date}</td>
