@@ -71,10 +71,12 @@ export default function AlucurvWorkspacePage() {
 
     // Omset = nominal yang benar-benar diterima Alucurv: received_amount untuk Shopee/TikTok
     // (setelah potongan marketplace), atau price langsung untuk Offline.
-    const totalOmsetPenjualan = orders.rows.reduce((s, o) => {
-        const effective = o.channel === "Offline" ? Number(o.price || 0) : Number(o.received_amount ?? o.price ?? 0);
-        return s + effective;
-    }, 0);
+    const effectiveOmset = (o: AlucurvOrder) =>
+        o.channel === "Offline" ? Number(o.price || 0) : Number(o.received_amount ?? o.price ?? 0);
+    // Keseluruhan: semua order dihitung begitu order masuk, tidak peduli status kirim.
+    const omsetKeseluruhan = orders.rows.reduce((s, o) => s + effectiveOmset(o), 0);
+    // Terkirim: hanya order yang sudah dicentang "Dikirim".
+    const omsetTerkirim = orders.rows.filter((o) => o.dikirim).reduce((s, o) => s + effectiveOmset(o), 0);
 
     const orderBerjalan = orders.rows
         .filter((o) => !o.sampai)
@@ -116,7 +118,8 @@ export default function AlucurvWorkspacePage() {
                 <DomeCard label="Pemasukan Bulan Ini" value={rupiah(pemasukanBulanIni)} valueColor="#16A34A" />
                 <DomeCard label="Pengeluaran Bulan Ini" value={rupiah(pengeluaranBulanIni)} valueColor="#EA580C" />
                 <DomeCard label="Laba Bulan Ini" value={rupiah(labaBulanIni)} valueColor={labaBulanIni >= 0 ? "#16A34A" : "#DC2626"} />
-                <DomeCard label="Total Omset Penjualan" value={rupiah(totalOmsetPenjualan)} valueColor="#0F766E" sub="Nominal bersih diterima dari semua order" />
+                <DomeCard label="Omset Keseluruhan" value={rupiah(omsetKeseluruhan)} valueColor="#0F766E" sub="Semua order, belum tentu sudah dikirim" />
+                <DomeCard label="Omset Terkirim" value={rupiah(omsetTerkirim)} valueColor="#0D9488" sub="Hanya order yang sudah dikirim" />
             </div>
 
             {/* 3 columns */}
