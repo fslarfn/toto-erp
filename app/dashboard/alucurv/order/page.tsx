@@ -23,10 +23,10 @@ interface AlucurvOrder {
 }
 
 const fields: CrudField[] = [
-    { key: "date", label: "Tanggal", type: "date" },
-    { key: "customer", label: "Customer", type: "text" },
+    { key: "date", label: "Tanggal", type: "date", required: true },
+    { key: "customer", label: "Customer", type: "text", required: true },
     { key: "description", label: "Deskripsi", type: "text" },
-    { key: "channel", label: "Channel", type: "select", options: ["Shopee", "TikTokShop", "Offline"] },
+    { key: "channel", label: "Channel", type: "select", options: ["Shopee", "TikTokShop", "Offline"], required: true },
     { key: "deadline", label: "Deadline", type: "date" },
     { key: "price", label: "Harga", type: "number", format: "currency" },
     {

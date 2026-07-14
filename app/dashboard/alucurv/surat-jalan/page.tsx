@@ -11,9 +11,9 @@ interface AlucurvDeliveryNote {
 }
 
 const fields: CrudField[] = [
-    { key: "number", label: "No. Surat Jalan", type: "text" },
-    { key: "date", label: "Tanggal", type: "date" },
-    { key: "customer", label: "Customer", type: "text" },
+    { key: "number", label: "No. Surat Jalan", type: "text", required: true },
+    { key: "date", label: "Tanggal", type: "date", required: true },
+    { key: "customer", label: "Customer", type: "text", required: true },
 ];
 
 const excelColumns: ExcelColumn[] = [

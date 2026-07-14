@@ -13,9 +13,9 @@ interface AlucurvStockItem {
 }
 
 const fields: CrudField[] = [
-    { key: "code", label: "Kode", type: "text" },
-    { key: "name", label: "Nama Barang", type: "text" },
-    { key: "category", label: "Kategori", type: "select", options: ["Produk", "Consumable"] },
+    { key: "code", label: "Kode", type: "text", required: true },
+    { key: "name", label: "Nama Barang", type: "text", required: true },
+    { key: "category", label: "Kategori", type: "select", options: ["Produk", "Consumable"], required: true },
     { key: "min_stock", label: "Stok Minimum", type: "number" },
     { key: "opening_stock", label: "Stok Awal", type: "number" },
 ];

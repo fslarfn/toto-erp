@@ -15,9 +15,9 @@ interface AlucurvTransaction {
 }
 
 const fields: CrudField[] = [
-    { key: "date", label: "Tanggal", type: "date" },
-    { key: "description", label: "Deskripsi", type: "text" },
-    { key: "type", label: "Tipe", type: "select", options: ["Pemasukan", "Pengeluaran"] },
+    { key: "date", label: "Tanggal", type: "date", required: true },
+    { key: "description", label: "Deskripsi", type: "text", required: true },
+    { key: "type", label: "Tipe", type: "select", options: ["Pemasukan", "Pengeluaran"], required: true },
     { key: "amount", label: "Nominal", type: "number", format: "currency" },
     { key: "account_id", label: "Akun", type: "text" },
     { key: "note", label: "Catatan", type: "text" },

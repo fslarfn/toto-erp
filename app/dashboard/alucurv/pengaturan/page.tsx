@@ -19,16 +19,16 @@ interface AlucurvSupplier {
 }
 
 const accountFields: CrudField[] = [
-    { key: "name", label: "Nama Akun", type: "text" },
-    { key: "type", label: "Tipe", type: "select", options: ["cash", "bank", "marketplace"] },
+    { key: "name", label: "Nama Akun", type: "text", required: true },
+    { key: "type", label: "Tipe", type: "select", options: ["cash", "bank", "marketplace"], required: true },
     { key: "opening_balance", label: "Saldo Awal", type: "number", format: "currency" },
 ];
 const subCategoryFields: CrudField[] = [
-    { key: "type", label: "Tipe", type: "select", options: ["Pemasukan", "Pengeluaran"] },
-    { key: "name", label: "Nama Kategori", type: "text" },
+    { key: "type", label: "Tipe", type: "select", options: ["Pemasukan", "Pengeluaran"], required: true },
+    { key: "name", label: "Nama Kategori", type: "text", required: true },
 ];
 const supplierFields: CrudField[] = [
-    { key: "name", label: "Nama Supplier", type: "text" },
+    { key: "name", label: "Nama Supplier", type: "text", required: true },
 ];
 
 export default function AlucurvPengaturanPage() {

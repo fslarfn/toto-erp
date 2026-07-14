@@ -13,9 +13,9 @@ interface AlucurvEmployee {
 }
 
 const fields: CrudField[] = [
-    { key: "name", label: "Nama", type: "text" },
+    { key: "name", label: "Nama", type: "text", required: true },
     { key: "role", label: "Jabatan", type: "text" },
-    { key: "division", label: "Divisi", type: "select", options: ["Produksi", "Admin", "Marketing"] },
+    { key: "division", label: "Divisi", type: "select", options: ["Produksi", "Admin", "Marketing"], required: true },
     { key: "weekly_base", label: "Gaji Mingguan", type: "number", format: "currency" },
     { key: "active", label: "Aktif", type: "checkbox" },
 ];

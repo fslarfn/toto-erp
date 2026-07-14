@@ -18,9 +18,9 @@ interface AlucurvPurchase {
 }
 
 const fields: CrudField[] = [
-    { key: "date", label: "Tanggal", type: "date" },
+    { key: "date", label: "Tanggal", type: "date", required: true },
     { key: "supplier_id", label: "Supplier", type: "text" },
-    { key: "item_name", label: "Nama Barang", type: "text" },
+    { key: "item_name", label: "Nama Barang", type: "text", required: true },
     { key: "size", label: "Ukuran", type: "text" },
     { key: "unit_price", label: "Harga Satuan", type: "number", format: "currency" },
     { key: "qty", label: "Qty", type: "number" },
