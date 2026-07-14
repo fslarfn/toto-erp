@@ -26,7 +26,7 @@ const fields: CrudField[] = [
 const excelColumns: ExcelColumn[] = [
     { key: "date", header: "Tanggal", type: "date" },
     { key: "description", header: "Deskripsi", type: "text" },
-    { key: "type", header: "Tipe", type: "text" },
+    { key: "type", header: "Tipe", type: "text", options: ["Pemasukan", "Pengeluaran"] },
     { key: "amount", header: "Nominal", type: "number" },
     { key: "account_id", header: "Akun", type: "text" },
     { key: "note", header: "Catatan", type: "text" },

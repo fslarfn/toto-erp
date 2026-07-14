@@ -24,7 +24,7 @@ const excelColumns: ExcelColumn[] = [
     { key: "date", header: "Tanggal", type: "date" },
     { key: "inv_no", header: "No. Invoice", type: "text" },
     { key: "amount", header: "Nominal", type: "number" },
-    { key: "status", header: "Status", type: "text" },
+    { key: "status", header: "Status", type: "text", options: ["LUNAS", "BELUM"] },
     { key: "note", header: "Catatan", type: "text" },
 ];
 
