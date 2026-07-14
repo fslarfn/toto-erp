@@ -23,7 +23,7 @@ const fields: CrudField[] = [
 const excelColumns: ExcelColumn[] = [
     { key: "name", header: "Nama", type: "text" },
     { key: "role", header: "Jabatan", type: "text" },
-    { key: "division", header: "Divisi", type: "text" },
+    { key: "division", header: "Divisi", type: "text", options: ["Produksi", "Admin", "Marketing"] },
     { key: "weekly_base", header: "Gaji Mingguan", type: "number" },
     { key: "active", header: "Aktif", type: "boolean" },
 ];

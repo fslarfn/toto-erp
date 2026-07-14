@@ -6,6 +6,14 @@ export interface ExcelColumn {
     key: string;
     header: string;
     type?: "text" | "number" | "date" | "boolean";
+    /** Kalau diisi, value dicocokkan case-insensitive lalu dinormalisasi ke ejaan persis di sini (mis. CHECK constraint enum di database). */
+    options?: string[];
+}
+
+/** Cocokkan value ke salah satu options tanpa peduli besar-kecil huruf/spasi, kembalikan ejaan persis dari options. */
+function normalizeToOption(val: string, options: string[]): string {
+    const match = options.find((o) => o.toLowerCase() === val.toLowerCase());
+    return match ?? val;
 }
 
 function errorMessage(err: unknown): string {
@@ -66,7 +74,10 @@ export default function ExcelImportButton({
                     if (col.type === "number") val = val === "" ? 0 : Number(val);
                     else if (col.type === "boolean") val = val === true || val === "TRUE" || val === "true" || val === 1 || val === "1";
                     else if (col.type === "date") val = toDateString(val);
-                    else val = val === "" || val === undefined ? null : String(val).trim();
+                    else {
+                        const str = val === "" || val === undefined ? null : String(val).trim();
+                        val = str && col.options ? normalizeToOption(str, col.options) : str;
+                    }
                     row[col.key] = val;
                 }
                 return row;

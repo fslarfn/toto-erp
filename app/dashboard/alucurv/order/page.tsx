@@ -46,7 +46,7 @@ const excelColumns: ExcelColumn[] = [
     { key: "date", header: "Tanggal", type: "date" },
     { key: "customer", header: "Customer", type: "text" },
     { key: "description", header: "Deskripsi", type: "text" },
-    { key: "channel", header: "Channel", type: "text" },
+    { key: "channel", header: "Channel", type: "text", options: ["Shopee", "TikTokShop", "Offline"] },
     { key: "deadline", header: "Deadline", type: "date" },
     { key: "price", header: "Harga", type: "number" },
     { key: "received_amount", header: "Harga Setelah Barang Datang", type: "number" },

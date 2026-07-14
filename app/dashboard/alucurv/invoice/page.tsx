@@ -30,9 +30,9 @@ const excelColumns: ExcelColumn[] = [
     { key: "number", header: "No. Invoice", type: "text" },
     { key: "date", header: "Tanggal", type: "date" },
     { key: "customer", header: "Customer", type: "text" },
-    { key: "status", header: "Status", type: "text" },
+    { key: "status", header: "Status", type: "text", options: ["LUNAS", "DP", "BELUM"] },
     { key: "dp_amount", header: "Nominal DP", type: "number" },
-    { key: "payment", header: "Pembayaran", type: "text" },
+    { key: "payment", header: "Pembayaran", type: "text", options: ["TRANSFER", "CASH"] },
     { key: "note", header: "Catatan", type: "text" },
 ];
 
