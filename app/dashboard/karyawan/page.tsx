@@ -18,6 +18,15 @@ function fmtRp(v: number) {
     if (!v) return "-";
     return "Rp " + Math.round(v).toLocaleString("id-ID");
 }
+/** "2026-07-W2" -> perkiraan tanggal akhir minggu itu ("2026-07-14"), dibatasi akhir bulan. */
+function periodeToDate(periode: string): string {
+    const m = periode.match(/^(\d{4})-(\d{2})-W(\d)$/);
+    if (!m) return periode;
+    const [, y, mo, w] = m;
+    const lastDayOfMonth = new Date(Number(y), Number(mo), 0).getDate();
+    const day = Math.min(Number(w) * 7, lastDayOfMonth);
+    return `${y}-${mo}-${String(day).padStart(2, "0")}`;
+}
 function fmtDate(d: string) {
     if (!d) return "-";
     const p = d.split("-");
@@ -926,29 +935,41 @@ function TabKasbon() {
     const [form, setForm] = useState({ karyawan_id: 0, tanggal: new Date().toISOString().slice(0, 10), nominal: 0, bayar: 0, keterangan: "" });
 
     const kasbonWithAuto = React.useMemo(() => {
-        const map: Record<number, number> = {};
+        // Kelompokkan potongan kasbon per karyawan, per slip gaji (bukan dipukul rata jadi satu pool).
+        const gajiByKaryawan: Record<number, typeof gaji> = {};
         gaji.forEach(g => {
-            if (g.kasbon_potong) map[g.karyawan_id] = (map[g.karyawan_id] || 0) + g.kasbon_potong;
+            if (g.kasbon_potong > 0) {
+                (gajiByKaryawan[g.karyawan_id] ||= []).push(g);
+            }
         });
 
         const arr = JSON.parse(JSON.stringify(kasbon)) as (typeof kasbon[0] & { auto_bayar: number })[];
+        arr.forEach(b => { b.auto_bayar = 0; });
+
         const grouped: Record<number, typeof arr> = {};
         arr.forEach(b => {
-            grouped[b.karyawan_id] = grouped[b.karyawan_id] || [];
-            grouped[b.karyawan_id].push(b);
+            (grouped[b.karyawan_id] ||= []).push(b);
         });
 
         for (const kId in grouped) {
-            let left = map[kId] || 0;
-            // urutkan dari ID terkecil (terlama)
-            grouped[kId].sort((a, b) => a.id - b.id);
-            grouped[kId].forEach(b => {
-                b.auto_bayar = 0;
-                const gap = b.nominal - (b.bayar || 0);
-                if (gap > 0 && left > 0) {
-                    const deduct = Math.min(gap, left);
-                    b.auto_bayar = deduct;
-                    left -= deduct;
+            // Urutkan kasbon dari yang paling lama (tanggal dibuat).
+            const kasbonList = grouped[kId].sort((a, b) => a.tanggal.localeCompare(b.tanggal) || a.id - b.id);
+            // Proses slip gaji secara kronologis, dari periode paling lama.
+            const gajiList = (gajiByKaryawan[kId] || []).sort((a, b) => a.periode.localeCompare(b.periode));
+
+            gajiList.forEach(g => {
+                let sisaPotongan = g.kasbon_potong;
+                const periodeEnd = periodeToDate(g.periode);
+                for (const b of kasbonList) {
+                    if (sisaPotongan <= 0) break;
+                    // Kasbon yang dibuat SETELAH slip gaji ini tidak mungkin sudah dipotong di situ.
+                    if (b.tanggal > periodeEnd) continue;
+                    const gap = b.nominal - (b.bayar || 0) - b.auto_bayar;
+                    if (gap > 0) {
+                        const deduct = Math.min(gap, sisaPotongan);
+                        b.auto_bayar += deduct;
+                        sisaPotongan -= deduct;
+                    }
                 }
             });
         }
