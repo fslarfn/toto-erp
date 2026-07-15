@@ -72,10 +72,16 @@ export default function AlucurvInvoicePrintPage({ params }: { params: Promise<{ 
     const bayar = total - dp - diskon;
 
     return (
-        <div style={{ background: "#e5e5e5", minHeight: "100vh", padding: "24px 12px", fontFamily: "Arial, Helvetica, sans-serif" }}>
+        <div className="print-page-bg" style={{ background: "#e5e5e5", minHeight: "100vh", padding: "24px 12px", fontFamily: "Arial, Helvetica, sans-serif" }}>
             <style>{`
+                @page { margin: 10mm; }
+                * {
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                    color-adjust: exact !important;
+                }
                 @media print {
-                    body { background: white !important; }
+                    body, .print-page-bg { background: white !important; padding: 0 !important; }
                     .no-print { display: none !important; }
                     .nota-paper { box-shadow: none !important; margin: 0 !important; border: none !important; }
                 }
@@ -98,7 +104,7 @@ export default function AlucurvInvoicePrintPage({ params }: { params: Promise<{ 
                         <img
                             src={ALUCURV.logoSrc}
                             alt={ALUCURV.name}
-                            style={{ height: 64, margin: "0 auto 4px", display: "block" }}
+                            style={{ height: 112, width: 112, objectFit: "contain", margin: "0 auto 4px", display: "block" }}
                             onError={() => setLogoOk(false)}
                         />
                     ) : (
