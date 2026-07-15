@@ -12,8 +12,9 @@ const ALUCURV = {
     bankName: "BCA",
     bankAccountNo: "739-207-9893",
     bankAccountName: "Devina Aulia Rahma",
-    // Ganti dengan logo asli via public/alucurv-logo.png kalau sudah tersedia.
-    logoSrc: "/alucurv-logo.png",
+    // Sudah di-crop presisi ke bounding box asli (3464x952, dari kanvas asal 3464x3464 yang
+    // banyak transparant padding vertikal) supaya ukurannya pas & center saat ditampilkan.
+    logoSrc: "/alucurv-logo-trimmed.png",
 };
 
 interface InvoiceRow {
@@ -104,7 +105,7 @@ export default function AlucurvInvoicePrintPage({ params }: { params: Promise<{ 
                         <img
                             src={ALUCURV.logoSrc}
                             alt={ALUCURV.name}
-                            style={{ height: 112, width: 112, objectFit: "contain", margin: "0 auto 4px", display: "block" }}
+                            style={{ width: 280, height: "auto", margin: "0 auto 4px", display: "block" }}
                             onError={() => setLogoOk(false)}
                         />
                     ) : (
