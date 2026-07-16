@@ -15,6 +15,13 @@ export interface ExcelColumn {
      * Default false (cell kosong -> 0) karena kebanyakan kolom numerik NOT NULL DEFAULT 0.
      */
     nullable?: boolean;
+    /**
+     * Untuk kolom foreign key (mis. supplier_id, account_id): cocokkan teks di Excel (nama,
+     * case-insensitive) ke `label` di sini, ganti jadi `value` (id baris master) yang sesuai.
+     * Kalau tidak ketemu kecocokan, kolom dikosongkan (null) alih-alih insert teks yang pasti
+     * gagal foreign key constraint.
+     */
+    lookup?: { value: string; label: string }[];
 }
 
 /** Cocokkan value ke salah satu options tanpa peduli besar-kecil huruf/spasi, kembalikan ejaan persis dari options. */
@@ -83,7 +90,11 @@ export default function ExcelImportButton({
                     else if (col.type === "date") val = toDateString(val);
                     else {
                         const str = val === "" || val === undefined ? null : String(val).trim();
-                        val = str && col.options ? normalizeToOption(str, col.options) : str;
+                        if (str && col.lookup) {
+                            val = col.lookup.find((o) => o.label.toLowerCase() === str.toLowerCase())?.value ?? null;
+                        } else {
+                            val = str && col.options ? normalizeToOption(str, col.options) : str;
+                        }
                     }
                     row[col.key] = val;
                 }

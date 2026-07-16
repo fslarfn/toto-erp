@@ -6,6 +6,12 @@ export interface CrudField {
     label: string;
     type?: "text" | "number" | "date" | "select" | "checkbox";
     options?: string[];
+    /**
+     * Untuk select yang value-nya beda dari label yang ditampilkan (mis. foreign key ke tabel
+     * lain: value = id baris master, label = nama yang manusiawi). Kalau diisi, dipakai alih-alih
+     * `options`.
+     */
+    optionsMap?: { value: string; label: string }[];
     /** Tampilkan field ini di form tambah hanya kalau kondisi terpenuhi (mis. tergantung field lain). */
     showIf?: (form: Record<string, unknown>) => boolean;
     /** Format tampilan di tabel (input tetap angka biasa). "currency" -> "Rp 1.234.567". */
@@ -34,6 +40,9 @@ function displayValue(field: CrudField, val: unknown): string {
         const n = Number(val);
         return val === "" || val === null || val === undefined || isNaN(n) ? "" : `Rp ${n.toLocaleString("id-ID")}`;
     }
+    if (field.optionsMap) {
+        return field.optionsMap.find((o) => o.value === val)?.label ?? String(val ?? "");
+    }
     return String(val ?? "");
 }
 
@@ -47,11 +56,12 @@ function FieldInput({
     onChange: (val: unknown) => void;
 }) {
     if (field.type === "select") {
+        const opts = field.optionsMap ?? (field.options ?? []).map((o) => ({ value: o, label: o }));
         return (
-            <select value={String(value ?? "")} onChange={(e) => onChange(e.target.value)} style={inputStyle}>
+            <select value={String(value ?? "")} onChange={(e) => onChange(e.target.value || null)} style={inputStyle}>
                 <option value="">-</option>
-                {field.options?.map((o) => (
-                    <option key={o} value={o}>{o}</option>
+                {opts.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
             </select>
         );
