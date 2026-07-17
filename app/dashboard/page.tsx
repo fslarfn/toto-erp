@@ -71,15 +71,18 @@ export default function DashboardPage() {
     const totalRevenue = totalRevenueFromCashFlow + paidPesananRowsValue;
     const netProfit = totalRevenue - totalExpense;
 
-    // Piutang gabungan (Saldo yang belum dibayar)
-    const storeAR = orders.filter((o) => o.paymentStatus !== "lunas").reduce((s, o) => s + (o.totalPrice - o.paidAmount), 0);
-    const pesananAR = pesananRows.filter(r => isRowFilled(r) && !r.is_paid).reduce((s, r) => {
+    // Piutang: HANYA dari pesanan_rows — satu-satunya jalur input order
+    // (definisi sama dengan Cockpit; tabel orders legacy tumpang-tindih
+    // dengan pesanan_rows sehingga sebelumnya terhitung dobel ~2x).
+    const unpaidRows = pesananRows.filter(r => isRowFilled(r) && !r.is_paid);
+    const totalAR = unpaidRows.reduce((s, r) => {
         const u = parseIdNum(r.ukuran);
         const q = parseIdNum(r.qty);
         const h = parseIdNum(r.harga);
         return s + (u * q * h);
     }, 0);
-    const totalAR = storeAR + pesananAR;
+    // Jumlah invoice: dedup per no_inv (1 invoice bisa banyak baris item).
+    const unpaidInvoiceCount = new Set(unpaidRows.map(r => (r.no_inv || String(r.id)).trim())).size;
 
     // Saldo TERHITUNG (sumber kebenaran yang sama dengan Keuangan), bukan cache.
     const totalSaldo = bankAccounts.reduce((s, b) => s + getComputedBalance(b.id), 0);
@@ -174,7 +177,7 @@ export default function DashboardPage() {
                 {[
                     { label: "Order Bulan Ini", value: `${totalOrderCount} order`, sub: formatCurrency(totalOrderValue), bg: "#FDF3E7", border: "#E8DCCF", icon: "📦" },
                     { label: "Total Saldo", value: formatCurrency(totalSaldo), sub: `${bankAccounts.length} rekening`, bg: "#FDF3E7", border: "#E8DCCF", icon: "🏦" },
-                    { label: "Piutang Belum Lunas", value: formatCurrency(totalAR), sub: `${orders.filter((o) => o.paymentStatus !== "lunas").length + pesananRows.filter(r => isRowFilled(r) && !r.is_paid).length} invoice`, bg: "#FEF2F2", border: "#FECACA", icon: "⚠️" },
+                    { label: "Piutang Belum Lunas", value: formatCurrency(totalAR), sub: `${unpaidInvoiceCount} invoice`, bg: "#FEF2F2", border: "#FECACA", icon: "⚠️" },
                     { label: "Laba Bersih", value: formatCurrency(netProfit), sub: `Rev ${formatCurrency(totalRevenue)}`, bg: netProfit >= 0 ? "#F0FDF4" : "#FEF2F2", border: netProfit >= 0 ? "#BBF7D0" : "#FECACA", icon: netProfit >= 0 ? "📈" : "📉" },
                 ].map((card) => (
                     <div key={card.label} className="stat-card" style={{ borderColor: card.border, background: card.bg }}>
