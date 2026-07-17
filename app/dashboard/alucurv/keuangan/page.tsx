@@ -14,7 +14,7 @@ interface AlucurvTransaction {
     note: string | null;
 }
 interface AlucurvAccount { id: string; name: string }
-interface AlucurvSubCategory { id: string; name: string }
+interface AlucurvSubCategory { id: string; name: string; type: string }
 
 export default function AlucurvKeuanganPage() {
     const { rows, loading, insertRow, insertRows, updateRow, deleteRow } = useAlucurvTable<AlucurvTransaction>("alu_transactions", "date");
@@ -22,13 +22,25 @@ export default function AlucurvKeuanganPage() {
     const subCategories = useAlucurvTable<AlucurvSubCategory>("alu_sub_categories", "name");
 
     const accountOptions = accounts.rows.map((a) => ({ value: a.id, label: a.name }));
-    const subCategoryOptions = subCategories.rows.map((c) => ({ value: c.id, label: c.name }));
+    // Semua kategori (dipakai untuk lookup Excel & tabel, di situ tidak ada konteks Tipe yang dipilih).
+    const subCategoryOptionsAll = subCategories.rows.map((c) => ({ value: c.id, label: c.name }));
 
     const fields: CrudField[] = [
         { key: "date", label: "Tanggal", type: "date", required: true },
         { key: "description", label: "Deskripsi", type: "text", required: true },
         { key: "type", label: "Tipe", type: "select", options: ["Pemasukan", "Pengeluaran"], required: true },
-        { key: "sub_category_id", label: "Kategori", type: "select", optionsMap: subCategoryOptions },
+        {
+            key: "sub_category_id",
+            label: "Kategori",
+            type: "select",
+            // Cuma tampilkan kategori yang tipe-nya cocok dengan Tipe yang sedang dipilih di form —
+            // sebelumnya semua kategori campur, jadi gampang salah pilih (transaksi Pemasukan
+            // ketaut ke kategori pengeluaran, bikin Laporan Bulanan tampil rancu).
+            optionsMap: (form) =>
+                subCategories.rows
+                    .filter((c) => !form.type || c.type === form.type)
+                    .map((c) => ({ value: c.id, label: c.name })),
+        },
         { key: "amount", label: "Nominal", type: "number", format: "currency" },
         { key: "account_id", label: "Akun", type: "select", optionsMap: accountOptions },
         { key: "note", label: "Catatan", type: "text" },
@@ -38,7 +50,7 @@ export default function AlucurvKeuanganPage() {
         { key: "date", header: "Tanggal", type: "date" },
         { key: "description", header: "Deskripsi", type: "text" },
         { key: "type", header: "Tipe", type: "text", options: ["Pemasukan", "Pengeluaran"] },
-        { key: "sub_category_id", header: "Kategori", type: "text", lookup: subCategoryOptions },
+        { key: "sub_category_id", header: "Kategori", type: "text", lookup: subCategoryOptionsAll },
         { key: "amount", header: "Nominal", type: "number" },
         { key: "account_id", header: "Akun", type: "text", lookup: accountOptions },
         { key: "note", header: "Catatan", type: "text" },

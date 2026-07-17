@@ -9,9 +9,10 @@ export interface CrudField {
     /**
      * Untuk select yang value-nya beda dari label yang ditampilkan (mis. foreign key ke tabel
      * lain: value = id baris master, label = nama yang manusiawi). Kalau diisi, dipakai alih-alih
-     * `options`.
+     * `options`. Bisa berupa fungsi dari form saat ini — pakai untuk memfilter pilihan tergantung
+     * field lain (mis. Kategori cuma tampilkan yang tipe-nya cocok dengan field Tipe terpilih).
      */
-    optionsMap?: { value: string; label: string }[];
+    optionsMap?: { value: string; label: string }[] | ((form: Record<string, unknown>) => { value: string; label: string }[]);
     /** Tampilkan field ini di form tambah hanya kalau kondisi terpenuhi (mis. tergantung field lain). */
     showIf?: (form: Record<string, unknown>) => boolean;
     /** Format tampilan di tabel (input tetap angka biasa). "currency" -> "Rp 1.234.567". */
@@ -35,13 +36,22 @@ function errorMessage(err: unknown): string {
     return "Gagal menyimpan data.";
 }
 
+function resolveOptions(field: CrudField, form: Record<string, unknown>): { value: string; label: string }[] {
+    if (typeof field.optionsMap === "function") return field.optionsMap(form);
+    if (field.optionsMap) return field.optionsMap;
+    return (field.options ?? []).map((o) => ({ value: o, label: o }));
+}
+
 function displayValue(field: CrudField, val: unknown): string {
     if (field.format === "currency") {
         const n = Number(val);
         return val === "" || val === null || val === undefined || isNaN(n) ? "" : `Rp ${n.toLocaleString("id-ID")}`;
     }
     if (field.optionsMap) {
-        return field.optionsMap.find((o) => o.value === val)?.label ?? String(val ?? "");
+        // Selalu resolve pakai daftar PENUH (form={}) — filter kondisional di optionsMap cuma
+        // relevan buat pengalaman isi form, bukan buat label di tabel (baris lama yang datanya
+        // tidak konsisten tetap harus kelihatan nama kategorinya, bukan id mentah).
+        return resolveOptions(field, {}).find((o) => o.value === val)?.label ?? String(val ?? "");
     }
     return String(val ?? "");
 }
@@ -49,14 +59,16 @@ function displayValue(field: CrudField, val: unknown): string {
 function FieldInput({
     field,
     value,
+    form,
     onChange,
 }: {
     field: CrudField;
     value: unknown;
+    form: Record<string, unknown>;
     onChange: (val: unknown) => void;
 }) {
     if (field.type === "select") {
-        const opts = field.optionsMap ?? (field.options ?? []).map((o) => ({ value: o, label: o }));
+        const opts = resolveOptions(field, form);
         return (
             <select value={String(value ?? "")} onChange={(e) => onChange(e.target.value || null)} style={inputStyle}>
                 <option value="">-</option>
@@ -133,9 +145,10 @@ export default function AlucurvCrudTable<T extends { id: string }>({
 
     const query = search.trim().toLowerCase();
     const visibleRows = query
-        ? rows.filter((row) =>
-            fields.some((f) => displayValue(f, (row as unknown as Record<string, unknown>)[f.key]).toLowerCase().includes(query))
-          )
+        ? rows.filter((row) => {
+            const r = row as unknown as Record<string, unknown>;
+            return fields.some((f) => displayValue(f, r[f.key]).toLowerCase().includes(query));
+          })
         : rows;
 
     const submit = async (e: FormEvent) => {
@@ -190,7 +203,7 @@ export default function AlucurvCrudTable<T extends { id: string }>({
                 {fields.filter((f) => !f.showIf || f.showIf(form)).map((f) => (
                     <div key={f.key} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                         <label style={labelStyle}>{f.label}</label>
-                        <FieldInput field={f} value={form[f.key]} onChange={(val) => setForm({ ...form, [f.key]: val })} />
+                        <FieldInput field={f} value={form[f.key]} form={form} onChange={(val) => setForm({ ...form, [f.key]: val })} />
                     </div>
                 ))}
                 <button type="submit" disabled={saving} style={btnStyle}>
@@ -224,10 +237,12 @@ export default function AlucurvCrudTable<T extends { id: string }>({
                         ) : visibleRows.length === 0 ? (
                             <tr><td colSpan={fields.length + 1} style={tdEmptyStyle}>{query ? "Tidak ada hasil untuk pencarian ini." : "Belum ada data."}</td></tr>
                         ) : (
-                            visibleRows.map((row) => (
+                            visibleRows.map((row) => {
+                                const r = row as unknown as Record<string, unknown>;
+                                return (
                                 <tr key={row.id}>
                                     {fields.map((f) => {
-                                        const rowVal = (row as unknown as Record<string, unknown>)[f.key];
+                                        const rowVal = r[f.key];
                                         return (
                                             <td key={f.key} style={tdStyle}>
                                                 {f.type === "checkbox" ? (
@@ -251,7 +266,8 @@ export default function AlucurvCrudTable<T extends { id: string }>({
                                         <button onClick={() => onDelete(row.id)} style={deleteBtnStyle}>Hapus</button>
                                     </td>
                                 </tr>
-                            ))
+                                );
+                            })
                         )}
                     </tbody>
                 </table>
@@ -265,7 +281,7 @@ export default function AlucurvCrudTable<T extends { id: string }>({
                             {fields.filter((f) => !f.showIf || f.showIf(editForm)).map((f) => (
                                 <div key={f.key} style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 140 }}>
                                     <label style={labelStyle}>{f.label}</label>
-                                    <FieldInput field={f} value={editForm[f.key]} onChange={(val) => setEditForm({ ...editForm, [f.key]: val })} />
+                                    <FieldInput field={f} value={editForm[f.key]} form={editForm} onChange={(val) => setEditForm({ ...editForm, [f.key]: val })} />
                                 </div>
                             ))}
                         </div>
