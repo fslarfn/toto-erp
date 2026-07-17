@@ -62,15 +62,11 @@ export default function DashboardPage() {
     const filteredCashFlow = cashFlow.filter(c => c.date.startsWith(selectedPeriod));
     const { income: totalRevenueFromCashFlow, expense: totalExpense } = computeTotals(filteredCashFlow);
 
-    // Tambahkan pendapatan dari pesananRows yang sudah lunas (is_paid) di periode terpilih
-    const paidPesananRowsValue = filteredPesananRows.filter(r => r.is_paid).reduce((s, r) => {
-        const u = parseIdNum(r.ukuran);
-        const q = parseIdNum(r.qty);
-        const h = parseIdNum(r.harga);
-        return s + (u * q * h);
-    }, 0);
-
-    const totalRevenue = totalRevenueFromCashFlow + paidPesananRowsValue;
+    // Revenue = pemasukan cash flow SAJA. Pembayaran invoice selalu dicatat
+    // di Keuangan (konfirmasi owner), jadi menambah nilai order lunas dari
+    // pesanan_rows membuat pendapatan terhitung DOBEL. Definisi ini kini
+    // konsisten dengan Keuangan & Laba Bulan Ini di Cockpit.
+    const totalRevenue = totalRevenueFromCashFlow;
     const netProfit = totalRevenue - totalExpense;
 
     // Piutang: HANYA dari pesanan_rows — satu-satunya jalur input order
