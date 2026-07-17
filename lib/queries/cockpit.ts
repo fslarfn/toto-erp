@@ -26,16 +26,29 @@ export const getCockpitBalance = async (): Promise<CockpitBalance> => {
   const { data: accData, error: accErr } = await supabase.from('bank_accounts').select('*');
   if (accErr) throw accErr;
 
+  // Saldo TERHITUNG dari view v_account_balances (sumber kebenaran yang sama
+  // dengan halaman Keuangan). Bila view belum ada di DB, fallback ke cache
+  // bank_accounts.balance agar Cockpit tetap tampil.
+  const { data: viewData, error: viewErr } = await supabase
+    .from('v_account_balances')
+    .select('id, computed_balance');
+  const computedById = new Map<string, number>(
+    viewErr ? [] : (viewData || []).map(v => [v.id as string, Number(v.computed_balance) || 0])
+  );
+
+  const accounts = accData.map(a => ({
+    id: a.id,
+    name: a.name,
+    bank: a.bank,
+    balance: computedById.has(a.id) ? computedById.get(a.id)! : Number(a.balance) || 0,
+  }));
+  const totalNow = accounts.reduce((s, a) => s + a.balance, 0);
+
   return {
-    total_now: deltaData.total_now,
-    total_7d_ago: deltaData.total_7d_ago,
+    total_now: totalNow,
+    total_7d_ago: totalNow - deltaData.delta,
     delta: deltaData.delta,
-    accounts: accData.map(a => ({
-      id: a.id,
-      name: a.name,
-      bank: a.bank,
-      balance: a.balance
-    }))
+    accounts,
   };
 };
 
