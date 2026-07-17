@@ -5,6 +5,7 @@ import { usePesanan, isRowFilled } from "@/lib/pesanan-store";
 import { useAuth } from "@/lib/auth";
 import { useSuratJalan } from "@/lib/surat-jalan-store";
 import { formatCurrency, formatDate, PRODUCTION_STATUS_LABELS, parseIdNum } from "@/lib/utils";
+import { computeTotals, isTransfer } from "@/lib/balance";
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
     ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart, Bar
@@ -20,7 +21,7 @@ const PROD_COLORS: Record<string, string> = {
 };
 
 export default function DashboardPage() {
-    const { orders, cashFlow, materials, bankAccounts } = useStore();
+    const { orders, cashFlow, materials, bankAccounts, getComputedBalance } = useStore();
     const { rows: pesananRows } = usePesanan();
     const { user } = useAuth();
     const { suratJalans } = useSuratJalan();
@@ -53,10 +54,11 @@ export default function DashboardPage() {
     
     const totalOrderValue = storeOrdersValue + pesananRowsValue;
 
-    // Filter cashFlow berdasarkan periode
+    // Filter cashFlow berdasarkan periode.
+    // Definisi SAMA dengan Keuangan & Cockpit: kecualikan mutasi antar-kas,
+    // entri test, dan penyesuaian (lib/balance.computeTotals).
     const filteredCashFlow = cashFlow.filter(c => c.date.startsWith(selectedPeriod));
-    const totalRevenueFromCashFlow = filteredCashFlow.filter((c) => c.type === "income").reduce((s, c) => s + c.amount, 0);
-    const totalExpense = filteredCashFlow.filter((c) => c.type === "expense").reduce((s, c) => s + c.amount, 0);
+    const { income: totalRevenueFromCashFlow, expense: totalExpense } = computeTotals(filteredCashFlow);
 
     // Tambahkan pendapatan dari pesananRows yang sudah lunas (is_paid) di periode terpilih
     const paidPesananRowsValue = filteredPesananRows.filter(r => r.is_paid).reduce((s, r) => {
@@ -79,7 +81,8 @@ export default function DashboardPage() {
     }, 0);
     const totalAR = storeAR + pesananAR;
 
-    const totalSaldo = bankAccounts.reduce((s, b) => s + b.balance, 0);
+    // Saldo TERHITUNG (sumber kebenaran yang sama dengan Keuangan), bukan cache.
+    const totalSaldo = bankAccounts.reduce((s, b) => s + getComputedBalance(b.id), 0);
     const lowStock = materials.filter((m) => m.currentStock <= m.minimumStock).length;
     
     // Active jobs gabungan
@@ -91,6 +94,7 @@ export default function DashboardPage() {
     const monthlyData = (() => {
         const map: Record<string, { income: number; expense: number }> = {};
         cashFlow.forEach((c) => {
+            if (c.isTest || c.isAdjustment || isTransfer(c)) return; // konsisten dgn computeTotals
             const m = c.date.substring(0, 7);
             if (!map[m]) map[m] = { income: 0, expense: 0 };
             if (c.type === "income") map[m].income += c.amount;
