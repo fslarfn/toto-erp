@@ -1,5 +1,6 @@
 import { supabase } from '../supabase-client';
 import { computeTotals } from '../balance';
+import { groupUnpaidInvoices, fetchUnpaidPesananRows, pesananRowTotal } from '../piutang';
 import {
   CockpitBalance,
   CockpitAging,
@@ -54,29 +55,16 @@ export const getCockpitBalance = async (): Promise<CockpitBalance> => {
 
 // Query pesanan_rows directly to avoid relying on v_cockpit_aging view permissions
 export const getCockpitAging = async (): Promise<CockpitAging[]> => {
-  const { data, error } = await supabase
-    .from('pesanan_rows')
-    .select('id, no_inv, tanggal, harga, ukuran, qty, is_paid')
-    .eq('is_paid', false);
-
-  if (error) throw error;
+  // Fetch bersama lib/piutang: paged (bebas cap 1000 baris Supabase).
+  const data = await fetchUnpaidPesananRows();
 
   const today = new Date();
   const buckets: Record<CockpitAging['bucket'], number> = {
     '0-30': 0, '31-60': 0, '61-90': 0, '>90': 0,
   };
 
-  // Deduplicate by invoice so multi-row invoices count once
-  const invMap = new Map<string, { tanggal: string; total: number }>();
-  (data || []).forEach(r => {
-    if (!r.tanggal) return;
-    const total = parseIdNum(r.harga) * parseIdNum(r.ukuran) * parseIdNum(r.qty);
-    if (total <= 0) return;
-    const key = (r.no_inv || String(r.id)).trim();
-    const ex = invMap.get(key);
-    if (ex) { ex.total += total; }
-    else { invMap.set(key, { tanggal: r.tanggal, total }); }
-  });
+  // Dedup per invoice — rumus bersama lib/piutang (sama dengan Dashboard).
+  const invMap = groupUnpaidInvoices(data);
 
   invMap.forEach(({ tanggal, total }) => {
     const d = new Date(tanggal);
@@ -106,12 +94,8 @@ export const getCashForecast = async (): Promise<CashForecastPoint[]> => {
 
 // Query pesanan_rows directly to avoid relying on v_cockpit_top_debtors view permissions
 export const getTopDebtors = async (): Promise<TopDebtor[]> => {
-  const { data, error } = await supabase
-    .from('pesanan_rows')
-    .select('id, no_inv, customer, tanggal, harga, ukuran, qty, is_paid')
-    .eq('is_paid', false);
-
-  if (error) throw error;
+  // Fetch bersama lib/piutang: paged (bebas cap 1000 baris Supabase).
+  const data = await fetchUnpaidPesananRows();
 
   const today = new Date();
 
@@ -119,7 +103,7 @@ export const getTopDebtors = async (): Promise<TopDebtor[]> => {
   const invMap = new Map<string, { customer: string; tanggal: string; total: number }>();
   (data || []).forEach(r => {
     if (!r.customer) return;
-    const total = parseIdNum(r.harga) * parseIdNum(r.ukuran) * parseIdNum(r.qty);
+    const total = pesananRowTotal(r);
     if (total <= 0) return;
     const key = (r.no_inv || String(r.id)).trim();
     const ex = invMap.get(key);

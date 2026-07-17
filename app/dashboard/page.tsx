@@ -6,6 +6,8 @@ import { useAuth } from "@/lib/auth";
 import { useSuratJalan } from "@/lib/surat-jalan-store";
 import { formatCurrency, formatDate, PRODUCTION_STATUS_LABELS, parseIdNum } from "@/lib/utils";
 import { computeTotals, isTransfer } from "@/lib/balance";
+import { fetchPiutangSummary } from "@/lib/piutang";
+import useSWR from "swr";
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
     ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart, Bar
@@ -72,17 +74,12 @@ export default function DashboardPage() {
     const netProfit = totalRevenue - totalExpense;
 
     // Piutang: HANYA dari pesanan_rows — satu-satunya jalur input order
-    // (definisi sama dengan Cockpit; tabel orders legacy tumpang-tindih
-    // dengan pesanan_rows sehingga sebelumnya terhitung dobel ~2x).
-    const unpaidRows = pesananRows.filter(r => isRowFilled(r) && !r.is_paid);
-    const totalAR = unpaidRows.reduce((s, r) => {
-        const u = parseIdNum(r.ukuran);
-        const q = parseIdNum(r.qty);
-        const h = parseIdNum(r.harga);
-        return s + (u * q * h);
-    }, 0);
-    // Jumlah invoice: dedup per no_inv (1 invoice bisa banyak baris item).
-    const unpaidInvoiceCount = new Set(unpaidRows.map(r => (r.no_inv || String(r.id)).trim())).size;
+    // (tabel orders legacy tumpang-tindih sehingga dulu terhitung dobel ~2x).
+    // Diambil langsung dari DB lewat fungsi bersama lib/piutang —
+    // query & rumus SAMA PERSIS dengan Executive Cockpit.
+    const { data: piutang } = useSWR("piutang-summary", fetchPiutangSummary, { dedupingInterval: 5000 });
+    const totalAR = piutang?.total ?? 0;
+    const unpaidInvoiceCount = piutang?.invoiceCount ?? 0;
 
     // Saldo TERHITUNG (sumber kebenaran yang sama dengan Keuangan), bukan cache.
     const totalSaldo = bankAccounts.reduce((s, b) => s + getComputedBalance(b.id), 0);
