@@ -1,4 +1,5 @@
 import { supabase } from '../supabase-client';
+import { computeTotals } from '../balance';
 import {
   CockpitBalance,
   CockpitAging,
@@ -149,18 +150,24 @@ export const getProfitStats = async (): Promise<ProfitStats> => {
 
   const { data: cfData, error: cfErr } = await supabase
     .from('cash_flow')
-    .select('type, amount')
+    .select('type, amount, category, is_test, is_adjustment, transfer_group, account_id')
     .gte('date', startOfMonth);
 
   if (cfErr) throw cfErr;
 
-  const income = cfData
-    .filter(c => c.type === 'income')
-    .reduce((sum, c) => sum + Number(c.amount), 0);
-
-  const expense = cfData
-    .filter(c => c.type === 'expense')
-    .reduce((sum, c) => sum + Number(c.amount), 0);
+  // Definisi SAMA dengan halaman Keuangan (lib/balance.computeTotals):
+  // kecualikan entri test, penyesuaian, dan mutasi antar-kas.
+  const { income, expense } = computeTotals(
+    (cfData || []).map(c => ({
+      accountId: (c.account_id as string) ?? null,
+      type: c.type as 'income' | 'expense',
+      amount: Number(c.amount) || 0,
+      isTest: Boolean(c.is_test),
+      isAdjustment: Boolean(c.is_adjustment),
+      category: (c.category as string) || '',
+      transferGroup: (c.transfer_group as string) ?? null,
+    }))
+  );
 
   const { data: targetData, error: targetErr } = await supabase
     .from('monthly_targets')
