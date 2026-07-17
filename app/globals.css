@@ -3,6 +3,30 @@
 @import "tailwindcss";
 
 /* ============================================ */
+/* PRINT (dashboard chrome)                      */
+/* Sembunyikan sidebar/header saat cetak halaman */
+/* apa pun di dalam /dashboard, dan pastikan     */
+/* warna (background, badge) ikut tercetak.       */
+/* ============================================ */
+@media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+  #sidebar, #sidebar-backdrop, header, .no-print {
+    display: none !important;
+  }
+  #main-content-wrapper {
+    width: 100% !important;
+    margin: 0 !important;
+  }
+  #app-container {
+    display: block !important;
+  }
+}
+
+/* ============================================ */
 /* ROOT VARIABLES - CARAMEL WARM THEME          */
 /* ============================================ */
 :root {
