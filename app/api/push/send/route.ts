@@ -16,6 +16,8 @@ export interface PushPayload {
   url?: string;
   /** Tag untuk grouping (opsional) */
   tag?: string;
+  /** Tingkat urgensi untuk panel notifikasi in-app (default: info) */
+  severity?: "info" | "warning" | "danger";
 }
 
 function getVapidConfig() {
@@ -48,10 +50,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Payload tidak lengkap" }, { status: 400 });
     }
 
-    const { publicKey, privateKey, subject } = getVapidConfig();
-
-    webpush.setVapidDetails(subject, publicKey, privateKey);
-
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -68,6 +66,52 @@ export async function POST(req: Request) {
       resolvedUserIds = [...new Set([...resolvedUserIds, ...roleIds])];
     }
 
+    // ── 1) SIMPAN RIWAYAT PANEL DULU (di-AWAIT) ─────────────────
+    // Panel notifikasi in-app TIDAK boleh bergantung pada web push:
+    // sebelumnya insert ini fire-and-forget dan baru jalan SETELAH
+    // getVapidConfig() — kalau env VAPID kosong, route 500 dan riwayat
+    // tidak pernah tertulis → panel selalu kosong.
+    const baseRow = {
+      title: payload.title,
+      body: payload.body,
+      url: payload.url ?? "/dashboard",
+      notification_type: payload.notificationType,
+      severity: payload.severity ?? "info",
+    };
+    let historySaved = false;
+    if (resolvedUserIds.length > 0) {
+      // Tertarget: satu baris per user agar scoping panel per-user benar.
+      const { error: perUserErr } = await supabase
+        .from("notifications")
+        .insert(resolvedUserIds.map((uid) => ({ ...baseRow, target_user_id: uid })));
+      if (perUserErr) {
+        console.error("[push/send] insert riwayat per-user gagal:", perUserErr.message);
+        // Fallback broadcast agar notifikasi tetap tampil (mis. FK/format id tak cocok).
+        const { error: bcErr } = await supabase.from("notifications").insert(baseRow);
+        if (bcErr) console.error("[push/send] insert riwayat broadcast gagal:", bcErr.message);
+        else historySaved = true;
+      } else historySaved = true;
+    } else {
+      const { error: bcErr } = await supabase.from("notifications").insert(baseRow);
+      if (bcErr) console.error("[push/send] insert riwayat gagal:", bcErr.message);
+      else historySaved = true;
+    }
+
+    // ── 2) WEB PUSH (best-effort) ───────────────────────────────
+    // VAPID belum dikonfigurasi → lewati push, riwayat panel tetap tersimpan.
+    let vapid: { publicKey: string; privateKey: string; subject: string } | null = null;
+    try {
+      vapid = getVapidConfig();
+    } catch {
+      return NextResponse.json({
+        ok: true,
+        sent: 0,
+        history: historySaved,
+        message: "VAPID belum dikonfigurasi — riwayat in-app tetap disimpan",
+      });
+    }
+    webpush.setVapidDetails(vapid.subject, vapid.publicKey, vapid.privateKey);
+
     // Ambil subscriber yang relevan
     let query = supabase
       .from("push_subscriptions")
@@ -80,16 +124,8 @@ export async function POST(req: Request) {
     const { data: subscriptions, error } = await query;
     if (error) throw error;
 
-    // Selalu simpan ke riwayat notifikasi terlebih dahulu
-    supabase.from("notifications").insert({
-      title: payload.title,
-      body: payload.body,
-      url: payload.url ?? "/dashboard",
-      notification_type: payload.notificationType,
-    }).then(() => {});
-
     if (!subscriptions || subscriptions.length === 0) {
-      return NextResponse.json({ ok: true, sent: 0, message: "Tidak ada subscriber" });
+      return NextResponse.json({ ok: true, sent: 0, history: historySaved, message: "Tidak ada subscriber" });
     }
 
     // Filter berdasarkan notification_prefs
@@ -142,7 +178,7 @@ export async function POST(req: Request) {
     const sent = results.filter((r) => r.status === "fulfilled").length;
     const failed = results.filter((r) => r.status === "rejected").length;
 
-    return NextResponse.json({ ok: true, sent, failed });
+    return NextResponse.json({ ok: true, sent, failed, history: historySaved });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("[push/send POST]", message);

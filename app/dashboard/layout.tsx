@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useAuth, roleLabels, getRoleDisplay } from "@/lib/auth";
@@ -12,10 +12,10 @@ import { SJBahanProvider } from "@/lib/sj-bahan-store";
 import { TagihanBahanProvider } from "@/lib/tagihan-bahan-store";
 import { QuotationProvider } from "@/lib/quotation-store";
 import { CrmProvider } from "@/lib/crm-store";
-import ChatOrderBox from "@/components/layout/ChatOrderBox";
 import NotificationSettings from "@/components/notifications/NotificationSettings";
 import NotificationPanel from "@/components/NotificationPanel";
 import { useNotifications } from "@/hooks/useNotifications";
+import { useRuangTimAlert } from "@/hooks/useRuangTimAlert";
 
 const NAV_ITEMS = [
     {
@@ -25,6 +25,7 @@ const NAV_ITEMS = [
             { href: "/dashboard/pesanan", label: "Input Pesanan", module: "pesanan", icon: ClipboardIcon },
             { href: "/dashboard/status-barang", label: "Status Barang", module: "status-barang", icon: PackageIcon },
             { href: "/dashboard/cockpit", label: "Executive Cockpit", module: "any", icon: CockpitIcon },
+            { href: "/dashboard/ruang-tim", label: "Ruang Tim", module: "any", icon: RuangTimIcon },
         ],
     },
     {
@@ -131,22 +132,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }, [activeWorkspace]);
     const [collapsed, setCollapsed] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
-    const [chatOpen, setChatOpen] = useState(false);
     const [notifOpen, setNotifOpen] = useState(false);
     const [notifPanelOpen, setNotifPanelOpen] = useState(false);
     const [showTrialModal, setShowTrialModal] = useState(false);
     const { notifications, unreadCount, loading: notifLoading, markAsRead, markAllRead } = useNotifications();
-
-    type ChatToast = { id: number; senderName: string; message: string };
-    const [chatToast, setChatToast] = useState<ChatToast | null>(null);
-    const chatToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-    const handleNewChatMessage = (senderName: string, message: string) => {
-        if (chatToastTimer.current) clearTimeout(chatToastTimer.current);
-        const id = Date.now();
-        setChatToast({ id, senderName, message });
-        chatToastTimer.current = setTimeout(() => setChatToast(null), 5000);
-    };
+    // Badge + toast pesan Ruang Tim (pengganti sinyal floating chat lama).
+    const { unread: chatUnread, toast: chatToast, dismissToast: dismissChatToast } = useRuangTimAlert(user?.id, pathname);
 
     const isAdmin = ["faisal", "vira", "toto", "fauzi", "yuni"].includes(user?.username || "");
     const isFinishing = user?.role === "finishing";
@@ -159,7 +150,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         if (!user) router.replace("/login");
         else if (isFinishing && pathname !== "/dashboard/produksi") {
             router.replace("/dashboard/produksi");
-        } else if (isAlucurvOnly && !pathname.startsWith("/dashboard/alucurv") && !pathname.startsWith("/dashboard/gabungan")) {
+        } else if (isAlucurvOnly && !pathname.startsWith("/dashboard/alucurv") && !pathname.startsWith("/dashboard/gabungan") && pathname !== "/dashboard/ruang-tim") {
+            // Ruang Tim dikecualikan: chat/koordinasi berlaku lintas brand
+            // (menggantikan floating chat lama yang bisa diakses semua user).
             router.replace("/dashboard/alucurv");
         } else if (!isFinishing && !isAlucurvOnly && license && !license.is_setup_completed) {
             setShowTrialModal(true);
@@ -380,13 +373,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                         </button>
 
                                         <button
-                                            onClick={() => setChatOpen(!chatOpen)}
+                                            onClick={() => router.push("/dashboard/ruang-tim")}
                                             className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-slate-100 transition-colors text-primary relative"
-                                            title="Koordinasi Tim"
+                                            title="Ruang Tim"
                                         >
                                             <MessageSquareIcon size={20} />
-                                            {/* Badge notifikasi sederhana di header */}
-                                            <div className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-white" />
+                                            {chatUnread > 0 && (
+                                                <span style={{
+                                                    position: "absolute", top: 4, right: 4,
+                                                    background: "#EF4444", color: "white",
+                                                    borderRadius: 99, fontSize: 9, fontWeight: 700,
+                                                    minWidth: 16, height: 16, lineHeight: "16px",
+                                                    textAlign: "center", padding: "0 3px",
+                                                    border: "1.5px solid white",
+                                                }}>
+                                                    {chatUnread > 99 ? "99+" : chatUnread}
+                                                </span>
+                                            )}
                                         </button>
 
                                         <div className="text-right hidden sm:block">
@@ -436,7 +439,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             </div>
                         </div>
                     )}
-                    <ChatOrderBox isOpen={chatOpen} onClose={() => setChatOpen(false)} onNewMessage={handleNewChatMessage} />
                     <NotificationPanel
                         isOpen={notifPanelOpen}
                         onClose={() => setNotifPanelOpen(false)}
@@ -448,17 +450,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     />
                     <NotificationSettings isOpen={notifOpen} onClose={() => setNotifOpen(false)} />
 
-                    {/* ── Chat Toast Pop-up ── */}
+                    {/* ── Toast pesan Ruang Tim (pengganti toast floating chat lama) ── */}
                     {chatToast && (
-                        <div style={{
-                            position: "fixed", bottom: 90, right: 20, zIndex: 9999,
+                        <div className="rt-toast-anim" style={{
+                            position: "fixed", bottom: 24, right: 20, zIndex: 9999,
                             background: "white", borderRadius: 14,
                             boxShadow: "0 8px 32px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.06)",
                             padding: "12px 14px", maxWidth: 300, minWidth: 240,
                             display: "flex", flexDirection: "column", gap: 6,
                             animation: "slideInRight 0.25s ease",
                         }}>
-                            <style>{`@keyframes slideInRight { from { transform: translateX(110%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }`}</style>
+                            <style>{`
+                                @keyframes slideInRight { from { transform: translateX(110%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+                                @media (prefers-reduced-motion: reduce) { .rt-toast-anim { animation: none !important; } }
+                            `}</style>
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                     <div style={{
@@ -470,11 +475,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                         {chatToast.senderName[0]?.toUpperCase()}
                                     </div>
                                     <div>
-                                        <div style={{ fontSize: 12, fontWeight: 700, color: "#3C2F2F" }}>💬 {chatToast.senderName}</div>
-                                        <div style={{ fontSize: 10, color: "#B89678" }}>Pesan baru</div>
+                                        <div style={{ fontSize: 12, fontWeight: 700, color: "#3C2F2F" }}>
+                                            {chatToast.type === "tugas" ? "📋" : chatToast.type === "pengumuman" ? "📣" : "💬"} {chatToast.senderName}
+                                        </div>
+                                        <div style={{ fontSize: 10, color: "#B89678" }}>
+                                            {chatToast.type === "tugas" ? "Tugas baru" : chatToast.type === "pengumuman" ? "Pengumuman" : "Pesan baru"}
+                                        </div>
                                     </div>
                                 </div>
-                                <button onClick={() => setChatToast(null)} style={{
+                                <button onClick={dismissChatToast} style={{
                                     background: "none", border: "none", cursor: "pointer",
                                     color: "#B89678", fontSize: 16, lineHeight: 1, padding: 2, flexShrink: 0,
                                 }}>×</button>
@@ -485,14 +494,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                 overflow: "hidden", display: "-webkit-box",
                                 WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
                             }}>
-                                {chatToast.message}
+                                {chatToast.body}
                             </div>
-                            <button onClick={() => { setChatOpen(true); setChatToast(null); }} style={{
+                            <button onClick={() => { dismissChatToast(); router.push("/dashboard/ruang-tim"); }} style={{
                                 background: "#A67B5B", color: "white", border: "none",
                                 borderRadius: 8, padding: "6px 0", fontSize: 11, fontWeight: 700,
                                 cursor: "pointer", width: "100%",
                             }}>
-                                Buka Chat
+                                Buka Ruang Tim
                             </button>
                         </div>
                     )}
@@ -528,6 +537,7 @@ function BellIcon({ size = 18 }: { size?: number }) { return ( <svg width={size}
 function CustomerIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 00-3-3.87" /><path d="M16 3.13a4 4 0 010 7.75" /></svg> ); }
 function PenawaranIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /><path d="M16 13H8" /><path d="M16 17H8" /><path d="M10 9H9H8" /><path d="M12 2v6" /></svg> ); }
 function BarChartIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /><line x1="3" y1="20" x2="21" y2="20" /></svg> ); }
+function RuangTimIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /><path d="M8 9h8" /><path d="M8 13h5" /></svg> ); }
 function CockpitIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 12L16 10" /><path d="M12 12L8 10" /><path d="M12 12V7" /><path d="M12 17V17.01" /></svg> ); }
 function GabunganIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="12" r="5" /><circle cx="16" cy="12" r="5" /></svg> ); }
 function CartIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6" /></svg> ); }

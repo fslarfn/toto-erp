@@ -1,5 +1,28 @@
 # Supabase Migrations Changelog
 
+## 20260718_ruang_tim.sql
+**Tujuan:** Fitur "Ruang Tim" — chat + papan tugas (tipe info/tugas/pengumuman, assignee, deadline, prioritas, status selesai).
+
+### Perubahan
+| # | Objek | Aksi |
+|---|-------|------|
+| 1 | `messages` | CREATE TABLE (FK ke `app_users`; CHECK type & priority) |
+| 2 | `idx_messages_created_at`, `idx_messages_open_tasks` | Index baru |
+| 3 | RLS `messages` | ENABLE + policy allow-all (konvensi custom auth) |
+| 4 | Realtime | REPLICA IDENTITY FULL + add ke publication `supabase_realtime` |
+| 5 | `v_messages_named` | VIEW join nama author/assignee (security_invoker) |
+
+Catatan: `internal_notes` (chat lama) TIDAK disentuh.
+
+### Rollback
+```sql
+DROP VIEW IF EXISTS v_messages_named;
+-- DROP TABLE messages hanya jika yakin datanya tidak diperlukan:
+-- DROP TABLE IF EXISTS messages;
+```
+
+---
+
 ## 20260718_alucurv_mutasi.sql
 **Tujuan:** Mutasi antar akun Alucurv (pasangan keluar+masuk, dikecualikan dari total operasional).
 
