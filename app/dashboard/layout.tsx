@@ -122,6 +122,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const router = useRouter();
     const pathname = usePathname();
     const activeWorkspace = getWorkspaceFromPath(pathname);
+
+    // <title> browser mengikuti brand aktif (Toto coklat / Alucurv tosca / Gabungan).
+    useEffect(() => {
+        if (activeWorkspace === "alucurv") document.title = "Alucurv — ERP";
+        else if (activeWorkspace === "gabungan") document.title = "Gabungan — Toto & Alucurv ERP";
+        else document.title = "CV TOTO ALUMINIUM MANUFACTURE - Sistem Informasi Manufaktur";
+    }, [activeWorkspace]);
     const [collapsed, setCollapsed] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
     const [chatOpen, setChatOpen] = useState(false);
