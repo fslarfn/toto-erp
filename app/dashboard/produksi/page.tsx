@@ -558,7 +558,11 @@ function AlurPesananPage() {
 }
 
 // Di HP tampilkan keterangan "buka di komputer" (components/layout/DesktopOnly).
+// PENGECUALIAN: operator finishing bekerja pakai TABLET di lantai produksi —
+// jangan diblok (mereka hanya melihat tab Finishing, tanpa menu lain/Alucurv).
 export default function AlurPesananPageMobileGuard() {
+    const { user } = useAuth();
+    if (user?.role === "finishing") return <AlurPesananPage />;
     return (
         <DesktopOnly label="Alur Pesanan">
             <AlurPesananPage />
