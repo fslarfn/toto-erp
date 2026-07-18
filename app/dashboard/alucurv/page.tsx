@@ -1,24 +1,10 @@
 "use client";
 import Link from "next/link";
-import { useAlucurvTable } from "@/lib/alucurv/useAlucurvTable";
+import { useAlucurvDashboard, type AluDashOrder } from "@/lib/alucurv/useAlucurvDashboard";
+import { isAluTransfer, computeAluTotals } from "@/lib/alucurv/transaksi";
 import DomeCard from "@/components/layout/DomeCard";
 
-interface AlucurvOrder {
-    id: string;
-    customer: string;
-    description: string | null;
-    channel: string;
-    deadline: string | null;
-    price: number;
-    received_amount: number | null;
-    produksi: boolean; perakitan: boolean; packing: boolean; dikirim: boolean; sampai: boolean;
-}
-interface AlucurvInvoice { id: string; status: string }
-interface AlucurvTransaction { id: string; date: string; type: string; amount: number; account_id: string | null; sub_category_id: string | null }
-interface AlucurvStockItem { id: string; name: string; min_stock: number; opening_stock: number }
-interface AlucurvAccount { id: string; name: string; type: string; opening_balance: number }
-interface AlucurvSubCategory { id: string; name: string; type: string }
-interface AlucurvBendingOrder { id: string; amount: number; status: string }
+type AlucurvOrder = AluDashOrder;
 
 const rupiah = (n: number) => `Rp ${Math.round(n).toLocaleString("id-ID")}`;
 const MONTH_NAMES = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
@@ -42,13 +28,15 @@ function formatDeadline(s: string | null) {
 }
 
 export default function AlucurvWorkspacePage() {
-    const orders = useAlucurvTable<AlucurvOrder>("alu_orders");
-    const invoices = useAlucurvTable<AlucurvInvoice>("alu_invoices");
-    const transactions = useAlucurvTable<AlucurvTransaction>("alu_transactions");
-    const stock = useAlucurvTable<AlucurvStockItem>("alu_stock_items");
-    const accounts = useAlucurvTable<AlucurvAccount>("alu_accounts");
-    const subCategories = useAlucurvTable<AlucurvSubCategory>("alu_sub_categories");
-    const bending = useAlucurvTable<AlucurvBendingOrder>("alu_bending_orders");
+    // SATU hook hemat: hanya kolom yang dipakai + transaksi bulan berjalan.
+    // Saldo per akun dihitung di DB (view v_alu_account_balances).
+    const { data, loading } = useAlucurvDashboard();
+    const orders = data?.orders ?? [];
+    const invoices = data?.invoices ?? [];
+    const stock = data?.stock ?? [];
+    const accounts = data?.accounts ?? [];
+    const subCategories = data?.subCategories ?? [];
+    const bending = data?.bending ?? [];
 
     const now = new Date();
     const monthLabel = `${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`;
@@ -56,19 +44,12 @@ export default function AlucurvWorkspacePage() {
         const d = new Date(dateStr);
         return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
     };
-    const txnsThisMonth = transactions.rows.filter((t) => t.date && isThisMonth(t.date));
+    const txnsThisMonth = (data?.txThisMonth ?? []).filter((t) => t.date && isThisMonth(t.date));
 
-    const pemasukanBulanIni = txnsThisMonth.filter((t) => t.type === "Pemasukan").reduce((s, t) => s + Number(t.amount || 0), 0);
-    const pengeluaranBulanIni = txnsThisMonth.filter((t) => t.type === "Pengeluaran").reduce((s, t) => s + Number(t.amount || 0), 0);
-    const labaBulanIni = pemasukanBulanIni - pengeluaranBulanIni;
+    // Mutasi antar akun dikecualikan dari total operasional.
+    const { masuk: pemasukanBulanIni, keluar: pengeluaranBulanIni, laba: labaBulanIni } = computeAluTotals(txnsThisMonth);
 
-    const accountBalance = (acc: AlucurvAccount) => {
-        const delta = transactions.rows
-            .filter((t) => t.account_id === acc.id)
-            .reduce((s, t) => s + (t.type === "Pemasukan" ? Number(t.amount || 0) : -Number(t.amount || 0)), 0);
-        return Number(acc.opening_balance || 0) + delta;
-    };
-    const totalUangBeredar = accounts.rows.reduce((s, acc) => s + accountBalance(acc), 0);
+    const totalUangBeredar = accounts.reduce((s, acc) => s + acc.balance, 0);
 
     // Omset = nominal yang benar-benar diterima Alucurv: received_amount untuk Shopee/TikTok
     // (setelah potongan marketplace), atau price langsung untuk Offline. Pakai `||` bukan `??`
@@ -79,11 +60,11 @@ export default function AlucurvWorkspacePage() {
         return Number(o.received_amount || 0) || Number(o.price || 0);
     };
     // Keseluruhan: semua order dihitung begitu order masuk, tidak peduli status kirim.
-    const omsetKeseluruhan = orders.rows.reduce((s, o) => s + effectiveOmset(o), 0);
+    const omsetKeseluruhan = orders.reduce((s, o) => s + effectiveOmset(o), 0);
     // Terkirim: hanya order yang sudah dicentang "Dikirim".
-    const omsetTerkirim = orders.rows.filter((o) => o.dikirim).reduce((s, o) => s + effectiveOmset(o), 0);
+    const omsetTerkirim = orders.filter((o) => o.dikirim).reduce((s, o) => s + effectiveOmset(o), 0);
 
-    const orderBerjalan = orders.rows
+    const orderBerjalan = orders
         .filter((o) => !o.sampai)
         .sort((a, b) => (a.deadline ?? "9999").localeCompare(b.deadline ?? "9999"))
         .slice(0, 3);
@@ -92,13 +73,14 @@ export default function AlucurvWorkspacePage() {
         return (stages.filter(Boolean).length / stages.length) * 100;
     };
 
-    const sisaTagihanBending = bending.rows.filter((b) => b.status === "BELUM").reduce((s, b) => s + Number(b.amount || 0), 0);
-    const invoiceBelumLunas = invoices.rows.filter((i) => i.status !== "LUNAS").length;
-    const stokMinim = stock.rows.filter((s) => Number(s.opening_stock) < Number(s.min_stock));
+    const sisaTagihanBending = bending.filter((b) => b.status === "BELUM").reduce((s, b) => s + Number(b.amount || 0), 0);
+    const invoiceBelumLunas = invoices.filter((i) => i.status !== "LUNAS").length;
+    const stokMinim = stock.filter((s) => Number(s.opening_stock) < Number(s.min_stock));
 
-    const subCategoryMap = new Map(subCategories.rows.map((c) => [c.id, c]));
+    const subCategoryMap = new Map(subCategories.map((c) => [c.id, c]));
     const rekapMap = new Map<string, { name: string; type: string; total: number }>();
     for (const t of txnsThisMonth) {
+        if (isAluTransfer(t)) continue; // mutasi bukan omzet/biaya
         const cat = t.sub_category_id ? subCategoryMap.get(t.sub_category_id) : null;
         const name = cat?.name ?? "Tanpa Kategori";
         const type = cat?.type ?? t.type;
@@ -130,13 +112,13 @@ export default function AlucurvWorkspacePage() {
             {/* 3 columns */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16, marginBottom: 24 }}>
                 <Panel title="Saldo per Akun">
-                    {accounts.loading ? (
+                    {loading ? (
                         <Empty text="Memuat..." />
-                    ) : accounts.rows.length === 0 ? (
+                    ) : accounts.length === 0 ? (
                         <Empty text="Belum ada akun. Tambahkan di Pengaturan." />
                     ) : (
                         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                            {accounts.rows.map((acc) => {
+                            {accounts.map((acc) => {
                                 const badge = ACCOUNT_BADGE_COLOR[acc.type] ?? ACCOUNT_BADGE_COLOR.cash;
                                 return (
                                     <div key={acc.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
@@ -146,7 +128,7 @@ export default function AlucurvWorkspacePage() {
                                             </span>
                                             <span style={{ fontSize: 12.5, color: "var(--text-dark)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{acc.name}</span>
                                         </div>
-                                        <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-dark)", whiteSpace: "nowrap" }}>{rupiah(accountBalance(acc))}</span>
+                                        <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-dark)", whiteSpace: "nowrap" }}>{rupiah(acc.balance)}</span>
                                     </div>
                                 );
                             })}
@@ -155,7 +137,7 @@ export default function AlucurvWorkspacePage() {
                 </Panel>
 
                 <Panel title="Order Berjalan" action={<Link href="/dashboard/alucurv/order" style={{ fontSize: 12, color: "var(--primary-dark)", fontWeight: 600, textDecoration: "none" }}>Lihat semua</Link>}>
-                    {orders.loading ? (
+                    {loading ? (
                         <Empty text="Memuat..." />
                     ) : orderBerjalan.length === 0 ? (
                         <Empty text="Tidak ada order berjalan." />

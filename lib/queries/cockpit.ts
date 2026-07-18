@@ -1,4 +1,6 @@
 import { supabase } from '../supabase-client';
+import { computeTotals } from '../balance';
+import { groupUnpaidInvoices, fetchUnpaidPesananRows, pesananRowTotal } from '../piutang';
 import {
   CockpitBalance,
   CockpitAging,
@@ -25,44 +27,44 @@ export const getCockpitBalance = async (): Promise<CockpitBalance> => {
   const { data: accData, error: accErr } = await supabase.from('bank_accounts').select('*');
   if (accErr) throw accErr;
 
+  // Saldo TERHITUNG dari view v_account_balances (sumber kebenaran yang sama
+  // dengan halaman Keuangan). Bila view belum ada di DB, fallback ke cache
+  // bank_accounts.balance agar Cockpit tetap tampil.
+  const { data: viewData, error: viewErr } = await supabase
+    .from('v_account_balances')
+    .select('id, computed_balance');
+  const computedById = new Map<string, number>(
+    viewErr ? [] : (viewData || []).map(v => [v.id as string, Number(v.computed_balance) || 0])
+  );
+
+  const accounts = accData.map(a => ({
+    id: a.id,
+    name: a.name,
+    bank: a.bank,
+    balance: computedById.has(a.id) ? computedById.get(a.id)! : Number(a.balance) || 0,
+  }));
+  const totalNow = accounts.reduce((s, a) => s + a.balance, 0);
+
   return {
-    total_now: deltaData.total_now,
-    total_7d_ago: deltaData.total_7d_ago,
+    total_now: totalNow,
+    total_7d_ago: totalNow - deltaData.delta,
     delta: deltaData.delta,
-    accounts: accData.map(a => ({
-      id: a.id,
-      name: a.name,
-      bank: a.bank,
-      balance: a.balance
-    }))
+    accounts,
   };
 };
 
 // Query pesanan_rows directly to avoid relying on v_cockpit_aging view permissions
 export const getCockpitAging = async (): Promise<CockpitAging[]> => {
-  const { data, error } = await supabase
-    .from('pesanan_rows')
-    .select('id, no_inv, tanggal, harga, ukuran, qty, is_paid')
-    .eq('is_paid', false);
-
-  if (error) throw error;
+  // Fetch bersama lib/piutang: paged (bebas cap 1000 baris Supabase).
+  const data = await fetchUnpaidPesananRows();
 
   const today = new Date();
   const buckets: Record<CockpitAging['bucket'], number> = {
     '0-30': 0, '31-60': 0, '61-90': 0, '>90': 0,
   };
 
-  // Deduplicate by invoice so multi-row invoices count once
-  const invMap = new Map<string, { tanggal: string; total: number }>();
-  (data || []).forEach(r => {
-    if (!r.tanggal) return;
-    const total = parseIdNum(r.harga) * parseIdNum(r.ukuran) * parseIdNum(r.qty);
-    if (total <= 0) return;
-    const key = (r.no_inv || String(r.id)).trim();
-    const ex = invMap.get(key);
-    if (ex) { ex.total += total; }
-    else { invMap.set(key, { tanggal: r.tanggal, total }); }
-  });
+  // Dedup per invoice — rumus bersama lib/piutang (sama dengan Dashboard).
+  const invMap = groupUnpaidInvoices(data);
 
   invMap.forEach(({ tanggal, total }) => {
     const d = new Date(tanggal);
@@ -92,12 +94,8 @@ export const getCashForecast = async (): Promise<CashForecastPoint[]> => {
 
 // Query pesanan_rows directly to avoid relying on v_cockpit_top_debtors view permissions
 export const getTopDebtors = async (): Promise<TopDebtor[]> => {
-  const { data, error } = await supabase
-    .from('pesanan_rows')
-    .select('id, no_inv, customer, tanggal, harga, ukuran, qty, is_paid')
-    .eq('is_paid', false);
-
-  if (error) throw error;
+  // Fetch bersama lib/piutang: paged (bebas cap 1000 baris Supabase).
+  const data = await fetchUnpaidPesananRows();
 
   const today = new Date();
 
@@ -105,7 +103,7 @@ export const getTopDebtors = async (): Promise<TopDebtor[]> => {
   const invMap = new Map<string, { customer: string; tanggal: string; total: number }>();
   (data || []).forEach(r => {
     if (!r.customer) return;
-    const total = parseIdNum(r.harga) * parseIdNum(r.ukuran) * parseIdNum(r.qty);
+    const total = pesananRowTotal(r);
     if (total <= 0) return;
     const key = (r.no_inv || String(r.id)).trim();
     const ex = invMap.get(key);
@@ -149,18 +147,24 @@ export const getProfitStats = async (): Promise<ProfitStats> => {
 
   const { data: cfData, error: cfErr } = await supabase
     .from('cash_flow')
-    .select('type, amount')
+    .select('type, amount, category, is_test, is_adjustment, transfer_group, account_id')
     .gte('date', startOfMonth);
 
   if (cfErr) throw cfErr;
 
-  const income = cfData
-    .filter(c => c.type === 'income')
-    .reduce((sum, c) => sum + Number(c.amount), 0);
-
-  const expense = cfData
-    .filter(c => c.type === 'expense')
-    .reduce((sum, c) => sum + Number(c.amount), 0);
+  // Definisi SAMA dengan halaman Keuangan (lib/balance.computeTotals):
+  // kecualikan entri test, penyesuaian, dan mutasi antar-kas.
+  const { income, expense } = computeTotals(
+    (cfData || []).map(c => ({
+      accountId: (c.account_id as string) ?? null,
+      type: c.type as 'income' | 'expense',
+      amount: Number(c.amount) || 0,
+      isTest: Boolean(c.is_test),
+      isAdjustment: Boolean(c.is_adjustment),
+      category: (c.category as string) || '',
+      transferGroup: (c.transfer_group as string) ?? null,
+    }))
+  );
 
   const { data: targetData, error: targetErr } = await supabase
     .from('monthly_targets')

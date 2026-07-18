@@ -1,10 +1,13 @@
 "use client";
 import { useState } from "react";
 import { useStore } from "@/lib/store";
-import { usePesanan, isRowFilled } from "@/lib/pesanan-store";
+import { usePesanan, isRowFilled, PesananRow } from "@/lib/pesanan-store";
 import { useAuth } from "@/lib/auth";
 import { useSuratJalan } from "@/lib/surat-jalan-store";
-import { formatCurrency, formatDate, PRODUCTION_STATUS_LABELS, parseIdNum } from "@/lib/utils";
+import { formatCurrency, formatDate, PRODUCTION_STATUS_LABELS } from "@/lib/utils";
+import { computeTotals, isTransfer } from "@/lib/balance";
+import { fetchPiutangSummary, pesananRowTotal } from "@/lib/piutang";
+import useSWR from "swr";
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
     ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart, Bar
@@ -20,7 +23,7 @@ const PROD_COLORS: Record<string, string> = {
 };
 
 export default function DashboardPage() {
-    const { orders, cashFlow, materials, bankAccounts } = useStore();
+    const { cashFlow, materials, bankAccounts, getComputedBalance } = useStore();
     const { rows: pesananRows } = usePesanan();
     const { user } = useAuth();
     const { suratJalans } = useSuratJalan();
@@ -31,66 +34,84 @@ export default function DashboardPage() {
 
     const selectedPeriod = `${year}-${String(month).padStart(2, "0")}`;
 
-    // Filter orders dari useStore
-    const filteredStoreOrders = orders.filter((o) => o.orderDate.startsWith(selectedPeriod));
-    
-    // Filter rows dari usePesanan
+    // Filter rows dari usePesanan (SATU-SATUNYA jalur input order — tabel
+    // orders legacy tidak lagi dihitung agar tidak dobel).
     const filteredPesananRows = pesananRows.filter((r) => {
         if (!isRowFilled(r)) return false;
         return r.tanggal.startsWith(selectedPeriod);
     });
 
-    // Gabungkan data untuk metrik
-    const totalOrderCount = filteredStoreOrders.length + filteredPesananRows.length;
-    
-    const storeOrdersValue = filteredStoreOrders.reduce((s, o) => s + o.totalPrice, 0);
-    const pesananRowsValue = filteredPesananRows.reduce((s, r) => {
-        const u = parseIdNum(r.ukuran);
-        const q = parseIdNum(r.qty);
-        const h = parseIdNum(r.harga);
-        return s + (u * q * h);
-    }, 0);
-    
-    const totalOrderValue = storeOrdersValue + pesananRowsValue;
+    // ── Definisi ORDER = kelompok baris per invoice (dedup no_inv) ──
+    // 1 order bisa banyak baris item; sebelumnya semua metrik menghitung
+    // per-BARIS sehingga angkanya membengkak (mis. "Di Kirim: belasan ribu").
+    const orderGroups = (() => {
+        const map = new Map<string, PesananRow[]>();
+        filteredPesananRows.forEach((r) => {
+            const key = (r.no_inv || `#${r.id}`).trim();
+            const arr = map.get(key);
+            if (arr) arr.push(r);
+            else map.set(key, [r]);
+        });
+        return [...map.values()];
+    })();
+    // Status order = tahap yang sudah dilewati SEMUA item-nya.
+    const groupStatus = (items: PesananRow[]): string => {
+        if (items.every((i) => i.di_kirim)) return "di_kirim";
+        if (items.every((i) => i.siap_kirim)) return "siap_kirim";
+        if (items.every((i) => i.di_warna)) return "di_warna";
+        if (items.every((i) => i.di_produksi)) return "di_produksi";
+        return "belum_produksi";
+    };
+    const statusCounts: Record<string, number> = {};
+    orderGroups.forEach((g) => {
+        const s = groupStatus(g);
+        statusCounts[s] = (statusCounts[s] || 0) + 1;
+    });
 
-    // Filter cashFlow berdasarkan periode
+    const totalOrderCount = orderGroups.length;
+    const totalOrderValue = filteredPesananRows.reduce((s, r) => s + pesananRowTotal(r), 0);
+
+    // Order telat: >7 hari sejak tanggal order & belum terkirim semua.
+    const overdueCount = orderGroups.filter((g) => {
+        if (groupStatus(g) === "di_kirim") return false;
+        const t = new Date(g[0]?.tanggal || "");
+        if (isNaN(t.getTime())) return false;
+        return (now.getTime() - t.getTime()) / 86400000 > 7;
+    }).length;
+
+    // Filter cashFlow berdasarkan periode.
+    // Definisi SAMA dengan Keuangan & Cockpit: kecualikan mutasi antar-kas,
+    // entri test, dan penyesuaian (lib/balance.computeTotals).
     const filteredCashFlow = cashFlow.filter(c => c.date.startsWith(selectedPeriod));
-    const totalRevenueFromCashFlow = filteredCashFlow.filter((c) => c.type === "income").reduce((s, c) => s + c.amount, 0);
-    const totalExpense = filteredCashFlow.filter((c) => c.type === "expense").reduce((s, c) => s + c.amount, 0);
+    const { income: totalRevenueFromCashFlow, expense: totalExpense } = computeTotals(filteredCashFlow);
 
-    // Tambahkan pendapatan dari pesananRows yang sudah lunas (is_paid) di periode terpilih
-    const paidPesananRowsValue = filteredPesananRows.filter(r => r.is_paid).reduce((s, r) => {
-        const u = parseIdNum(r.ukuran);
-        const q = parseIdNum(r.qty);
-        const h = parseIdNum(r.harga);
-        return s + (u * q * h);
-    }, 0);
-
-    const totalRevenue = totalRevenueFromCashFlow + paidPesananRowsValue;
+    // Revenue = pemasukan cash flow SAJA. Pembayaran invoice selalu dicatat
+    // di Keuangan (konfirmasi owner), jadi menambah nilai order lunas dari
+    // pesanan_rows membuat pendapatan terhitung DOBEL. Definisi ini kini
+    // konsisten dengan Keuangan & Laba Bulan Ini di Cockpit.
+    const totalRevenue = totalRevenueFromCashFlow;
     const netProfit = totalRevenue - totalExpense;
 
-    // Piutang gabungan (Saldo yang belum dibayar)
-    const storeAR = orders.filter((o) => o.paymentStatus !== "lunas").reduce((s, o) => s + (o.totalPrice - o.paidAmount), 0);
-    const pesananAR = pesananRows.filter(r => isRowFilled(r) && !r.is_paid).reduce((s, r) => {
-        const u = parseIdNum(r.ukuran);
-        const q = parseIdNum(r.qty);
-        const h = parseIdNum(r.harga);
-        return s + (u * q * h);
-    }, 0);
-    const totalAR = storeAR + pesananAR;
+    // Piutang: HANYA dari pesanan_rows — satu-satunya jalur input order
+    // (tabel orders legacy tumpang-tindih sehingga dulu terhitung dobel ~2x).
+    // Diambil langsung dari DB lewat fungsi bersama lib/piutang —
+    // query & rumus SAMA PERSIS dengan Executive Cockpit.
+    const { data: piutang } = useSWR("piutang-summary", fetchPiutangSummary, { dedupingInterval: 5000 });
+    const totalAR = piutang?.total ?? 0;
+    const unpaidInvoiceCount = piutang?.invoiceCount ?? 0;
 
-    const totalSaldo = bankAccounts.reduce((s, b) => s + b.balance, 0);
+    // Saldo TERHITUNG (sumber kebenaran yang sama dengan Keuangan), bukan cache.
+    const totalSaldo = bankAccounts.reduce((s, b) => s + getComputedBalance(b.id), 0);
     const lowStock = materials.filter((m) => m.currentStock <= m.minimumStock).length;
-    
-    // Active jobs gabungan
-    const activeStoreJobs = orders.filter((o) => o.productionStatus !== "di_kirim").length;
-    const activePesananJobs = pesananRows.filter(r => isRowFilled(r) && !r.di_kirim).length;
-    const activeJobs = activeStoreJobs + activePesananJobs;
+
+    // Order aktif = order periode terpilih yang belum terkirim semua (per ORDER, bukan per baris).
+    const activeJobs = orderGroups.filter((g) => groupStatus(g) !== "di_kirim").length;
 
     // Monthly chart data
     const monthlyData = (() => {
         const map: Record<string, { income: number; expense: number }> = {};
         cashFlow.forEach((c) => {
+            if (c.isTest || c.isAdjustment || isTransfer(c)) return; // konsisten dgn computeTotals
             const m = c.date.substring(0, 7);
             if (!map[m]) map[m] = { income: 0, expense: 0 };
             if (c.type === "income") map[m].income += c.amount;
@@ -103,40 +124,37 @@ export default function DashboardPage() {
         }));
     })();
 
-    // Payment pie gabungan (berdasarkan periode terpilih agar konsisten)
-    const countPaidStore = filteredStoreOrders.filter((o) => o.paymentStatus === "lunas").length;
-    const countPartStore = filteredStoreOrders.filter((o) => o.paymentStatus === "bayar_sebagian").length;
-    const countUnpaidStore = filteredStoreOrders.filter((o) => o.paymentStatus === "belum_bayar").length;
-
-    const countPaidPesanan = filteredPesananRows.filter(r => r.is_paid).length;
-    const countUnpaidPesanan = filteredPesananRows.filter(r => !r.is_paid).length;
+    // Payment pie per ORDER (invoice) di periode terpilih.
+    const countPaidOrders = orderGroups.filter((g) => g.every((r) => r.is_paid)).length;
+    const countPartialOrders = orderGroups.filter((g) => g.some((r) => r.is_paid) && !g.every((r) => r.is_paid)).length;
+    const countUnpaidOrders = orderGroups.length - countPaidOrders - countPartialOrders;
 
     const paymentPie = [
-        { name: "Lunas", value: countPaidStore + countPaidPesanan },
-        { name: "Bayar Sebagian", value: countPartStore },
-        { name: "Belum Lunas", value: countUnpaidStore + countUnpaidPesanan },
+        { name: "Lunas", value: countPaidOrders },
+        { name: "Bayar Sebagian", value: countPartialOrders },
+        { name: "Belum Lunas", value: countUnpaidOrders },
     ].filter((d) => d.value > 0);
 
-    // Production status bar gabungan
-    const prodCounts: Record<string, number> = {};
-    orders.forEach(o => { prodCounts[o.productionStatus] = (prodCounts[o.productionStatus] || 0) + 1; });
-    pesananRows.forEach(r => {
-        if (!isRowFilled(r)) return;
-        let status = "belum_produksi";
-        if (r.di_kirim) status = "di_kirim";
-        else if (r.siap_kirim) status = "siap_kirim";
-        else if (r.di_warna) status = "di_warna";
-        else if (r.di_produksi) status = "di_produksi";
-        prodCounts[status] = (prodCounts[status] || 0) + 1;
-    });
-
-    const prodData = Object.entries(prodCounts).map(([status, count]) => ({
+    // Distribusi status produksi per ORDER (periode terpilih) — sumber sama
+    // dengan pill di atas agar angkanya tidak saling bertentangan.
+    const prodData = Object.entries(statusCounts).map(([status, count]) => ({
         name: PRODUCTION_STATUS_LABELS[status] ?? status,
         count,
         fill: PROD_COLORS[status] ?? "#D1BFA3",
     }));
 
-    const recentOrders = [...orders].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 6);
+    // Order terbaru: dari pesanan_rows periode terpilih (bukan tabel orders legacy).
+    const recentOrders = [...orderGroups]
+        .sort((a, b) => (b[0]?.tanggal || "").localeCompare(a[0]?.tanggal || ""))
+        .slice(0, 6)
+        .map((g) => ({
+            key: (g[0].no_inv || `#${g[0].id}`).trim(),
+            customer: g[0].customer || "—",
+            deskripsi: g[0].deskripsi || "",
+            itemCount: g.length,
+            total: g.reduce((s, r) => s + pesananRowTotal(r), 0),
+            tanggal: g[0].tanggal || "",
+        }));
 
     return (
         <div className="page-content space-y-5">
@@ -170,7 +188,7 @@ export default function DashboardPage() {
                 {[
                     { label: "Order Bulan Ini", value: `${totalOrderCount} order`, sub: formatCurrency(totalOrderValue), bg: "#FDF3E7", border: "#E8DCCF", icon: "📦" },
                     { label: "Total Saldo", value: formatCurrency(totalSaldo), sub: `${bankAccounts.length} rekening`, bg: "#FDF3E7", border: "#E8DCCF", icon: "🏦" },
-                    { label: "Piutang Belum Lunas", value: formatCurrency(totalAR), sub: `${orders.filter((o) => o.paymentStatus !== "lunas").length + pesananRows.filter(r => isRowFilled(r) && !r.is_paid).length} invoice`, bg: "#FEF2F2", border: "#FECACA", icon: "⚠️" },
+                    { label: "Piutang Belum Lunas", value: formatCurrency(totalAR), sub: `${unpaidInvoiceCount} invoice`, bg: "#FEF2F2", border: "#FECACA", icon: "⚠️" },
                     { label: "Laba Bersih", value: formatCurrency(netProfit), sub: `Rev ${formatCurrency(totalRevenue)}`, bg: netProfit >= 0 ? "#F0FDF4" : "#FEF2F2", border: netProfit >= 0 ? "#BBF7D0" : "#FECACA", icon: netProfit >= 0 ? "📈" : "📉" },
                 ].map((card) => (
                     <div key={card.label} className="stat-card" style={{ borderColor: card.border, background: card.bg }}>
@@ -187,31 +205,24 @@ export default function DashboardPage() {
             {/* Status produksi summary pills */}
             <div style={{ background: "white", border: "1px solid var(--border-light)", borderRadius: 10, padding: "0.875rem 1rem" }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: "#B89678", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                    Status Produksi Aktif ({activeJobs} order)
+                    Status Produksi Aktif ({activeJobs} order) — per order, periode terpilih
                 </div>
                 <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                    {Object.entries(PRODUCTION_STATUS_LABELS).map(([key, label]) => {
-                        const countStore = orders.filter((o) => o.productionStatus === key).length;
-                        const countPesanan = pesananRows.filter(r => {
-                            if (!isRowFilled(r)) return false;
-                            let status = "belum_produksi";
-                            if (r.di_kirim) status = "di_kirim";
-                            else if (r.siap_kirim) status = "siap_kirim";
-                            else if (r.di_warna) status = "di_warna";
-                            else if (r.di_produksi) status = "di_produksi";
-                            return status === key;
-                        }).length;
-                        const count = countStore + countPesanan;
-                        return (
-                            <span key={key} className={`badge status-${key}`} style={{ fontSize: 12, padding: "3px 12px" }}>
-                                {label}: <strong style={{ marginLeft: 4 }}>{count}</strong>
-                            </span>
-                        );
-                    })}
-                    
+                    {Object.entries(PRODUCTION_STATUS_LABELS).map(([key, label]) => (
+                        <span key={key} className={`badge status-${key}`} style={{ fontSize: 12, padding: "3px 12px" }}>
+                            {label}: <strong style={{ marginLeft: 4 }}>{statusCounts[key] || 0}</strong>
+                        </span>
+                    ))}
+
                     <span className="badge" style={{ background: "#DBEAFE", color: "#1D4ED8", fontSize: 12, padding: "3px 12px", borderRadius: 999 }}>
                         Dalam Pengiriman: <strong style={{ marginLeft: 4 }}>{suratJalans.filter(sj => sj.statusPengiriman === "Dikirim" || sj.statusPengiriman === "Dalam Perjalanan").length}</strong>
                     </span>
+
+                    {overdueCount > 0 && (
+                        <span className="badge" style={{ background: "#FEE2E2", color: "#B91C1C", fontSize: 12, padding: "3px 12px", borderRadius: 999 }}>
+                            ⏰ Telat &gt;7 hari belum kirim: <strong style={{ marginLeft: 4 }}>{overdueCount}</strong>
+                        </span>
+                    )}
                 </div>
             </div>
 
@@ -237,18 +248,24 @@ export default function DashboardPage() {
 
                 {/* Payment pie */}
                 <div className="card">
-                    <div className="card-header" style={{ fontSize: 13 }}>💳 Status Pembayaran</div>
+                    <div className="card-header" style={{ fontSize: 13 }}>💳 Status Pembayaran (per order)</div>
                     <div className="card-body">
-                        <ResponsiveContainer width="100%" height={200}>
-                            <PieChart>
-                                <Pie data={paymentPie} cx="50%" cy="50%" innerRadius={50} outerRadius={75} dataKey="value"
-                                    label={({ value }) => value}>
-                                    {paymentPie.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                                </Pie>
-                                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                                <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
-                            </PieChart>
-                        </ResponsiveContainer>
+                        {paymentPie.length === 0 ? (
+                            <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: "#C5A882", fontSize: 13, textAlign: "center" }}>
+                                Belum ada order di periode ini.<br />Ganti bulan/tahun di kanan atas.
+                            </div>
+                        ) : (
+                            <ResponsiveContainer width="100%" height={200}>
+                                <PieChart>
+                                    <Pie data={paymentPie} cx="50%" cy="50%" innerRadius={50} outerRadius={75} dataKey="value"
+                                        label={({ value }) => value}>
+                                        {paymentPie.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                                    </Pie>
+                                    <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                                    <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        )}
                     </div>
                 </div>
             </div>
@@ -273,17 +290,21 @@ export default function DashboardPage() {
 
                 {/* Recent orders */}
                 <div className="card">
-                    <div className="card-header" style={{ fontSize: 13 }}>📋 Order Terbaru</div>
+                    <div className="card-header" style={{ fontSize: 13 }}>📋 Order Terbaru (periode terpilih)</div>
                     <div style={{ overflowY: "auto", maxHeight: 220 }}>
-                        {recentOrders.map((o) => (
-                            <div key={o.id} style={{ display: "flex", alignItems: "center", padding: "0.625rem 1.25rem", borderBottom: "1px solid var(--border-light)", gap: "0.75rem" }}>
+                        {recentOrders.length === 0 ? (
+                            <div style={{ height: 180, display: "flex", alignItems: "center", justifyContent: "center", color: "#C5A882", fontSize: 13, textAlign: "center" }}>
+                                Belum ada order di periode ini.
+                            </div>
+                        ) : recentOrders.map((o) => (
+                            <div key={o.key} style={{ display: "flex", alignItems: "center", padding: "0.625rem 1.25rem", borderBottom: "1px solid var(--border-light)", gap: "0.75rem" }}>
                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-dark)", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.customerName}</div>
-                                    <div style={{ fontSize: 11, color: "#B89678" }}>{o.description} • {o.qty} pcs</div>
+                                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-dark)", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.customer}</div>
+                                    <div style={{ fontSize: 11, color: "#B89678", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.deskripsi} • {o.itemCount} item</div>
                                 </div>
                                 <div style={{ textAlign: "right", flexShrink: 0 }}>
-                                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-dark)" }}>{formatCurrency(o.totalPrice)}</div>
-                                    <div style={{ fontSize: 11, color: "#B89678" }}>{formatDate(o.orderDate)}</div>
+                                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-dark)" }}>{formatCurrency(o.total)}</div>
+                                    <div style={{ fontSize: 11, color: "#B89678" }}>{formatDate(o.tanggal)}</div>
                                 </div>
                             </div>
                         ))}

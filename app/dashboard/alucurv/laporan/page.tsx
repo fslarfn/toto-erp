@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useAlucurvTable } from "@/lib/alucurv/useAlucurvTable";
+import { isAluTransfer, computeAluTotals } from "@/lib/alucurv/transaksi";
 import DomeCard from "@/components/layout/DomeCard";
 
 interface AlucurvTransaction {
@@ -10,6 +11,7 @@ interface AlucurvTransaction {
     amount: number;
     account_id: string | null;
     sub_category_id: string | null;
+    transfer_group?: string | null;
 }
 interface AlucurvSubCategory { id: string; name: string; type: string }
 interface AlucurvAccount { id: string; name: string; opening_balance: number }
@@ -40,15 +42,14 @@ export default function AlucurvLaporanPage() {
     const endOfMonth = `${month}-${String(lastDayOfMonth(y, m)).padStart(2, "0")}`;
 
     const txnsInMonth = transactions.rows.filter((t) => t.date && t.date.slice(0, 7) === month);
-    const totalMasuk = txnsInMonth.filter((t) => t.type === "Pemasukan").reduce((s, t) => s + Number(t.amount || 0), 0);
-    const totalKeluar = txnsInMonth.filter((t) => t.type === "Pengeluaran").reduce((s, t) => s + Number(t.amount || 0), 0);
-    const laba = totalMasuk - totalKeluar;
+    // Mutasi antar akun dikecualikan dari laba/rugi operasional.
+    const { masuk: totalMasuk, keluar: totalKeluar, laba } = computeAluTotals(txnsInMonth);
     const margin = totalMasuk > 0 ? (laba / totalMasuk) * 100 : 0;
 
     const subCategoryMap = new Map(subCategories.rows.map((c) => [c.id, c.name]));
     const groupByType = (type: string) => {
         const map = new Map<string, number>();
-        txnsInMonth.filter((t) => t.type === type).forEach((t) => {
+        txnsInMonth.filter((t) => t.type === type && !isAluTransfer(t)).forEach((t) => {
             const name = (t.sub_category_id && subCategoryMap.get(t.sub_category_id)) || "Tanpa Kategori";
             map.set(name, (map.get(name) ?? 0) + Number(t.amount || 0));
         });

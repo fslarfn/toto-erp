@@ -7,6 +7,8 @@ import ReconciliationPanel from "@/components/ReconciliationPanel";
 import { computeTotals, isTransfer } from "@/lib/balance";
 
 const BANK_ACCOUNTS = ["Bank BCA Toto", "Bank BCA Yanto", "Cash"];
+// Paginasi riwayat transaksi — meniru pola Input Pesanan (100 baris/halaman).
+const PAGE_SIZE = 100;
 const CATEGORIES_IN = ["Pembayaran Invoice", "DP Invoice", "Penjualan", "Lainnya"];
 const CATEGORIES_OUT = ["Bahan Baku", "Gaji", "Operasional", "Transportasi", "Perawatan Mesin", "Lainnya"];
 
@@ -50,6 +52,7 @@ export default function KeuanganPage() {
     const [filterMonth, setFilterMonth] = useState(thisMonthStr);
     const [searchKeterangan, setSearchKeterangan] = useState("");
     const [showTest, setShowTest] = useState(false);
+    const [page, setPage] = useState(1);
 
     // Opsi kas: dari bank_accounts (agar account_id ter-resolve), fallback ke daftar statis.
     const kasOptions = bankAccounts.length ? bankAccounts.map((b) => b.name) : BANK_ACCOUNTS;
@@ -91,7 +94,13 @@ export default function KeuanganPage() {
 
     // Masuk/Keluar: KECUALIKAN mutasi antar-kas (transfer internal bukan omzet/biaya).
     // `filtered` sudah menerapkan toggle test → pakai includeTest:true di sini.
+    // Total dihitung dari SEMUA baris terfilter (bukan hanya halaman aktif).
     const { income: totalIn, expense: totalOut } = computeTotals(filtered, { includeTest: true });
+
+    // Paginasi: hanya cara render yang dibatasi, data tetap lengkap.
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    const safePage = Math.min(page, totalPages);
+    const pageRows = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
     // Saldo TERHITUNG (sumber kebenaran) — bukan field tersimpan.
     const computedFor = (id: string) => getComputedBalance(id, { includeTest: showTest });
@@ -369,14 +378,14 @@ export default function KeuanganPage() {
                                 Keluar: <strong style={{ color: "#ef4444" }}>{formatCurrency(totalOut)}</strong>
                             </span>
                             <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#8A7B6E", cursor: "pointer" }}>
-                                <input type="checkbox" checked={showTest} onChange={(e) => setShowTest(e.target.checked)} />
+                                <input type="checkbox" checked={showTest} onChange={(e) => { setShowTest(e.target.checked); setPage(1); }} />
                                 Tampilkan entri uji/test
                             </label>
                             <select
                                 className="form-select"
                                 style={{ width: "auto", padding: "4px 8px", fontSize: 12 }}
                                 value={filterMonth}
-                                onChange={(e) => setFilterMonth(e.target.value)}
+                                onChange={(e) => { setFilterMonth(e.target.value); setPage(1); }}
                             >
                                 <option value="semua">Semua Periode</option>
                                 {months.map((m) => (
@@ -391,7 +400,7 @@ export default function KeuanganPage() {
                             type="text"
                             placeholder="Cari keterangan transaksi..."
                             value={searchKeterangan}
-                            onChange={(e) => setSearchKeterangan(e.target.value)}
+                            onChange={(e) => { setSearchKeterangan(e.target.value); setPage(1); }}
                             style={{ width: "100%", padding: "7px 32px 7px 32px", borderRadius: 8, border: "1.5px solid #e5e0d8", fontSize: 13, background: "#faf8f5", outline: "none", boxSizing: "border-box" as const }}
                             onFocus={(e) => (e.target.style.borderColor = "#B89678")}
                             onBlur={(e) => (e.target.style.borderColor = "#e5e0d8")}
@@ -418,7 +427,7 @@ export default function KeuanganPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {filtered.map((c) => (
+                            {pageRows.map((c) => (
                                 <tr key={c.id}>
                                     <td style={{ fontSize: 13 }}>{formatDate(c.date)}</td>
                                     <td style={{ fontWeight: 500 }}>
@@ -463,6 +472,27 @@ export default function KeuanganPage() {
                             ))}
                         </tbody>
                     </table>
+                </div>
+                {/* Kontrol paginasi */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px", borderTop: "1px solid #E6D5BE", fontSize: 12, color: "#8A7B6E", flexWrap: "wrap", gap: 8 }}>
+                    <span>
+                        Menampilkan {filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} dari {filtered.length} transaksi
+                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <button
+                            onClick={() => setPage(Math.max(1, safePage - 1))}
+                            disabled={safePage <= 1}
+                            className="btn btn-secondary"
+                            style={{ padding: "4px 12px", fontSize: 12, opacity: safePage <= 1 ? 0.5 : 1 }}
+                        >‹ Sebelumnya</button>
+                        <span style={{ fontWeight: 600, color: "#5C4033" }}>Hal. {safePage} / {totalPages}</span>
+                        <button
+                            onClick={() => setPage(Math.min(totalPages, safePage + 1))}
+                            disabled={safePage >= totalPages}
+                            className="btn btn-secondary"
+                            style={{ padding: "4px 12px", fontSize: 12, opacity: safePage >= totalPages ? 0.5 : 1 }}
+                        >Berikutnya ›</button>
+                    </div>
                 </div>
             </div>
 

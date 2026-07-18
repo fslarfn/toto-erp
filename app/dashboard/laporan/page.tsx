@@ -3,6 +3,10 @@ import React, { useState, useMemo } from "react";
 import { useStore } from "@/lib/store";
 import { usePesanan, PesananRow, isRowFilled } from "@/lib/pesanan-store";
 import { formatCurrency, parseIdNum } from "@/lib/utils";
+import { computeTotals, isTransfer } from "@/lib/balance";
+import { fetchUnpaidPesananRows, groupUnpaidInvoices } from "@/lib/piutang";
+import useSWR from "swr";
+import type { CashFlow } from "@/types";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     PieChart, Pie, Cell,
@@ -49,8 +53,9 @@ function TabLabaRugi() {
 
     // Transactions in selected period
     const periodCF = useMemo(() => cashFlow.filter(c => c.date.startsWith(selectedPeriod)), [cashFlow, selectedPeriod]);
-    const income = periodCF.filter(c => c.type === "income").reduce((s, c) => s + c.amount, 0);
-    const expense = periodCF.filter(c => c.type === "expense").reduce((s, c) => s + c.amount, 0);
+    // Definisi SAMA dengan Keuangan/Cockpit/Dashboard: kecualikan
+    // mutasi antar-kas, entri test, dan penyesuaian (lib/balance).
+    const { income, expense } = computeTotals(periodCF);
     const profit = income - expense;
 
     // 6-month chart
@@ -60,15 +65,39 @@ function TabLabaRugi() {
             const d = new Date(year, month - 1 - i, 1);
             const mStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
             const label = `${MONTH_NAMES[d.getMonth()]} ${String(d.getFullYear()).slice(-2)}`;
-            const monthCF = cashFlow.filter(c => c.date.startsWith(mStr));
-            result.push({
-                Bulan: label,
-                Pemasukan: monthCF.filter(c => c.type === "income").reduce((a, c) => a + c.amount, 0),
-                Pengeluaran: monthCF.filter(c => c.type === "expense").reduce((a, c) => a + c.amount, 0)
-            });
+            const t = computeTotals(cashFlow.filter(c => c.date.startsWith(mStr)));
+            result.push({ Bulan: label, Pemasukan: t.income, Pengeluaran: t.expense });
         }
         return result;
     }, [cashFlow, month, year]);
+
+    // ── Rekap per Kategori + perbandingan bulan lalu (pola Alucurv) ──
+    const prevD = new Date(year, month - 2, 1);
+    const prevPeriod = `${prevD.getFullYear()}-${String(prevD.getMonth() + 1).padStart(2, "0")}`;
+    const prevLabel = `${MONTH_NAMES[prevD.getMonth()]} ${prevD.getFullYear()}`;
+
+    const rekapKategori = useMemo(() => {
+        const sumByCategory = (rows: CashFlow[]) => {
+            const map = new Map<string, number>();
+            for (const c of rows) {
+                if (c.isTest || c.isAdjustment || isTransfer(c)) continue;
+                const key = `${c.type}|${c.category || "Tanpa Kategori"}`;
+                map.set(key, (map.get(key) ?? 0) + c.amount);
+            }
+            return map;
+        };
+        const cur = sumByCategory(periodCF);
+        const prev = sumByCategory(cashFlow.filter(c => c.date.startsWith(prevPeriod)));
+        const keys = new Set([...cur.keys(), ...prev.keys()]);
+        const list = [...keys].map((key) => {
+            const [type, name] = key.split("|");
+            return { type, name, total: cur.get(key) ?? 0, prevTotal: prev.get(key) ?? 0 };
+        }).filter((r) => r.total > 0 || r.prevTotal > 0);
+        return {
+            pemasukan: list.filter(r => r.type === "income").sort((a, b) => b.total - a.total),
+            pengeluaran: list.filter(r => r.type === "expense").sort((a, b) => b.total - a.total),
+        };
+    }, [periodCF, cashFlow, prevPeriod]);
 
     const doExport = () => {
         const raw = periodCF.map(c => ({
@@ -109,6 +138,24 @@ function TabLabaRugi() {
                 <div style={{ padding: 16, borderRadius: 12, background: profit >= 0 ? "#FFF8F0" : "#FEF2F2", border: `1px solid ${profit >= 0 ? "#E6D5BE" : "#FECACA"}` }}>
                     <div style={{ fontSize: 13, color: profit >= 0 ? "#7C5C3E" : "#991B1B", fontWeight: 700 }}>Laba Bersih</div>
                     <div style={{ fontSize: 24, fontWeight: 800, color: profit >= 0 ? "#7C5C3E" : "#991B1B" }}>{formatCurrency(profit)}</div>
+                </div>
+            </div>
+
+            {/* Rekap per Kategori + perbandingan bulan lalu (pola Alucurv) */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
+                <div style={{ background: "white", borderRadius: 12, padding: 20, border: "1px solid #E6D5BE" }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#065F46", marginBottom: 4 }}>Pemasukan per Kategori</div>
+                    <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 14 }}>vs {prevLabel}</div>
+                    {rekapKategori.pemasukan.length === 0 ? (
+                        <div style={{ fontSize: 12, color: "#9CA3AF" }}>Belum ada pemasukan bulan ini.</div>
+                    ) : rekapKategori.pemasukan.map((r) => <KategoriRow key={r.name} r={r} upIsGood />)}
+                </div>
+                <div style={{ background: "white", borderRadius: 12, padding: 20, border: "1px solid #E6D5BE" }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#991B1B", marginBottom: 4 }}>Pengeluaran per Kategori</div>
+                    <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 14 }}>vs {prevLabel}</div>
+                    {rekapKategori.pengeluaran.length === 0 ? (
+                        <div style={{ fontSize: 12, color: "#9CA3AF" }}>Belum ada pengeluaran bulan ini.</div>
+                    ) : rekapKategori.pengeluaran.map((r) => <KategoriRow key={r.name} r={r} />)}
                 </div>
             </div>
 
@@ -167,64 +214,56 @@ function TabLabaRugi() {
     );
 }
 
+/** Baris rekap kategori: total bulan ini + delta vs bulan lalu.
+ *  upIsGood: kenaikan pemasukan = bagus (hijau); kenaikan pengeluaran = waspada (oranye). */
+function KategoriRow({ r, upIsGood = false }: { r: { name: string; total: number; prevTotal: number }; upIsGood?: boolean }) {
+    const delta = r.total - r.prevTotal;
+    const pct = r.prevTotal > 0 ? (delta / r.prevTotal) * 100 : null;
+    const deltaText = r.prevTotal === 0
+        ? (r.total > 0 ? "baru bulan ini" : "—")
+        : `${delta >= 0 ? "▲" : "▼"} ${pct === null ? "" : `${Math.abs(pct).toFixed(0)}%`} (${formatCurrency(Math.abs(delta))})`;
+    const naik = "#B45309", turun = "#15803D";
+    const deltaColor = delta === 0 ? "#9CA3AF" : delta > 0 ? (upIsGood ? turun : naik) : (upIsGood ? naik : turun);
+    return (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid #F3F4F6", gap: 10 }}>
+            <span style={{ fontSize: 12.5, color: "#3C2F2F", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
+            <span style={{ textAlign: "right", flexShrink: 0 }}>
+                <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: "#3C2F2F" }}>{formatCurrency(r.total)}</span>
+                <span style={{ display: "block", fontSize: 10, fontWeight: 600, color: deltaColor }}>{deltaText}</span>
+            </span>
+        </div>
+    );
+}
+
 /* =========================================================
    TAB 2: Aging Piutang
 ========================================================= */
 function TabAgingPiutang() {
-    const { rows: pesananRows } = usePesanan();
-    const { orders } = useStore();
     const [year, setYear] = useState(new Date().getFullYear());
 
-    // Gabungkan Piutang dari Order & Pesanan
+    // Sumber & rumus SAMA dengan Dashboard/Cockpit: lib/piutang
+    // (query is_paid=false langsung dari DB, paged — bebas cap 1000 baris,
+    // dedup per invoice; tabel orders legacy tidak dihitung lagi agar tidak dobel).
+    const { data: unpaidRows } = useSWR("piutang-unpaid-rows", fetchUnpaidPesananRows, { dedupingInterval: 5000 });
+
     const piutangData = useMemo(() => {
-        const data: any[] = [];
-        
-        // Dari store pesanan
-        pesananRows.forEach(r => {
-            if (!isRowFilled(r)) return;
-            if (!r.is_paid && r.tanggal.startsWith(String(year))) {
-                const u = parseIdNum(r.ukuran);
-                const q = parseIdNum(r.qty);
-                const h = parseIdNum(r.harga);
-                const val = u * q * h;
-                const umur = calculateUmur(r.tanggal);
-                if (val > 0) {
-                    data.push({
-                        customer: r.customer,
-                        invoice: r.no_inv || r.po_label || "Tanpa No",
-                        tanggal: r.tanggal,
-                        tagihan: val,
-                        lunas: 0,
-                        sisa: val,
-                        umur,
-                        kategori: getAgingCategory(umur),
-                        src: "Pesanan"
-                    });
-                }
-            }
-        });
-
-        // Dari orders store
-        orders.forEach(o => {
-            if (o.paymentStatus !== "lunas" && o.orderDate.startsWith(String(year))) {
-                const umur = calculateUmur(o.orderDate);
-                const sisa = o.totalPrice - o.paidAmount;
-                data.push({
-                    customer: o.customerName,
-                    invoice: o.id.split("-")[0].toUpperCase(),
-                    tanggal: o.orderDate,
-                    tagihan: o.totalPrice,
-                    lunas: o.paidAmount,
-                    sisa: sisa,
-                    umur,
-                    kategori: getAgingCategory(umur),
-                    src: "Invoice"
-                });
-            }
-        });
-
-        return data.sort((a, b) => b.umur - a.umur);
-    }, [pesananRows, orders, year]);
+        const rows = (unpaidRows ?? []).filter(r => (r.tanggal || "").startsWith(String(year)));
+        const invMap = groupUnpaidInvoices(rows);
+        return [...invMap.entries()].map(([invoice, v]) => {
+            const umur = calculateUmur(v.tanggal);
+            return {
+                customer: v.customer || "—",
+                invoice: invoice || "Tanpa No",
+                tanggal: v.tanggal,
+                tagihan: v.total,
+                lunas: 0,
+                sisa: v.total,
+                umur,
+                kategori: getAgingCategory(umur),
+                src: "Pesanan",
+            };
+        }).sort((a, b) => b.umur - a.umur);
+    }, [unpaidRows, year]);
 
     const summary = useMemo(() => {
         return {
