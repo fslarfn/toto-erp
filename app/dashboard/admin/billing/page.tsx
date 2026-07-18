@@ -1,4 +1,5 @@
 "use client";
+import DesktopOnly from "@/components/layout/DesktopOnly";
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/auth";
 import { useLicense } from "@/lib/license-store";
@@ -13,7 +14,7 @@ import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 
 
-export default function BillingPage() {
+function BillingPage() {
     const { user } = useAuth();
     const { refreshLicense: refreshBanner } = useLicense();
     const [license, setLicense] = useState<any>(null);
@@ -906,5 +907,14 @@ export default function BillingPage() {
                 </div>
             )}
         </div>
+    );
+}
+
+// Di HP tampilkan keterangan "buka di komputer" (components/layout/DesktopOnly).
+export default function BillingPageMobileGuard() {
+    return (
+        <DesktopOnly label="Admin Billing">
+            <BillingPage />
+        </DesktopOnly>
     );
 }

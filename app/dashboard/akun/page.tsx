@@ -1,4 +1,5 @@
 "use client";
+import DesktopOnly from "@/components/layout/DesktopOnly";
 import { useState, useRef } from "react";
 import { useAuth, getRoleDisplay } from "@/lib/auth";
 import { supabase } from "@/lib/supabase-client";
@@ -8,7 +9,7 @@ import {
     Shield, Key, UserCircle
 } from "lucide-react";
 
-export default function AkunPage() {
+function AkunPage() {
     const { user, updateUserData } = useAuth();
     const [saving, setSaving] = useState(false);
     const [uploading, setUploading] = useState(false);
@@ -298,5 +299,14 @@ export default function AkunPage() {
                 </div>
             </div>
         </div>
+    );
+}
+
+// Di HP tampilkan keterangan "buka di komputer" (components/layout/DesktopOnly).
+export default function AkunPageMobileGuard() {
+    return (
+        <DesktopOnly label="Akun Saya">
+            <AkunPage />
+        </DesktopOnly>
     );
 }

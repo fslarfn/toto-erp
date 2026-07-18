@@ -243,7 +243,7 @@ export default function KeuanganPage() {
             </div>
 
             {/* Saldo Summary */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.875rem" }}>
+            <div className="rgrid rgrid-4" style={{ gap: "0.875rem" }}>
                 {bankAccounts.map((b) => (
                     <div key={b.id} className="stat-card">
                         <div style={{ fontSize: 11, fontWeight: 600, color: "#B89678", marginBottom: 4 }}>{b.name}</div>
@@ -264,7 +264,7 @@ export default function KeuanganPage() {
                 <div className="card-header">🔁 Mutasi Antar Kas</div>
                 <div className="card-body">
                     <form onSubmit={handleTransfer}>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr auto", gap: "1rem", alignItems: "flex-end" }}>
+                        <div className="rform-transfer">
                             <div>
                                 <label className="form-label">Dari Kas</label>
                                 <select value={transfer.from} onChange={(e) => setTransfer((p) => ({ ...p, from: e.target.value }))} className="form-select" required>
@@ -298,7 +298,7 @@ export default function KeuanganPage() {
                 <div className="card-header">Input Transaksi Keuangan</div>
                 <div className="card-body">
                     <form onSubmit={handleSubmit}>
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1rem", marginBottom: "1rem" }}>
+                        <div className="rform-4" style={{ marginBottom: "1rem" }}>
                             <div>
                                 <label className="form-label">Tanggal</label>
                                 <input type="date" value={form.tanggal} onChange={(e) => setForm((p) => ({ ...p, tanggal: e.target.value }))} className="form-input" required />
@@ -324,7 +324,7 @@ export default function KeuanganPage() {
                             </div>
                         </div>
 
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr auto", gap: "1rem", alignItems: "flex-end" }}>
+                        <div className="rform-amount">
                             <div>
                                 <label className="form-label">Jumlah (Rp)</label>
                                 <input
@@ -532,7 +532,7 @@ export default function KeuanganPage() {
                         {/* Modal Body */}
                         <form onSubmit={handleEditSubmit}>
                             <div style={{ padding: "20px" }}>
-                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
+                                <div className="rgrid rgrid-half" style={{ marginBottom: "1rem" }}>
                                     <div>
                                         <label className="form-label">Tanggal</label>
                                         <input
@@ -579,7 +579,7 @@ export default function KeuanganPage() {
                                         </select>
                                     </div>
                                 </div>
-                                <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "1rem" }}>
+                                <div className="rgrid rgrid-half">
                                     <div>
                                         <label className="form-label">Jumlah (Rp)</label>
                                         <input

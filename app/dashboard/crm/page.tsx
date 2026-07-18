@@ -204,7 +204,7 @@ export default function CrmPage() {
 
             {tab === "direktori" && (<>
             {/* Ringkasan — klik untuk filter */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.875rem" }}>
+            <div className="rgrid rgrid-3" style={{ gap: "0.875rem" }}>
                 {([
                     { key: "all" as const, label: "Total Customer", val: customers.length, color: "var(--text-dark)" },
                     { key: "with" as const, label: "Punya No. WA", val: withWa, color: "#15803D" },
@@ -285,7 +285,7 @@ export default function CrmPage() {
                 const totalPiutang = list.reduce((s, a) => s + a.unpaid, 0);
                 return (
                     <>
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "0.875rem" }}>
+                        <div className="rgrid rgrid-half" style={{ gap: "0.875rem" }}>
                             <div className="stat-card"><div style={{ fontSize: 11, fontWeight: 600, color: "#B89678" }}>Total Piutang</div><div style={{ fontSize: "1.3rem", fontWeight: 800, color: "#B91C1C" }}>{formatCurrency(totalPiutang)}</div></div>
                             <div className="stat-card"><div style={{ fontSize: 11, fontWeight: 600, color: "#B89678" }}>Customer Menunggak</div><div style={{ fontSize: "1.3rem", fontWeight: 800, color: "var(--text-dark)" }}>{list.length}</div></div>
                         </div>
@@ -333,7 +333,7 @@ export default function CrmPage() {
                 const list = Array.from(agg.values()).filter((a) => a.last && daysSince(a.last) >= CUTOFF).sort((x, y) => daysSince(y.last) - daysSince(x.last));
                 return (
                     <>
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "0.875rem" }}>
+                        <div className="rgrid rgrid-half" style={{ gap: "0.875rem" }}>
                             <div className="stat-card"><div style={{ fontSize: 11, fontWeight: 600, color: "#B89678" }}>Perlu Di-follow-up (≥ {CUTOFF} hari)</div><div style={{ fontSize: "1.3rem", fontWeight: 800, color: "#A16207" }}>{list.length}</div></div>
                             <div className="stat-card"><div style={{ fontSize: 11, fontWeight: 600, color: "#B89678" }}>Potensi Nilai (total historis)</div><div style={{ fontSize: "1.3rem", fontWeight: 800, color: "var(--text-dark)" }}>{formatCurrency(list.reduce((s, a) => s + a.total, 0))}</div></div>
                         </div>
@@ -417,7 +417,7 @@ export default function CrmPage() {
                                 <button onClick={() => setDetail(null)} style={{ background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 8, width: 30, height: 30, color: "white", fontSize: 16, cursor: "pointer" }}>×</button>
                             </div>
                             <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
-                                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 16 }}>
+                                <div className="rgrid rgrid-4" style={{ gap: 10, marginBottom: 16 }}>
                                     <div className="stat-card"><div style={{ fontSize: 10, color: "#B89678", fontWeight: 700 }}>JUMLAH ORDER</div><div style={{ fontSize: 18, fontWeight: 800 }}>{s.invoices.size || s.count}</div></div>
                                     <div className="stat-card"><div style={{ fontSize: 10, color: "#B89678", fontWeight: 700 }}>TOTAL NILAI</div><div style={{ fontSize: 15, fontWeight: 800, color: "#15803D" }}>{formatCurrency(s.total)}</div></div>
                                     <div className="stat-card"><div style={{ fontSize: 10, color: "#B89678", fontWeight: 700 }}>PIUTANG</div><div style={{ fontSize: 15, fontWeight: 800, color: s.unpaid > 0 ? "#B91C1C" : "#15803D" }}>{formatCurrency(s.unpaid)}</div></div>

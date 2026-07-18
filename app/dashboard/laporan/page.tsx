@@ -112,7 +112,7 @@ function TabLabaRugi() {
 
     return (
         <div style={{ padding: "0 16px 24px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
                 <div style={{ display: "flex", gap: "0.5rem" }}>
                     <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} style={{ border: "1px solid #D1BFA3", borderRadius: 6, padding: "6px 12px", outline: "none" }}>
                         {MONTH_NAMES.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
@@ -126,7 +126,7 @@ function TabLabaRugi() {
                 </button>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
+            <div className="rgrid rgrid-3" style={{ gap: 16, marginBottom: 24 }}>
                 <div style={{ padding: 16, borderRadius: 12, background: "#ECFDF5", border: "1px solid #A7F3D0" }}>
                     <div style={{ fontSize: 13, color: "#065F46", fontWeight: 700 }}>Total Pendapatan</div>
                     <div style={{ fontSize: 24, fontWeight: 800, color: "#065F46" }}>{formatCurrency(income)}</div>
@@ -142,7 +142,7 @@ function TabLabaRugi() {
             </div>
 
             {/* Rekap per Kategori + perbandingan bulan lalu (pola Alucurv) */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
+            <div className="rgrid rgrid-half" style={{ gap: 16, marginBottom: 24 }}>
                 <div style={{ background: "white", borderRadius: 12, padding: 20, border: "1px solid #E6D5BE" }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: "#065F46", marginBottom: 4 }}>Pemasukan per Kategori</div>
                     <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 14 }}>vs {prevLabel}</div>
@@ -159,7 +159,7 @@ function TabLabaRugi() {
                 </div>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1.5fr", gap: 16 }}>
+            <div className="rgrid rgrid-side-main" style={{ gap: 16 }}>
                 <div style={{ background: "white", borderRadius: 12, padding: 20, border: "1px solid #E6D5BE" }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: "#3C2F2F", marginBottom: 16 }}>Perbandingan 6 Bulan Terakhir</div>
                     <div style={{ height: 300 }}>
@@ -297,7 +297,7 @@ function TabAgingPiutang() {
 
     return (
         <div style={{ padding: "0 16px 24px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
                 <select value={year} onChange={(e) => setYear(parseInt(e.target.value))} style={{ border: "1px solid #D1BFA3", borderRadius: 6, padding: "6px 12px", outline: "none", width: 120 }}>
                     {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
@@ -306,7 +306,7 @@ function TabAgingPiutang() {
                 </button>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
+            <div className="rgrid rgrid-4" style={{ gap: 16, marginBottom: 24 }}>
                 {(["0-30", "31-60", "61-90", ">90"] as const).map(k => (
                     <div key={k} style={{ padding: 16, borderRadius: 12, background: badgeProps[k].bg, border: `1px solid ${badgeProps[k].col}40` }}>
                         <div style={{ fontSize: 13, color: badgeProps[k].col, fontWeight: 700, marginBottom: 8 }}>Aging {k} Hari</div>
@@ -417,7 +417,7 @@ function TabProduktivitas() {
 
     return (
         <div style={{ padding: "0 16px 24px" }}>
-             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
                 <div style={{ display: "flex", gap: "0.5rem" }}>
                     <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} style={{ border: "1px solid #D1BFA3", borderRadius: 6, padding: "6px 12px", outline: "none" }}>
                         {MONTH_NAMES.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
@@ -431,7 +431,7 @@ function TabProduktivitas() {
                 </button>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+            <div className="rgrid rgrid-half" style={{ gap: 20 }}>
                 {/* Table */}
                 <div style={{ background: "white", borderRadius: 12, border: "1px solid #E6D5BE", overflow: "hidden" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
@@ -584,7 +584,7 @@ function TabProdukTerlaris() {
 
     return (
          <div style={{ padding: "0 16px 24px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
                 <select value={period} onChange={(e) => setPeriod(e.target.value as any)} style={{ border: "1px solid #D1BFA3", borderRadius: 6, padding: "6px 12px", outline: "none", width: 160 }}>
                     <option value="bulan_ini">Bulan Ini</option>
                     <option value="semua">Semua Waktu</option>
@@ -594,7 +594,7 @@ function TabProdukTerlaris() {
                 </button>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: 20 }}>
+            <div className="rgrid rgrid-main-side" style={{ gap: 20 }}>
                 <div style={{ background: "white", borderRadius: 12, border: "1px solid #E6D5BE", overflow: "hidden", maxHeight: 500, display: "flex", flexDirection: "column" }}>
                      <div style={{ padding: "16px 20px", borderBottom: "1px solid #E6D5BE", fontSize: 14, fontWeight: 700, color: "#3C2F2F", background: "#FAF7F3" }}>Ranking Produk</div>
                     <div style={{ overflowY: "auto", flex: 1 }}>
@@ -655,7 +655,7 @@ export default function LaporanPage() {
         padding: "12px 24px", fontSize: 13, fontWeight: 700, border: "none",
         borderBottom: activeTab === key ? "3px solid #A67B5B" : "3px solid transparent",
         background: "white", color: activeTab === key ? "#A67B5B" : "#9CA3AF",
-        cursor: "pointer", transition: "color .15s", whiteSpace: "nowrap", flex: 1
+        cursor: "pointer", transition: "color .15s", whiteSpace: "nowrap", flex: "1 0 auto"
     });
 
     return (
@@ -664,7 +664,7 @@ export default function LaporanPage() {
                 <div style={{ fontSize: 20, fontWeight: 800, color: "#3C2F2F", marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
                     <span>📊</span> Laporan Sistem ERP
                 </div>
-                <div style={{ display: "flex" }}>
+                <div style={{ display: "flex", overflowX: "auto" }}>
                     <button onClick={() => setActiveTab("labarugi")} style={tabStyle("labarugi")}>Laba Rugi</button>
                     <button onClick={() => setActiveTab("aging")} style={tabStyle("aging")}>Aging Piutang</button>
                     <button onClick={() => setActiveTab("operator")} style={tabStyle("operator")}>Produktivitas Operator</button>

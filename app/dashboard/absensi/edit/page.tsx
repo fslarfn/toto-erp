@@ -1,4 +1,5 @@
 "use client";
+import DesktopOnly from "@/components/layout/DesktopOnly";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/lib/auth";
 import { useKaryawan } from "@/lib/karyawan-store";
@@ -85,7 +86,7 @@ const LEMBUR_OPTIONS = [
 
 /* ── Page ─────────────────────────────────────────────────────── */
 
-export default function EditAbsensiPage() {
+function EditAbsensiPage() {
     const { user } = useAuth();
     const { karyawan } = useKaryawan();
 
@@ -536,5 +537,14 @@ export default function EditAbsensiPage() {
                 </div>
             )}
         </div>
+    );
+}
+
+// Di HP tampilkan keterangan "buka di komputer" (components/layout/DesktopOnly).
+export default function EditAbsensiPageMobileGuard() {
+    return (
+        <DesktopOnly label="Edit Absen">
+            <EditAbsensiPage />
+        </DesktopOnly>
     );
 }

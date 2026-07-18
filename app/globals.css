@@ -617,6 +617,40 @@ header {
 }
 
 /* ============================================ */
+/* RESPONSIVE GRID UTILITIES (PWA mobile)        */
+/* Grid kolom-tetap runtuh bertahap di layar     */
+/* sempit: >900px penuh → ≤900px 2 kolom / stack */
+/* → ≤560px 1 kolom.                             */
+/* ============================================ */
+.rgrid { display: grid; gap: 1rem; }
+.rgrid-4 { grid-template-columns: repeat(4, 1fr); }
+.rgrid-3 { grid-template-columns: repeat(3, 1fr); }
+.rgrid-half { grid-template-columns: 1fr 1fr; }
+.rgrid-main-side { grid-template-columns: 2fr 1fr; }
+.rgrid-side-main { grid-template-columns: 1fr 1.5fr; }
+
+/* Baris form: kolom input + tombol di ujung */
+.rform-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+.rform-transfer { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap: 1rem; align-items: flex-end; }
+.rform-amount { display: grid; grid-template-columns: 1fr 2fr auto; gap: 1rem; align-items: flex-end; }
+
+@media (max-width: 900px) {
+  .rgrid-4, .rgrid-3 { grid-template-columns: repeat(2, 1fr); }
+  .rgrid-half, .rgrid-main-side, .rgrid-side-main { grid-template-columns: 1fr; }
+  .rform-4, .rform-transfer { grid-template-columns: repeat(2, 1fr); }
+  .rform-transfer > button { grid-column: 1 / -1; }
+}
+
+@media (max-width: 560px) {
+  .rgrid-4, .rgrid-3 { grid-template-columns: 1fr; }
+  .rform-4, .rform-transfer, .rform-amount { grid-template-columns: 1fr; }
+  .rform-amount > button, .rform-transfer > button { grid-column: auto; width: 100%; }
+  /* Header halaman: judul & filter menumpuk rapi */
+  .page-header { flex-wrap: wrap; gap: 0.625rem; }
+  .page-content { padding: 0.875rem 0.875rem; }
+}
+
+/* ============================================ */
 /* FILTER BAR                                    */
 /* ============================================ */
 .filter-bar {
@@ -774,6 +808,12 @@ header {
 }
 
 @media (min-width: 1025px) {
+  /* Cockpit desktop: tampilan eksekutif bersih tanpa header app
+     (di layar sempit header tetap tampil agar sidebar bisa dibuka). */
+  header.cockpit-header-mobile-only {
+    display: none;
+  }
+
   #sidebar-backdrop {
     display: none !important;
   }
