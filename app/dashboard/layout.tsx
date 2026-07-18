@@ -15,6 +15,7 @@ import { CrmProvider } from "@/lib/crm-store";
 import NotificationSettings from "@/components/notifications/NotificationSettings";
 import NotificationPanel from "@/components/NotificationPanel";
 import { useNotifications } from "@/hooks/useNotifications";
+import { useRuangTimAlert } from "@/hooks/useRuangTimAlert";
 
 const NAV_ITEMS = [
     {
@@ -135,6 +136,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const [notifPanelOpen, setNotifPanelOpen] = useState(false);
     const [showTrialModal, setShowTrialModal] = useState(false);
     const { notifications, unreadCount, loading: notifLoading, markAsRead, markAllRead } = useNotifications();
+    // Badge + toast pesan Ruang Tim (pengganti sinyal floating chat lama).
+    const { unread: chatUnread, toast: chatToast, dismissToast: dismissChatToast } = useRuangTimAlert(user?.id, pathname);
 
     const isAdmin = ["faisal", "vira", "toto", "fauzi", "yuni"].includes(user?.username || "");
     const isFinishing = user?.role === "finishing";
@@ -375,6 +378,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                             title="Ruang Tim"
                                         >
                                             <MessageSquareIcon size={20} />
+                                            {chatUnread > 0 && (
+                                                <span style={{
+                                                    position: "absolute", top: 4, right: 4,
+                                                    background: "#EF4444", color: "white",
+                                                    borderRadius: 99, fontSize: 9, fontWeight: 700,
+                                                    minWidth: 16, height: 16, lineHeight: "16px",
+                                                    textAlign: "center", padding: "0 3px",
+                                                    border: "1.5px solid white",
+                                                }}>
+                                                    {chatUnread > 99 ? "99+" : chatUnread}
+                                                </span>
+                                            )}
                                         </button>
 
                                         <div className="text-right hidden sm:block">
@@ -434,6 +449,62 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         markAllRead={markAllRead}
                     />
                     <NotificationSettings isOpen={notifOpen} onClose={() => setNotifOpen(false)} />
+
+                    {/* ── Toast pesan Ruang Tim (pengganti toast floating chat lama) ── */}
+                    {chatToast && (
+                        <div style={{
+                            position: "fixed", bottom: 24, right: 20, zIndex: 9999,
+                            background: "white", borderRadius: 14,
+                            boxShadow: "0 8px 32px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.06)",
+                            padding: "12px 14px", maxWidth: 300, minWidth: 240,
+                            display: "flex", flexDirection: "column", gap: 6,
+                            animation: "slideInRight 0.25s ease",
+                        }}>
+                            <style>{`
+                                @keyframes slideInRight { from { transform: translateX(110%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+                                @media (prefers-reduced-motion: reduce) { .rt-toast-anim { animation: none !important; } }
+                            `}</style>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <div style={{
+                                        width: 30, height: 30, borderRadius: "50%",
+                                        background: "linear-gradient(135deg, #A67B5B, #7C5A3C)",
+                                        display: "flex", alignItems: "center", justifyContent: "center",
+                                        color: "white", fontSize: 13, fontWeight: 700, flexShrink: 0,
+                                    }}>
+                                        {chatToast.senderName[0]?.toUpperCase()}
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: 12, fontWeight: 700, color: "#3C2F2F" }}>
+                                            {chatToast.type === "tugas" ? "📋" : chatToast.type === "pengumuman" ? "📣" : "💬"} {chatToast.senderName}
+                                        </div>
+                                        <div style={{ fontSize: 10, color: "#B89678" }}>
+                                            {chatToast.type === "tugas" ? "Tugas baru" : chatToast.type === "pengumuman" ? "Pengumuman" : "Pesan baru"}
+                                        </div>
+                                    </div>
+                                </div>
+                                <button onClick={dismissChatToast} style={{
+                                    background: "none", border: "none", cursor: "pointer",
+                                    color: "#B89678", fontSize: 16, lineHeight: 1, padding: 2, flexShrink: 0,
+                                }}>×</button>
+                            </div>
+                            <div style={{
+                                fontSize: 12, color: "#5C4033", lineHeight: 1.5,
+                                background: "#F8F4EF", borderRadius: 8, padding: "7px 10px",
+                                overflow: "hidden", display: "-webkit-box",
+                                WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+                            }}>
+                                {chatToast.body}
+                            </div>
+                            <button onClick={() => { dismissChatToast(); router.push("/dashboard/ruang-tim"); }} style={{
+                                background: "#A67B5B", color: "white", border: "none",
+                                borderRadius: 8, padding: "6px 0", fontSize: 11, fontWeight: 700,
+                                cursor: "pointer", width: "100%",
+                            }}>
+                                Buka Ruang Tim
+                            </button>
+                        </div>
+                    )}
                 </div>
                         </CrmProvider>
                         </QuotationProvider>
