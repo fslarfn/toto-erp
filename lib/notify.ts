@@ -7,6 +7,8 @@ export function pushNotify(opts: {
   url?: string;
   targetRoles?: string[];
   targetUserIds?: string[];
+  /** Urgensi di panel notifikasi in-app (default: info) */
+  severity?: "info" | "warning" | "danger";
 }): void {
   fetch("/api/push/send", {
     method: "POST",
