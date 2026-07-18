@@ -34,8 +34,8 @@ export function pesananRowTotal(r: Pick<PiutangRowLike, "harga" | "ukuran" | "qt
  */
 export function groupUnpaidInvoices(
     rows: PiutangRowLike[]
-): Map<string, { tanggal: string; total: number }> {
-    const invMap = new Map<string, { tanggal: string; total: number }>();
+): Map<string, { tanggal: string; customer: string; total: number }> {
+    const invMap = new Map<string, { tanggal: string; customer: string; total: number }>();
     for (const r of rows) {
         if (r.is_paid) continue;
         if (!r.tanggal) continue;
@@ -44,7 +44,7 @@ export function groupUnpaidInvoices(
         const key = ((r.no_inv || String(r.id)) as string).trim();
         const ex = invMap.get(key);
         if (ex) ex.total += total;
-        else invMap.set(key, { tanggal: r.tanggal, total });
+        else invMap.set(key, { tanggal: r.tanggal, customer: (r.customer || "").trim(), total });
     }
     return invMap;
 }

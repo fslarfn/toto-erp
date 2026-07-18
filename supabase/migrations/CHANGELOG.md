@@ -1,5 +1,40 @@
 # Supabase Migrations Changelog
 
+## 20260718_alucurv_mutasi.sql
+**Tujuan:** Mutasi antar akun Alucurv (pasangan keluar+masuk, dikecualikan dari total operasional).
+
+### Perubahan
+| # | Objek | Aksi |
+|---|-------|------|
+| 1 | `alu_transactions.transfer_group` | `ADD COLUMN IF NOT EXISTS` (TEXT, aditif) |
+| 2 | `idx_alu_transactions_transfer_group` | Index baru |
+
+Berisi juga query investigasi (SELECT saja) untuk saldo negatif CASH ALUCURV / OPR JAGO.
+
+### Rollback
+```sql
+DROP INDEX IF EXISTS idx_alu_transactions_transfer_group;
+-- Kolom boleh dibiarkan (tidak mengganggu); hapus hanya jika yakin:
+-- ALTER TABLE alu_transactions DROP COLUMN IF EXISTS transfer_group;
+```
+
+---
+
+## 20260717_alucurv_dashboard_perf.sql
+**Tujuan:** Saldo per akun Alucurv dihitung di DB (bukan unduh seluruh alu_transactions ke browser; bebas cap 1000 baris).
+
+### Perubahan
+| # | Objek | Aksi |
+|---|-------|------|
+| 1 | `v_alu_account_balances` | `CREATE OR REPLACE VIEW` (security_invoker) + GRANT SELECT ke anon & authenticated |
+
+### Rollback
+```sql
+DROP VIEW IF EXISTS v_alu_account_balances;
+```
+
+---
+
 ## 20260513_security_hardening.sql
 **Tujuan:** Menutup 4 security error yang diflag Supabase Advisor.
 
