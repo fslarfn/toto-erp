@@ -4,6 +4,7 @@ import * as XLSX from "xlsx";
 import { PesananRow, isRowFilled } from "@/lib/pesanan-store";
 import { useStatusBarangRows } from "./hooks/useStatusBarangRows";
 import { VirtualTable } from "./components/VirtualTable";
+import { OrderView } from "./components/OrderView";
 import { LocalImportExcel } from "./components/LocalImportExcel";
 
 const MONTH_NAMES = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
@@ -15,7 +16,7 @@ export default function StatusBarangPage() {
     const [search, setSearch] = useState("");
     const deferredSearch = useDeferredValue(search);
     
-    const [viewMode, setViewMode] = useState<"detail" | "simple">("detail");
+    const [viewMode, setViewMode] = useState<"detail" | "simple" | "order">("detail");
     const [statusFilter, setStatusFilter] = useState<string | null>(null);
     const [savedFlash, setSavedFlash] = useState(false);
 
@@ -99,10 +100,10 @@ export default function StatusBarangPage() {
                 </div>
 
                 <div style={{ background: "#F3F4F6", borderRadius: 7, padding: 2, display: "flex", fontSize: 11, marginLeft: 4 }}>
-                    {(["detail", "simple"] as const).map((m) => (
+                    {(["detail", "simple", "order"] as const).map((m) => (
                         <button key={m} onClick={() => setViewMode(m)}
                             style={{ padding: "3px 12px", borderRadius: 5, border: "none", cursor: "pointer", fontWeight: 600, background: viewMode === m ? "#A67B5B" : "transparent", color: viewMode === m ? "white" : "#5C4033" }}>
-                            {m === "detail" ? "Full" : "Simple"}
+                            {m === "detail" ? "Full" : m === "simple" ? "Simple" : "Per Order"}
                         </button>
                     ))}
                 </div>
@@ -146,8 +147,10 @@ export default function StatusBarangPage() {
             <div style={{ flex: 1, position: "relative", overflow: "hidden", display: "flex", flexDirection: "column", minHeight: 0 }}>
                 {filtered.length === 0 && !isLoading ? (
                     <div style={{ textAlign: "center", marginTop: 40, color: "#C5A882" }}>Tidak ada data.</div>
+                ) : viewMode === "order" ? (
+                    <OrderView rows={filtered} onUpdate={handleUpdate} />
                 ) : (
-                    <VirtualTable 
+                    <VirtualTable
                         key={`${statusFilter}-${month}-${year}-${deferredSearch}-${filtered.length}`}
                         rows={filtered}
                         viewMode={viewMode}
