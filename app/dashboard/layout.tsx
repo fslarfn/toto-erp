@@ -25,6 +25,7 @@ const NAV_ITEMS = [
             { href: "/dashboard/pesanan", label: "Input Pesanan", module: "pesanan", icon: ClipboardIcon },
             { href: "/dashboard/status-barang", label: "Status Barang", module: "status-barang", icon: PackageIcon },
             { href: "/dashboard/cockpit", label: "Executive Cockpit", module: "any", icon: CockpitIcon },
+            { href: "/dashboard/ruang-tim", label: "Ruang Tim", module: "any", icon: RuangTimIcon },
         ],
     },
     {
@@ -528,6 +529,7 @@ function BellIcon({ size = 18 }: { size?: number }) { return ( <svg width={size}
 function CustomerIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 00-3-3.87" /><path d="M16 3.13a4 4 0 010 7.75" /></svg> ); }
 function PenawaranIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /><path d="M16 13H8" /><path d="M16 17H8" /><path d="M10 9H9H8" /><path d="M12 2v6" /></svg> ); }
 function BarChartIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /><line x1="3" y1="20" x2="21" y2="20" /></svg> ); }
+function RuangTimIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /><path d="M8 9h8" /><path d="M8 13h5" /></svg> ); }
 function CockpitIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 12L16 10" /><path d="M12 12L8 10" /><path d="M12 12V7" /><path d="M12 17V17.01" /></svg> ); }
 function GabunganIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="12" r="5" /><circle cx="16" cy="12" r="5" /></svg> ); }
 function CartIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6" /></svg> ); }
