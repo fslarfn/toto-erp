@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useAuth, roleLabels, getRoleDisplay } from "@/lib/auth";
@@ -12,7 +12,6 @@ import { SJBahanProvider } from "@/lib/sj-bahan-store";
 import { TagihanBahanProvider } from "@/lib/tagihan-bahan-store";
 import { QuotationProvider } from "@/lib/quotation-store";
 import { CrmProvider } from "@/lib/crm-store";
-import ChatOrderBox from "@/components/layout/ChatOrderBox";
 import NotificationSettings from "@/components/notifications/NotificationSettings";
 import NotificationPanel from "@/components/NotificationPanel";
 import { useNotifications } from "@/hooks/useNotifications";
@@ -132,22 +131,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }, [activeWorkspace]);
     const [collapsed, setCollapsed] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
-    const [chatOpen, setChatOpen] = useState(false);
     const [notifOpen, setNotifOpen] = useState(false);
     const [notifPanelOpen, setNotifPanelOpen] = useState(false);
     const [showTrialModal, setShowTrialModal] = useState(false);
     const { notifications, unreadCount, loading: notifLoading, markAsRead, markAllRead } = useNotifications();
-
-    type ChatToast = { id: number; senderName: string; message: string };
-    const [chatToast, setChatToast] = useState<ChatToast | null>(null);
-    const chatToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-    const handleNewChatMessage = (senderName: string, message: string) => {
-        if (chatToastTimer.current) clearTimeout(chatToastTimer.current);
-        const id = Date.now();
-        setChatToast({ id, senderName, message });
-        chatToastTimer.current = setTimeout(() => setChatToast(null), 5000);
-    };
 
     const isAdmin = ["faisal", "vira", "toto", "fauzi", "yuni"].includes(user?.username || "");
     const isFinishing = user?.role === "finishing";
@@ -160,7 +147,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         if (!user) router.replace("/login");
         else if (isFinishing && pathname !== "/dashboard/produksi") {
             router.replace("/dashboard/produksi");
-        } else if (isAlucurvOnly && !pathname.startsWith("/dashboard/alucurv") && !pathname.startsWith("/dashboard/gabungan")) {
+        } else if (isAlucurvOnly && !pathname.startsWith("/dashboard/alucurv") && !pathname.startsWith("/dashboard/gabungan") && pathname !== "/dashboard/ruang-tim") {
+            // Ruang Tim dikecualikan: chat/koordinasi berlaku lintas brand
+            // (menggantikan floating chat lama yang bisa diakses semua user).
             router.replace("/dashboard/alucurv");
         } else if (!isFinishing && !isAlucurvOnly && license && !license.is_setup_completed) {
             setShowTrialModal(true);
@@ -381,13 +370,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                         </button>
 
                                         <button
-                                            onClick={() => setChatOpen(!chatOpen)}
+                                            onClick={() => router.push("/dashboard/ruang-tim")}
                                             className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-slate-100 transition-colors text-primary relative"
-                                            title="Koordinasi Tim"
+                                            title="Ruang Tim"
                                         >
                                             <MessageSquareIcon size={20} />
-                                            {/* Badge notifikasi sederhana di header */}
-                                            <div className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-white" />
                                         </button>
 
                                         <div className="text-right hidden sm:block">
@@ -437,7 +424,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             </div>
                         </div>
                     )}
-                    <ChatOrderBox isOpen={chatOpen} onClose={() => setChatOpen(false)} onNewMessage={handleNewChatMessage} />
                     <NotificationPanel
                         isOpen={notifPanelOpen}
                         onClose={() => setNotifPanelOpen(false)}
@@ -448,55 +434,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         markAllRead={markAllRead}
                     />
                     <NotificationSettings isOpen={notifOpen} onClose={() => setNotifOpen(false)} />
-
-                    {/* ── Chat Toast Pop-up ── */}
-                    {chatToast && (
-                        <div style={{
-                            position: "fixed", bottom: 90, right: 20, zIndex: 9999,
-                            background: "white", borderRadius: 14,
-                            boxShadow: "0 8px 32px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.06)",
-                            padding: "12px 14px", maxWidth: 300, minWidth: 240,
-                            display: "flex", flexDirection: "column", gap: 6,
-                            animation: "slideInRight 0.25s ease",
-                        }}>
-                            <style>{`@keyframes slideInRight { from { transform: translateX(110%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }`}</style>
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                    <div style={{
-                                        width: 30, height: 30, borderRadius: "50%",
-                                        background: "linear-gradient(135deg, #A67B5B, #7C5A3C)",
-                                        display: "flex", alignItems: "center", justifyContent: "center",
-                                        color: "white", fontSize: 13, fontWeight: 700, flexShrink: 0,
-                                    }}>
-                                        {chatToast.senderName[0]?.toUpperCase()}
-                                    </div>
-                                    <div>
-                                        <div style={{ fontSize: 12, fontWeight: 700, color: "#3C2F2F" }}>💬 {chatToast.senderName}</div>
-                                        <div style={{ fontSize: 10, color: "#B89678" }}>Pesan baru</div>
-                                    </div>
-                                </div>
-                                <button onClick={() => setChatToast(null)} style={{
-                                    background: "none", border: "none", cursor: "pointer",
-                                    color: "#B89678", fontSize: 16, lineHeight: 1, padding: 2, flexShrink: 0,
-                                }}>×</button>
-                            </div>
-                            <div style={{
-                                fontSize: 12, color: "#5C4033", lineHeight: 1.5,
-                                background: "#F8F4EF", borderRadius: 8, padding: "7px 10px",
-                                overflow: "hidden", display: "-webkit-box",
-                                WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
-                            }}>
-                                {chatToast.message}
-                            </div>
-                            <button onClick={() => { setChatOpen(true); setChatToast(null); }} style={{
-                                background: "#A67B5B", color: "white", border: "none",
-                                borderRadius: 8, padding: "6px 0", fontSize: 11, fontWeight: 700,
-                                cursor: "pointer", width: "100%",
-                            }}>
-                                Buka Chat
-                            </button>
-                        </div>
-                    )}
                 </div>
                         </CrmProvider>
                         </QuotationProvider>
