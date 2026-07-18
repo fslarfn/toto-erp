@@ -207,12 +207,16 @@ export default function RuangTimPage() {
 
                 {/* ——— Kolom tengah: feed + composer ——— */}
                 <main className="rt-main" style={{ background: C.cream }}>
-                    <header style={{ padding: "20px 24px 14px", borderBottom: `1px solid ${C.line}`, flexShrink: 0 }}>
-                        <h1 style={{ fontFamily: serif, fontSize: 22, margin: 0, color: C.ink, fontWeight: 600 }}>Ruang Tim</h1>
-                        <p style={{ fontSize: 13, color: C.brown, margin: "4px 0 0" }}>
+                    {/* Div, BUKAN <header>: elemen header ditata global (band coklat app bar) di globals.css */}
+                    <div style={{ padding: "24px 24px 16px", borderBottom: `1px solid ${C.line}`, flexShrink: 0, background: C.cream }}>
+                        <h1 style={{ fontFamily: serif, fontSize: 26, margin: 0, color: C.ink, fontWeight: 600, letterSpacing: 0.2 }}>
+                            Ruang Tim
+                        </h1>
+                        <div style={{ width: 36, height: 2, background: C.accent, margin: "8px 0 10px" }} />
+                        <p style={{ fontSize: 13.5, color: C.brown, margin: 0, lineHeight: 1.5 }}>
                             Kirim info, umumkan perubahan, atau tugaskan pekerjaan — semua dalam satu alur.
                         </p>
-                    </header>
+                    </div>
 
                     <div ref={feedRef} style={{ flex: 1, overflowY: "auto", padding: "6px 24px", minHeight: 0 }}>
                         {error && (

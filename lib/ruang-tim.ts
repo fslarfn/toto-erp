@@ -64,8 +64,16 @@ export function useRuangTim() {
         (async () => {
             setLoading(true);
             try {
-                const [{ data: users, error: uErr }, msgs] = await Promise.all([
-                    supabase.from("app_users").select("id, name, role, avatar").order("name"),
+                // Anggota tim via API server — SELECT app_users dari browser
+                // diblokir RLS (lihat app/api/team/route.ts).
+                const fetchTeam = async (): Promise<TeamMember[]> => {
+                    const res = await fetch("/api/team", { cache: "no-store" });
+                    if (!res.ok) throw new Error("Gagal memuat daftar tim.");
+                    const json = (await res.json()) as { data: TeamMember[] };
+                    return json.data ?? [];
+                };
+                const [users, msgs] = await Promise.all([
+                    fetchTeam(),
                     (async () => {
                         const all: RuangTimMessage[] = [];
                         let from = 0;
@@ -86,9 +94,8 @@ export function useRuangTim() {
                         return all;
                     })(),
                 ]);
-                if (uErr) throw uErr;
                 if (!cancelled) {
-                    setMembers((users ?? []) as TeamMember[]);
+                    setMembers(users);
                     setMessages(msgs);
                     setError(null);
                 }
