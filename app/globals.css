@@ -808,6 +808,12 @@ header {
 }
 
 @media (min-width: 1025px) {
+  /* Cockpit desktop: tampilan eksekutif bersih tanpa header app
+     (di layar sempit header tetap tampil agar sidebar bisa dibuka). */
+  header.cockpit-header-mobile-only {
+    display: none;
+  }
+
   #sidebar-backdrop {
     display: none !important;
   }

@@ -1,4 +1,5 @@
 "use client";
+import DesktopOnly from "@/components/layout/DesktopOnly";
 import React, { useState, useRef } from "react";
 import { usePesanan, PesananRow } from "@/lib/pesanan-store";
 import { FinishingTab } from "./FinishingTab";
@@ -492,7 +493,7 @@ function TabRiwayatPO() {
 /* ================================================================
    MAIN PAGE — 2 Tab
 ================================================================ */
-export default function PrintPOPage() {
+function PrintPOPage() {
     const [activeTab, setActiveTab] = useState<"print" | "riwayat" | "finishing">("print");
 
     const tabStyle = (key: typeof activeTab): React.CSSProperties => ({
@@ -525,5 +526,14 @@ export default function PrintPOPage() {
                 {activeTab === "finishing" && <FinishingTab />}
             </div>
         </div>
+    );
+}
+
+// Di HP tampilkan keterangan "buka di komputer" (components/layout/DesktopOnly).
+export default function PrintPOPageMobileGuard() {
+    return (
+        <DesktopOnly label="Print PO">
+            <PrintPOPage />
+        </DesktopOnly>
     );
 }

@@ -1,4 +1,5 @@
 "use client";
+import DesktopOnly from "@/components/layout/DesktopOnly";
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { useKaryawan, DataKaryawan } from "@/lib/karyawan-store";
 import { useAbsensi, AbsensiRecord, IzinRecord } from "@/lib/absensi-store";
@@ -68,7 +69,7 @@ function shiftWeek(dateStr: string, direction: -1 | 1): string {
 
 type ActiveTab = "rekap" | "mingguan" | "bulanan" | "izin" | "link";
 
-export default function AbsensiPage() {
+function AbsensiPage() {
     const { karyawan } = useKaryawan();
     const { absensi, izin, deleteAbsensi, getAbsensiFoto, refreshFromLS, addIzin, deleteIzin } = useAbsensi();
     const { license } = useLicense();
@@ -972,3 +973,12 @@ const todayBtn: React.CSSProperties = {
     background: "linear-gradient(135deg, #3B82F6, #1D4ED8)", color: "white",
     fontSize: 13, fontWeight: 600, cursor: "pointer",
 };
+
+// Di HP tampilkan keterangan "buka di komputer" (components/layout/DesktopOnly).
+export default function AbsensiPageMobileGuard() {
+    return (
+        <DesktopOnly label="Absensi">
+            <AbsensiPage />
+        </DesktopOnly>
+    );
+}

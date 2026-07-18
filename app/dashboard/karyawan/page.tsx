@@ -1,4 +1,5 @@
 "use client";
+import DesktopOnly from "@/components/layout/DesktopOnly";
 import React, { useState, useMemo } from "react";
 import * as XLSX from "xlsx";
 import { useKaryawan, DataKaryawan, StatusKaryawan } from "@/lib/karyawan-store";
@@ -1107,7 +1108,7 @@ function TabKasbon() {
 /* ================================================================
    MAIN PAGE
 ================================================================ */
-export default function KaryawanPage() {
+function KaryawanPage() {
     const [activeTab, setActiveTab] = useState<"data" | "gaji" | "kasbon">("data");
 
     const tabStyle = (key: typeof activeTab): React.CSSProperties => ({
@@ -1132,5 +1133,14 @@ export default function KaryawanPage() {
                 {activeTab === "kasbon" && <TabKasbon />}
             </div>
         </div>
+    );
+}
+
+// Di HP tampilkan keterangan "buka di komputer" (components/layout/DesktopOnly).
+export default function KaryawanPageMobileGuard() {
+    return (
+        <DesktopOnly label="Karyawan">
+            <KaryawanPage />
+        </DesktopOnly>
     );
 }

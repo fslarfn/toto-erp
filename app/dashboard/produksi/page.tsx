@@ -1,4 +1,5 @@
 "use client";
+import DesktopOnly from "@/components/layout/DesktopOnly";
 import React, { useState, useMemo } from "react";
 import * as XLSX from "xlsx";
 import { usePesanan, PesananRow } from "@/lib/pesanan-store";
@@ -492,7 +493,7 @@ function IconFinishing({ size = 16, color = "currentColor" }: { size?: number; c
     );
 }
 
-export default function AlurPesananPage() {
+function AlurPesananPage() {
     const [activeTab, setActiveTab] = useState<"finishing" | "gudang" | "pengiriman" | "riwayat">("finishing");
     const { rows } = usePesanan();
     const { user } = useAuth();
@@ -553,5 +554,14 @@ export default function AlurPesananPage() {
                 {activeTab === "riwayat"   && <TabRiwayatPO />}
             </div>
         </div>
+    );
+}
+
+// Di HP tampilkan keterangan "buka di komputer" (components/layout/DesktopOnly).
+export default function AlurPesananPageMobileGuard() {
+    return (
+        <DesktopOnly label="Alur Pesanan">
+            <AlurPesananPage />
+        </DesktopOnly>
     );
 }

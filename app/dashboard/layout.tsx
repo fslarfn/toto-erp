@@ -319,10 +319,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
                     {/* ============ MAIN CONTENT ============ */}
                     <div id="main-content-wrapper">
-                        {/* Header */}
-                        {/* Header */}
-                        {!isCockpit && (
-                            <header>
+                        {/* Header — di Cockpit hanya tampil pada layar sempit
+                            (tanpa ini, mobile tidak punya tombol buka sidebar). */}
+                        <header className={isCockpit ? "cockpit-header-mobile-only" : undefined}>
                                 <div className="header-content">
                                     <div className="flex items-center gap-3">
                                         <button
@@ -409,8 +408,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                         </div>
                                     </div>
                                 </div>
-                            </header>
-                        )}
+                        </header>
 
                         {/* Page content */}
                         <main style={{ flex: 1, display: "flex", flexDirection: "column", overflowX: "hidden", background: isCockpit ? "#F5EBDD" : "var(--bg)" }}>

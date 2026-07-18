@@ -1,4 +1,5 @@
 "use client";
+import DesktopOnly from "@/components/layout/DesktopOnly";
 import React, { useState, useMemo } from "react";
 import { usePesanan, PesananRow } from "@/lib/pesanan-store";
 import { useSuratJalan, SJItem } from "@/lib/surat-jalan-store";
@@ -838,7 +839,7 @@ function printSJ(noSJ: string, type: "customer" | "pewarnaan", vendor: string, t
 /* ================================================================
    MAIN PAGE
 ================================================================ */
-export default function SuratJalanPage() {
+function SuratJalanPage() {
     const [activeTab, setActiveTab] = useState<"customer" | "pewarnaan" | "log">("customer");
 
     const tabStyle = (key: typeof activeTab): React.CSSProperties => ({
@@ -864,5 +865,14 @@ export default function SuratJalanPage() {
                 {activeTab === "log" && <TabLog />}
             </div>
         </div>
+    );
+}
+
+// Di HP tampilkan keterangan "buka di komputer" (components/layout/DesktopOnly).
+export default function SuratJalanPageMobileGuard() {
+    return (
+        <DesktopOnly label="Surat Jalan">
+            <SuratJalanPage />
+        </DesktopOnly>
     );
 }

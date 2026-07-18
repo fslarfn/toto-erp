@@ -1,4 +1,5 @@
 "use client";
+import DesktopOnly from "@/components/layout/DesktopOnly";
 import { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
 import { usePesanan, PAGE_SIZE, EMPTY_BUFFER, PesananRow, isRowFilled } from "@/lib/pesanan-store";
 import * as XLSX from "xlsx";
@@ -161,7 +162,7 @@ const TableRow = memo(function TableRow({
 /* ================================================================
    MAIN PAGE
 ================================================================ */
-export default function PesananPage() {
+function PesananPage() {
     const { rows, loading, updateRow, addRows, flushAllRows, flushRow, fetchFilter } = usePesanan();
     const [savedFlash, setSavedFlash] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -709,5 +710,14 @@ export default function PesananPage() {
                 </button>
             </div>
         </div>
+    );
+}
+
+// Di HP tampilkan keterangan "buka di komputer" (components/layout/DesktopOnly).
+export default function PesananPageMobileGuard() {
+    return (
+        <DesktopOnly label="Input Pesanan">
+            <PesananPage />
+        </DesktopOnly>
     );
 }
