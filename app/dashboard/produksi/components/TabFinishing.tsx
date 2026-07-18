@@ -288,7 +288,7 @@ export default function TabFinishing() {
                         </div>
 
                         {/* Stats: 6 cards */}
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 6, marginTop: 10 }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))", gap: 6, marginTop: 10 }}>
                             {[
                                 { label: "Total",    val: stats.total,    color: "#3C2F2F", bg: "#F8F4EF" },
                                 { label: "Belum",    val: stats.belum,    color: "#6B7280", bg: "#F3F4F6" },

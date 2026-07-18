@@ -159,7 +159,7 @@ export default function DashboardPage() {
     return (
         <div className="page-content space-y-5">
             {/* Page header */}
-            <div className="page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+            <div className="page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "0.625rem" }}>
                 <div>
                     <h1 className="page-title-h1">Dashboard Performa Usaha</h1>
                     <p className="page-subtitle">
@@ -184,7 +184,7 @@ export default function DashboardPage() {
             </div>
 
             {/* KPI Cards */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1rem" }}>
+            <div className="rgrid rgrid-4">
                 {[
                     { label: "Order Bulan Ini", value: `${totalOrderCount} order`, sub: formatCurrency(totalOrderValue), bg: "#FDF3E7", border: "#E8DCCF", icon: "📦" },
                     { label: "Total Saldo", value: formatCurrency(totalSaldo), sub: `${bankAccounts.length} rekening`, bg: "#FDF3E7", border: "#E8DCCF", icon: "🏦" },
@@ -227,7 +227,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Charts row */}
-            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "1rem" }}>
+            <div className="rgrid rgrid-main-side">
                 {/* Line chart */}
                 <div className="card">
                     <div className="card-header" style={{ fontSize: 13 }}>📊 Pemasukan vs Pengeluaran (Juta Rupiah)</div>
@@ -271,7 +271,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Production bar + recent orders */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+            <div className="rgrid rgrid-half">
                 <div className="card">
                     <div className="card-header" style={{ fontSize: 13 }}>🏭 Distribusi Status Produksi</div>
                     <div className="card-body">
