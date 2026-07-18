@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useAlucurvDashboard, type AluDashOrder } from "@/lib/alucurv/useAlucurvDashboard";
+import { isAluTransfer, computeAluTotals } from "@/lib/alucurv/transaksi";
 import DomeCard from "@/components/layout/DomeCard";
 
 type AlucurvOrder = AluDashOrder;
@@ -45,9 +46,8 @@ export default function AlucurvWorkspacePage() {
     };
     const txnsThisMonth = (data?.txThisMonth ?? []).filter((t) => t.date && isThisMonth(t.date));
 
-    const pemasukanBulanIni = txnsThisMonth.filter((t) => t.type === "Pemasukan").reduce((s, t) => s + Number(t.amount || 0), 0);
-    const pengeluaranBulanIni = txnsThisMonth.filter((t) => t.type === "Pengeluaran").reduce((s, t) => s + Number(t.amount || 0), 0);
-    const labaBulanIni = pemasukanBulanIni - pengeluaranBulanIni;
+    // Mutasi antar akun dikecualikan dari total operasional.
+    const { masuk: pemasukanBulanIni, keluar: pengeluaranBulanIni, laba: labaBulanIni } = computeAluTotals(txnsThisMonth);
 
     const totalUangBeredar = accounts.reduce((s, acc) => s + acc.balance, 0);
 
@@ -80,6 +80,7 @@ export default function AlucurvWorkspacePage() {
     const subCategoryMap = new Map(subCategories.map((c) => [c.id, c]));
     const rekapMap = new Map<string, { name: string; type: string; total: number }>();
     for (const t of txnsThisMonth) {
+        if (isAluTransfer(t)) continue; // mutasi bukan omzet/biaya
         const cat = t.sub_category_id ? subCategoryMap.get(t.sub_category_id) : null;
         const name = cat?.name ?? "Tanpa Kategori";
         const type = cat?.type ?? t.type;

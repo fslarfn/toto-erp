@@ -27,7 +27,7 @@ export interface AluDashOrder {
     produksi: boolean; perakitan: boolean; packing: boolean; dikirim: boolean; sampai: boolean;
 }
 export interface AluDashInvoice { id: string; status: string }
-export interface AluDashTransaction { id: string; date: string; type: string; amount: number; account_id: string | null; sub_category_id: string | null }
+export interface AluDashTransaction { id: string; date: string; type: string; amount: number; account_id: string | null; sub_category_id: string | null; transfer_group?: string | null }
 export interface AluDashStockItem { id: string; name: string; min_stock: number; opening_stock: number }
 export interface AluDashAccount { id: string; name: string; type: string; balance: number }
 export interface AluDashSubCategory { id: string; name: string; type: string }
@@ -64,6 +64,21 @@ async function fetchAllPaged<T>(
 
 const ORDER_COLS = "id, customer, description, channel, deadline, price, received_amount, produksi, perakitan, packing, dikirim, sampai";
 const TX_COLS = "id, date, type, amount, account_id, sub_category_id";
+// transfer_group ada setelah migrasi 20260718_alucurv_mutasi.sql;
+// bila kolom belum ada, fallback ke kolom dasar (mutasi dianggap tidak ada).
+const TX_COLS_TG = `${TX_COLS}, transfer_group`;
+
+async function fetchTxThisMonth(monthStart: string): Promise<AluDashTransaction[]> {
+    try {
+        return await fetchAllPaged<AluDashTransaction>((f, t) =>
+            supabase.from("alu_transactions").select(TX_COLS_TG).gte("date", monthStart).order("id").range(f, t)
+        );
+    } catch {
+        return await fetchAllPaged<AluDashTransaction>((f, t) =>
+            supabase.from("alu_transactions").select(TX_COLS).gte("date", monthStart).order("id").range(f, t)
+        );
+    }
+}
 
 async function fetchAccounts(): Promise<AluDashAccount[]> {
     // Sumber kebenaran: view (dihitung di DB dari SEMUA transaksi).
@@ -106,9 +121,7 @@ async function fetchDashboard(): Promise<AlucurvDashboardData> {
     const [orders, invoices, txThisMonth, stockRes, subCatRes, bendingRes, accounts] = await Promise.all([
         fetchAllPaged<AluDashOrder>((f, t) => supabase.from("alu_orders").select(ORDER_COLS).order("id").range(f, t)),
         fetchAllPaged<AluDashInvoice>((f, t) => supabase.from("alu_invoices").select("id, status").order("id").range(f, t)),
-        fetchAllPaged<AluDashTransaction>((f, t) =>
-            supabase.from("alu_transactions").select(TX_COLS).gte("date", monthStart).order("id").range(f, t)
-        ),
+        fetchTxThisMonth(monthStart),
         supabase.from("alu_stock_items").select("id, name, min_stock, opening_stock"),
         supabase.from("alu_sub_categories").select("id, name, type"),
         supabase.from("alu_bending_orders").select("id, amount, status"),
