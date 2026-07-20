@@ -4,6 +4,7 @@ import { usePesanan } from "@/lib/pesanan-store";
 import { useCrm, normalizeName } from "@/lib/crm-store";
 import { waUrl } from "@/lib/wa";
 import { pushNotify } from "@/lib/notify";
+import { usePaged, PageNav } from "@/components/layout/PageNav";
 
 /* ================================================================
    MENU TAGIHAN
@@ -104,6 +105,11 @@ export default function TagihanPage() {
             .sort(([a], [b]) => a.localeCompare(b));
     }, [customerMap, search]);
 
+    // Render dipotong per halaman — sebelumnya SEMUA customer setahun (ratusan
+    // kartu + ribuan baris invoice) masuk DOM sekaligus dan bikin halaman berat.
+    // Kartu ringkasan di atas tetap dihitung dari seluruh data terfilter.
+    const { paged: pagedCustomers, page, setPage, totalPages, total: totalCustomers } = usePaged(filteredCustomers, 30);
+
     /* ── Summary totals ──────────────────────────────────── */
     const { totalAll, totalLunas, totalBelum, countAll, countLunas, countBelum } = useMemo(() => {
         let totalAll = 0, totalLunas = 0, countAll = 0, countLunas = 0;
@@ -194,7 +200,7 @@ export default function TagihanPage() {
                     </div>
                 ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                        {filteredCustomers.map(([customer, invoices]) => {
+                        {pagedCustomers.map(([customer, invoices]) => {
                             const custTotal = (invoices as typeof Array.prototype).reduce((s: number, inv: { total: number }) => s + inv.total, 0);
                             const custLunas = (invoices as typeof Array.prototype).filter((inv: { is_paid: boolean }) => inv.is_paid).reduce((s: number, inv: { total: number }) => s + inv.total, 0);
                             const custBelum = custTotal - custLunas;
@@ -298,6 +304,7 @@ export default function TagihanPage() {
                                 </div>
                             );
                         })}
+                        <PageNav page={page} totalPages={totalPages} setPage={setPage} total={totalCustomers} label="customer" />
                     </div>
                 )}
             </div>

@@ -3,6 +3,7 @@ import DesktopOnly from "@/components/layout/DesktopOnly";
 import React, { useState, useMemo } from "react";
 import { usePesanan, PesananRow } from "@/lib/pesanan-store";
 import { useSuratJalan, SJItem } from "@/lib/surat-jalan-store";
+import { usePaged, PageNav } from "@/components/layout/PageNav";
 
 /* ================================================================
    SURAT JALAN
@@ -423,6 +424,9 @@ function TabLog() {
         return true;
     });
 
+    // Render dipotong per halaman — sebelumnya 1.200+ surat jalan masuk DOM sekaligus.
+    const { paged: pagedSJ, page: sjPage, setPage: setSjPage, totalPages: sjTotalPages } = usePaged(displayed, 50);
+
     const [expanded, setExpanded] = useState<string | null>(null);
 
     const [updateModal, setUpdateModal] = useState<string | null>(null);
@@ -499,6 +503,7 @@ function TabLog() {
                     <div style={{ fontSize: 11, marginTop: 4 }}>Buat SJ dari tab <strong>Untuk Customer</strong> atau <strong>Untuk Pewarnaan</strong></div>
                 </div>
             ) : (
+                <>
                 <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12 }}>
                     <thead>
                         <tr>
@@ -508,7 +513,7 @@ function TabLog() {
                         </tr>
                     </thead>
                     <tbody>
-                        {displayed.map((sj, idx) => {
+                        {pagedSJ.map((sj, idx) => {
                             const totalQty = sj.items.reduce((a, it) => a + (parseFloat(it.qty) || 0), 0);
                             const isExpanded = expanded === sj.id;
                             const rowBg = idx % 2 === 1 ? "#FAFAF8" : "white";
@@ -579,6 +584,8 @@ function TabLog() {
                         })}
                     </tbody>
                 </table>
+                <PageNav page={sjPage} totalPages={sjTotalPages} setPage={setSjPage} total={displayed.length} label="surat jalan" />
+                </>
             )}
 
             {updateModal && (

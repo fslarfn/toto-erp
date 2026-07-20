@@ -4,6 +4,7 @@ import { useCrm, normalizeName } from "@/lib/crm-store";
 import { usePesanan } from "@/lib/pesanan-store";
 import type { Customer, CustomerType } from "@/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { usePaged, PageNav } from "@/components/layout/PageNav";
 
 const TYPE_OPTS: { value: CustomerType; label: string; color: string }[] = [
     { value: "retail", label: "Retail", color: "#2563EB" },
@@ -115,6 +116,10 @@ export default function CrmPage() {
         if (q) list = list.filter((c) => [c.name, c.phone, c.pic, c.address].join(" ").toLowerCase().includes(q));
         return list;
     }, [customers, search, waFilter]);
+
+    // Render dipotong per halaman — sebelumnya 2 ribu+ customer masuk DOM sekaligus.
+    // Kartu statistik di atas tetap dihitung dari seluruh data.
+    const { paged: pagedCustomers, page, setPage, totalPages } = usePaged(filtered, 50);
 
     const withWa = customers.filter((c) => c.phone.trim()).length;
 
@@ -250,7 +255,7 @@ export default function CrmPage() {
                                 <tr><td colSpan={7} style={{ textAlign: "center", padding: 30, color: "#B89678" }}>Memuat…</td></tr>
                             ) : filtered.length === 0 ? (
                                 <tr><td colSpan={7} style={{ textAlign: "center", padding: 30, color: "#B89678" }}>Belum ada customer. Klik <strong>Import dari Pesanan</strong> atau <strong>Tambah Customer</strong>.</td></tr>
-                            ) : filtered.map((c) => {
+                            ) : pagedCustomers.map((c) => {
                                 const s = statOf(c.name);
                                 const tm = typeMeta(c.type);
                                 const wa = waLink(c.phone, waGreeting(c.name, c.pic));
@@ -275,6 +280,7 @@ export default function CrmPage() {
                             })}
                         </tbody>
                     </table>
+                    <PageNav page={page} totalPages={totalPages} setPage={setPage} total={filtered.length} label="customer" />
                 </div>
             </div>
             </>)}
