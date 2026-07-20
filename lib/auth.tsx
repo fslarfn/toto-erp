@@ -1,7 +1,7 @@
 "use client";
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { User, UserRole } from "@/types";
-import { supabase } from "@/lib/supabase-client";
+import { supabase, clearSupabaseToken } from "@/lib/supabase-client";
 
 interface AuthContextType {
     user: User | null;
@@ -97,6 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const logout = () => {
         setUser(null);
         localStorage.removeItem(LS_USER_KEY);
+        clearSupabaseToken();
         // Hapus session cookie di server
         fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
     };
