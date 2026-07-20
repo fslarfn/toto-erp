@@ -63,6 +63,15 @@ export function isRowFilled(r: PesananRow): boolean {
     return !!(r.customer || r.deskripsi || r.tanggal);
 }
 
+// Kolom yang di-fetch dari pesanan_rows — persis yang dipetakan mapRows.
+// SENGAJA tanpa created_at & last_status_change (tidak dipakai store; dua kolom
+// terberat di payload). Kalau menambah field baru di mapRows, tambahkan di sini.
+const PESANAN_COLS =
+    "id, tanggal, customer, deskripsi, ukuran, qty, harga, no_inv, no_sj, " +
+    "di_produksi, di_warna, siap_kirim, di_kirim, ekspedisi, color_marker, " +
+    "printed_at, po_label, is_packing, is_paid, production_note, metode_kirim, " +
+    "shipped_at, sync_id, finishing_status, finishing_operator, finishing_at, is_repair";
+
 type Ctx = {
     rows: PesananRow[];
     loading: boolean;
@@ -127,8 +136,11 @@ export function PesananProvider({ children }: { children: ReactNode }) {
 
     // Helper to fetch data with range or filter
     const fetchRange = async (from: number, to: number, year?: number, month?: number | "all") => {
-        let query = supabase.from("pesanan_rows").select("*");
-        
+        // Kolom eksplisit = persis yang dipakai mapRows. select("*") ikut menyeret
+        // created_at + last_status_change yang TIDAK pernah dipakai store —
+        // dua kolom itu justru yang terberat (±16% dari ±9 MB total unduhan).
+        let query = supabase.from("pesanan_rows").select(PESANAN_COLS);
+
         if (year && month && month !== "all") {
             const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
             const lastDay = new Date(year, typeof month === "number" ? month : 0, 0).getDate();
@@ -138,8 +150,12 @@ export function PesananProvider({ children }: { children: ReactNode }) {
             query = query.gte("tanggal", `${year}-01-01`).lte("tanggal", `${year}-12-31`);
         }
 
+        // TERBARU DULU (id menurun): chunk pertama = 1000 baris terbaru — grid
+        // Input Pesanan & Produksi langsung bisa dipakai dalam ±1 detik, riwayat
+        // lama menyusul di background. State tetap di-sort ulang per id saat merge,
+        // jadi urutan tampilan tidak berubah.
         const { data, error } = await query
-            .order("id", { ascending: true })
+            .order("id", { ascending: false })
             .range(from, to);
 
         if (error) throw error;
