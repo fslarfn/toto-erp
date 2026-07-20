@@ -105,6 +105,28 @@ export default function AlucurvKeuanganPage() {
         }
     };
 
+    // ── Filter per tanggal ────────────────────────────────────
+    // Rentang kosong = semua data. Preset: Hari Ini / Bulan Ini / Semua.
+    const [range, setRange] = useState({ from: "", to: "" });
+    const todayStr = now.toISOString().slice(0, 10);
+    const monthStart = todayStr.slice(0, 7) + "-01";
+    const filteredRows = rows.filter(
+        (r) => (!range.from || r.date >= range.from) && (!range.to || r.date <= range.to)
+    );
+    const filterAktif = range.from !== "" || range.to !== "";
+    const presetBtn = (label: string, from: string, to: string, active: boolean): React.ReactElement => (
+        <button
+            type="button"
+            onClick={() => setRange({ from, to })}
+            style={{
+                fontSize: 11, padding: "6px 12px", borderRadius: 6, fontWeight: 600, cursor: "pointer",
+                border: "1px solid var(--border)",
+                background: active ? "var(--primary)" : "white",
+                color: active ? "white" : "var(--text-med)",
+            }}
+        >{label}</button>
+    );
+
     const accountOptions = accounts.rows.map((a) => ({ value: a.id, label: a.name }));
     // Semua kategori (dipakai untuk lookup Excel & tabel, di situ tidak ada konteks Tipe yang dipilih).
     const subCategoryOptionsAll = subCategories.rows.map((c) => ({ value: c.id, label: c.name }));
@@ -141,7 +163,8 @@ export default function AlucurvKeuanganPage() {
     ];
 
     // Mutasi antar akun DIKECUALIKAN dari total operasional (lib/alucurv/transaksi).
-    const { masuk: totalMasuk, keluar: totalKeluar } = computeAluTotals(rows);
+    // Total mengikuti filter tanggal — admin bisa cek total per hari/periode.
+    const { masuk: totalMasuk, keluar: totalKeluar } = computeAluTotals(filteredRows);
 
     return (
         <div style={{ padding: 24 }}>
@@ -149,13 +172,35 @@ export default function AlucurvKeuanganPage() {
             <p style={{ fontSize: 13, color: "var(--text-med)", marginBottom: 16 }}>
                 Catatan kas masuk/keluar Alucurv. Akun &amp; Kategori mengikuti master data di Pengaturan.
             </p>
+            {/* Filter per tanggal */}
+            <div style={{ background: "white", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 14px", marginBottom: 12, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                    <label style={mutasiLabel}>Dari Tanggal</label>
+                    <input type="date" value={range.from} onChange={(e) => setRange((p) => ({ ...p, from: e.target.value }))} style={mutasiInput} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                    <label style={mutasiLabel}>Sampai Tanggal</label>
+                    <input type="date" value={range.to} onChange={(e) => setRange((p) => ({ ...p, to: e.target.value }))} style={mutasiInput} />
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                    {presetBtn("Hari Ini", todayStr, todayStr, range.from === todayStr && range.to === todayStr)}
+                    {presetBtn("Bulan Ini", monthStart, todayStr, range.from === monthStart && range.to === todayStr)}
+                    {presetBtn("Semua", "", "", !filterAktif)}
+                </div>
+                <span style={{ fontSize: 11, color: "var(--text-med)", fontWeight: 600, marginLeft: "auto" }}>
+                    {filterAktif
+                        ? `Menampilkan ${filteredRows.length} dari ${rows.length} transaksi`
+                        : `${rows.length} transaksi (semua tanggal)`}
+                </span>
+            </div>
+
             <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
                 <div style={{ padding: "10px 16px", borderRadius: 10, background: "var(--bg-secondary)", border: "1px solid var(--border)" }}>
-                    <div style={{ fontSize: 10, color: "var(--text-med)", fontWeight: 700, textTransform: "uppercase" }}>Total Pemasukan</div>
+                    <div style={{ fontSize: 10, color: "var(--text-med)", fontWeight: 700, textTransform: "uppercase" }}>Total Pemasukan{filterAktif ? " (Periode)" : ""}</div>
                     <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-dark)" }}>Rp {totalMasuk.toLocaleString("id-ID")}</div>
                 </div>
                 <div style={{ padding: "10px 16px", borderRadius: 10, background: "var(--bg-secondary)", border: "1px solid var(--border)" }}>
-                    <div style={{ fontSize: 10, color: "var(--text-med)", fontWeight: 700, textTransform: "uppercase" }}>Total Pengeluaran</div>
+                    <div style={{ fontSize: 10, color: "var(--text-med)", fontWeight: 700, textTransform: "uppercase" }}>Total Pengeluaran{filterAktif ? " (Periode)" : ""}</div>
                     <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-dark)" }}>Rp {totalKeluar.toLocaleString("id-ID")}</div>
                 </div>
             </div>
@@ -204,7 +249,7 @@ export default function AlucurvKeuanganPage() {
             <div style={{ marginBottom: 16 }}>
                 <ExcelImportButton columns={excelColumns} onImport={(rows) => insertRows(rows)} />
             </div>
-            <AlucurvCrudTable fields={fields} rows={rows} loading={loading} onAdd={handleAdd} onDelete={deleteRow} onUpdate={updateRow} />
+            <AlucurvCrudTable fields={fields} rows={filteredRows} loading={loading} onAdd={handleAdd} onDelete={deleteRow} onUpdate={updateRow} />
         </div>
     );
 }
