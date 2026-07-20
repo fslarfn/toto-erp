@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react";
 import { Order, Material, CashFlow, Payment, BankAccount, AccountReconciliation } from "@/types";
 import { supabase } from "@/lib/supabase-client";
 import { generateNumbers } from "@/lib/utils";
@@ -41,6 +41,8 @@ interface AppStore {
     recalculateBalances: () => void;
     /** Sinkronkan SELURUH akun via RPC (idempotent). Mengembalikan ringkasan. */
     syncAllBalances: () => Promise<AccountReconciliation[]>;
+    /** Dipanggil otomatis oleh useStore — memulai fetch data saat pertama kali dipakai (lazy-load). */
+    ensureLoaded: () => void;
 }
 
 const StoreContext = createContext<AppStore | null>(null);
@@ -222,9 +224,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
     const [loading, setLoading] = useState(true);
 
-    // Load all data on mount (paginasi → hindari cap 1000 baris / "data hilang")
+    // Lazy-load: fetch 5 tabel (paginasi → hindari cap 1000 baris) baru dimulai
+    // saat ada halaman yang memakai useStore — BUKAN saat provider mount.
+    // Provider ini ada di ROOT layout, jadi tanpa ini halaman login pun ikut
+    // mengunduh ribuan baris cash_flow dkk.
+    const startedRef = useRef(false);
+    const cancelledRef = useRef(false);
+    const [started, setStarted] = useState(false);
     useEffect(() => {
-        let cancelled = false;
+        // Reset saat (re)mount — StrictMode dev menjalankan cleanup lalu setup ulang;
+        // tanpa reset, ref tertinggal true dan hasil fetch dibuang selamanya.
+        cancelledRef.current = false;
+        return () => { cancelledRef.current = true; };
+    }, []);
+
+    const ensureLoaded = useCallback(() => {
+        if (startedRef.current) return;
+        startedRef.current = true;
+        setStarted(true);
+        const cancelled = () => cancelledRef.current;
         (async () => {
             try {
                 const [orders, mats, cf, pays, ba] = await Promise.all([
@@ -234,7 +252,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                     fetchAllPaged((f, t) => supabase.from("payments").select("*").order("payment_date", { ascending: false }).range(f, t)),
                     fetchAllPaged((f, t) => supabase.from("bank_accounts").select("*").range(f, t)),
                 ]);
-                if (!cancelled) {
+                if (!cancelled()) {
                     setOrders(orders.map(dbToOrder));
                     setMaterials(mats.map(dbToMaterial));
                     setCashFlow(cf.map(dbToCashFlow));
@@ -244,14 +262,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             } catch (e) {
                 console.error("Store fetch error:", e);
             } finally {
-                if (!cancelled) setLoading(false);
+                if (!cancelled()) setLoading(false);
             }
         })();
-        return () => { cancelled = true; };
     }, []);
 
-    // Realtime Subscriptions
+    // Realtime Subscriptions — ikut lazy: baru connect setelah data mulai dimuat.
     useEffect(() => {
+        if (!started) return;
         const channel = supabase
             .channel("realtime_general_store")
             // 1. Orders
@@ -374,8 +392,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, []);
-    
+    }, [started]);
+
 
     const addOrder = useCallback((orderData: Parameters<AppStore["addOrder"]>[0]) => {
         const nums = generateNumbers(orders.length);
@@ -608,6 +626,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             addMaterial, updateMaterial, deleteMaterial,
             addCashFlow, updateCashFlow, deleteCashFlow, addTransfer, addPayment, updateBankBalance,
             getComputedBalance, addAdjustment, reconcile, recalculateBalances, syncAllBalances,
+            ensureLoaded,
         }}>
             {children}
         </StoreContext.Provider>
@@ -616,6 +635,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
 export function useStore() {
     const ctx = useContext(StoreContext);
+    // Halaman yang memakai hook ini otomatis memicu fetch pertama (lazy-load).
+    // Effect dipanggil SEBELUM guard throw (rules-of-hooks: urutan hook wajib
+    // konsisten antar-render), dengan dep stabil (ensureLoaded = useCallback).
+    const ensureLoaded = ctx?.ensureLoaded;
+    useEffect(() => { ensureLoaded?.(); }, [ensureLoaded]);
     if (!ctx) throw new Error("useStore must be used inside StoreProvider");
     return ctx;
 }

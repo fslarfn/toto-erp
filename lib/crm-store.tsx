@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react";
 import { supabase } from "@/lib/supabase-client";
 import type { Customer, CustomerType } from "@/types";
 
@@ -45,6 +45,8 @@ type Ctx = {
     deleteCustomer: (id: string) => Promise<void>;
     /** Import nama-nama (mis. dari pesanan) yang belum ada di master. Mengembalikan jumlah baru. */
     importNames: (names: string[]) => Promise<number>;
+    /** Dipanggil otomatis oleh useCrm — memulai fetch data saat pertama kali dipakai (lazy-load). */
+    ensureLoaded: () => void;
 };
 
 const CrmCtx = createContext<Ctx | null>(null);
@@ -53,9 +55,22 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [loading, setLoading] = useState(true);
 
-    // Initial fetch (paginasi → hindari cap 1000)
+    // Lazy-load: fetch (paginasi → hindari cap 1000) baru dimulai saat ada
+    // halaman yang memakai useCrm — bukan saat provider mount.
+    const startedRef = useRef(false);
+    const cancelledRef = useRef(false);
+    const [started, setStarted] = useState(false);
     useEffect(() => {
-        let cancelled = false;
+        // Reset saat (re)mount — StrictMode dev menjalankan cleanup lalu setup ulang;
+        // tanpa reset, ref tertinggal true dan hasil fetch dibuang selamanya.
+        cancelledRef.current = false;
+        return () => { cancelledRef.current = true; };
+    }, []);
+
+    const ensureLoaded = useCallback(() => {
+        if (startedRef.current) return;
+        startedRef.current = true;
+        setStarted(true);
         (async () => {
             try {
                 const all: Record<string, unknown>[] = [];
@@ -69,15 +84,15 @@ export function CrmProvider({ children }: { children: ReactNode }) {
                     if (data && data.length) { all.push(...data); if (data.length < 1000) break; from += 1000; }
                     else break;
                 }
-                if (!cancelled) setCustomers(all.map(dbToCustomer));
+                if (!cancelledRef.current) setCustomers(all.map(dbToCustomer));
             } catch (e) { console.error("CRM fetch error:", e); }
-            finally { if (!cancelled) setLoading(false); }
+            finally { if (!cancelledRef.current) setLoading(false); }
         })();
-        return () => { cancelled = true; };
     }, []);
 
-    // Realtime
+    // Realtime — ikut lazy: baru connect setelah data mulai dimuat.
     useEffect(() => {
+        if (!started) return;
         const channel = supabase
             .channel("realtime_customers")
             .on("postgres_changes", { event: "*", schema: "public", table: "customers" }, (payload) => {
@@ -92,7 +107,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
             })
             .subscribe();
         return () => { supabase.removeChannel(channel); };
-    }, []);
+    }, [started]);
 
     const addCustomer = useCallback(async (c: Omit<Customer, "id" | "createdAt" | "updatedAt">) => {
         const { error } = await supabase.from("customers").insert(customerToDb(c));
@@ -148,7 +163,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     }, [customers]);
 
     return (
-        <CrmCtx.Provider value={{ customers, loading, addCustomer, updateCustomer, deleteCustomer, importNames }}>
+        <CrmCtx.Provider value={{ customers, loading, addCustomer, updateCustomer, deleteCustomer, importNames, ensureLoaded }}>
             {children}
         </CrmCtx.Provider>
     );
@@ -156,6 +171,11 @@ export function CrmProvider({ children }: { children: ReactNode }) {
 
 export function useCrm() {
     const ctx = useContext(CrmCtx);
+    // Halaman yang memakai hook ini otomatis memicu fetch pertama (lazy-load).
+    // Effect dipanggil SEBELUM guard throw (rules-of-hooks: urutan hook wajib
+    // konsisten antar-render), dengan dep stabil (ensureLoaded = useCallback).
+    const ensureLoaded = ctx?.ensureLoaded;
+    useEffect(() => { ensureLoaded?.(); }, [ensureLoaded]);
     if (!ctx) throw new Error("useCrm must be used inside CrmProvider");
     return ctx;
 }

@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from "react";
 import { supabase } from "@/lib/supabase-client";
 
 export type AbsensiRecord = {
@@ -47,6 +47,8 @@ type AbsensiCtx = {
     refreshFromLS: () => void;
     addIzin: (i: Omit<IzinRecord, "id" | "created_at">) => void;
     deleteIzin: (id: number) => void;
+    /** Dipanggil otomatis oleh useAbsensi — memulai fetch data saat pertama kali dipakai (lazy-load). */
+    ensureLoaded: () => void;
 };
 
 function padZero(n: number) { return n.toString().padStart(2, "0"); }
@@ -111,11 +113,25 @@ export function AbsensiProvider({ children }: { children: ReactNode }) {
     const [izin, setIzin] = useState<IzinRecord[]>([]);
     const [loading, setLoading] = useState(true);
 
-    // ── PHASED LOAD ──────────────────────────────────────────────
+    // ── PHASED LOAD (lazy) ───────────────────────────────────────
     // Fase 1: Hari ini saja → selesai dalam < 300ms → loading=false
     // Fase 2: 90 hari terakhir di background → dashboard punya data lengkap
+    // Lazy-load: baru dimulai saat ada halaman yang memakai useAbsensi.
+    const startedRef = useRef(false);
+    const cancelledRef = useRef(false);
+    const [started, setStarted] = useState(false);
     useEffect(() => {
-        let cancelled = false;
+        // Reset saat (re)mount — StrictMode dev menjalankan cleanup lalu setup ulang;
+        // tanpa reset, ref tertinggal true dan hasil fetch dibuang selamanya.
+        cancelledRef.current = false;
+        return () => { cancelledRef.current = true; };
+    }, []);
+
+    const ensureLoaded = useCallback(() => {
+        if (startedRef.current) return;
+        startedRef.current = true;
+        setStarted(true);
+        const cancelled = () => cancelledRef.current;
 
         (async () => {
             const today = getTodayWIB();
@@ -128,7 +144,7 @@ export function AbsensiProvider({ children }: { children: ReactNode }) {
                     supabase.from("izin_absensi").select("*").gte("tanggal", today),
                 ]);
 
-                if (!cancelled) {
+                if (!cancelled()) {
                     if (todayAbs) setAbsensi(todayAbs.map(dbToAbsensi));
                     if (todayIzin) setIzin(todayIzin as IzinRecord[]);
                     setLoading(false); // ← Unblock UI setelah data hari ini tiba
@@ -140,7 +156,7 @@ export function AbsensiProvider({ children }: { children: ReactNode }) {
                     supabase.from("izin_absensi").select("*").gte("tanggal", cutoff).order("tanggal", { ascending: false }),
                 ]);
 
-                if (!cancelled) {
+                if (!cancelled()) {
                     if (histAbs) setAbsensi(histAbs.map(dbToAbsensi));
                     if (histIzin) setIzin(histIzin as IzinRecord[]);
                 }
@@ -157,22 +173,21 @@ export function AbsensiProvider({ children }: { children: ReactNode }) {
                                 }
                                 const { data: freshData } = await supabase
                                     .from("absensi").select(ABSENSI_COLS).gte("tanggal", cutoff).order("tanggal", { ascending: false });
-                                if (!cancelled && freshData) setAbsensi(freshData.map(dbToAbsensi));
+                                if (!cancelled() && freshData) setAbsensi(freshData.map(dbToAbsensi));
                                 localStorage.removeItem("totobaru_absensi");
                             }
                         } catch { /* ignore */ }
                     }
                 }
             } catch {
-                if (!cancelled) setLoading(false);
+                if (!cancelled()) setLoading(false);
             }
         })();
-
-        return () => { cancelled = true; };
     }, []);
 
-    // ── REALTIME ─────────────────────────────────────────────────
+    // ── REALTIME (ikut lazy: baru connect setelah data mulai dimuat) ──
     useEffect(() => {
+        if (!started) return;
         const channel = supabase
             .channel("realtime_absensi_v2")
             .on("postgres_changes", { event: "*", schema: "public", table: "absensi" }, (payload) => {
@@ -220,7 +235,7 @@ export function AbsensiProvider({ children }: { children: ReactNode }) {
             .subscribe();
 
         return () => { supabase.removeChannel(channel); };
-    }, []);
+    }, [started]);
 
     // ── O(1) LOOKUP SETS ─────────────────────────────────────────
     // Menggantikan .some() O(n) per karyawan menjadi Set.has() O(1)
@@ -331,6 +346,7 @@ export function AbsensiProvider({ children }: { children: ReactNode }) {
                 getAbsensiByDate, getAbsensiByKaryawan, getAbsensiHariIni,
                 sudahAbsenMasuk, sudahAbsenPulang, deleteAbsensi, getAbsensiFoto, refreshFromLS,
                 addIzin, deleteIzin,
+                ensureLoaded,
             }}
         >
             {children}
@@ -340,6 +356,11 @@ export function AbsensiProvider({ children }: { children: ReactNode }) {
 
 export function useAbsensi() {
     const ctx = useContext(AbsensiContext);
+    // Halaman yang memakai hook ini otomatis memicu fetch pertama (lazy-load).
+    // Effect dipanggil SEBELUM guard throw (rules-of-hooks: urutan hook wajib
+    // konsisten antar-render), dengan dep stabil (ensureLoaded = useCallback).
+    const ensureLoaded = ctx?.ensureLoaded;
+    useEffect(() => { ensureLoaded?.(); }, [ensureLoaded]);
     if (!ctx) throw new Error("useAbsensi must be used inside AbsensiProvider");
     return ctx;
 }
