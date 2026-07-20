@@ -50,6 +50,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Payload tidak lengkap" }, { status: 400 });
     }
 
+    // Hardening (security review #2): endpoint ini bisa dipanggil user login
+    // mana pun (notifikasi lahir dari aksi user berhak-rendah juga). Cegah
+    // penyalahgunaan sbg phishing: `url` HARUS path internal (diawali satu "/"),
+    // bukan tautan eksternal (//evil, https://…, javascript:). Plus batasi
+    // panjang title/body agar tak dipakai spam payload besar.
+    if (payload.url !== undefined && !/^\/(?!\/)/.test(payload.url)) {
+      return NextResponse.json(
+        { error: "url harus path internal (diawali '/')" },
+        { status: 400 }
+      );
+    }
+    if (payload.title.length > 200 || payload.body.length > 1000) {
+      return NextResponse.json({ error: "Judul/isi terlalu panjang" }, { status: 400 });
+    }
+
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
