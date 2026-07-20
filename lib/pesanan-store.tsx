@@ -66,6 +66,8 @@ export function isRowFilled(r: PesananRow): boolean {
 type Ctx = {
     rows: PesananRow[];
     loading: boolean;
+    /** Id baris yang gagal tersimpan (jaringan/DB) — ditampilkan badge merah di grid. */
+    failedRowIds: Set<number>;
     updateRow: (id: number, patch: Partial<PesananRow>, autoFlush?: boolean) => void;
     flushRow: (id: number) => Promise<void>;
     flushAllRows: () => Promise<void>;
@@ -90,6 +92,38 @@ export function PesananProvider({ children }: { children: ReactNode }) {
     // Menyimpan field mana yang sedang dalam proses save (dalam penerbangan ke DB)
     // Melindungi field tersebut dari overwrite oleh Realtime
     const savingKeys = useRef<Record<number, Set<string>>>({});
+    // NILAI yang sedang dalam penerbangan ke DB (bukan cuma nama field-nya) —
+    // dipakai protectRow untuk menimpakan ulang ketikan di atas data server.
+    const inFlightPatches = useRef<Record<number, Partial<PesananRow>>>({});
+    // Nilai yang BARU BERHASIL disimpan (grace 8 dtk): echo realtime yang telat
+    // (membawa nilai lama) tidak boleh menimpa balik ketikan yang lebih baru.
+    const recentSaves = useRef<Record<number, Record<string, { value: unknown; until: number }>>>({});
+    // Baris yang flush-nya gagal (jaringan/DB) — ditampilkan sebagai badge merah
+    // di nomor baris; dicoba ulang otomatis dengan jeda lebih panjang.
+    const failedRef = useRef<Set<number>>(new Set());
+    const [failedRowIds, setFailedRowIds] = useState<Set<number>>(new Set());
+
+    /** Timpakan perubahan lokal yang belum/baru tersimpan di atas baris dari server.
+        Urutan menang: pending (belum dikirim) > in-flight (sedang dikirim) > recent-save
+        (baru tersimpan, tahan echo lama) > nilai server. */
+    const protectRow = useCallback((serverRow: PesananRow): PesananRow => {
+        const id = serverRow.id;
+        let out = serverRow;
+        const rs = recentSaves.current[id];
+        if (rs) {
+            const now = Date.now();
+            for (const f of Object.keys(rs)) {
+                if (rs[f].until > now) out = { ...out, [f]: rs[f].value };
+                else delete rs[f];
+            }
+            if (Object.keys(rs).length === 0) delete recentSaves.current[id];
+        }
+        const inf = inFlightPatches.current[id];
+        if (inf && Object.keys(inf).length > 0) out = { ...out, ...inf };
+        const pend = pendingPatches.current[id];
+        if (pend && Object.keys(pend).length > 0) out = { ...out, ...pend };
+        return out;
+    }, []);
 
     // Helper to fetch data with range or filter
     const fetchRange = async (from: number, to: number, year?: number, month?: number | "all") => {
@@ -159,7 +193,8 @@ export function PesananProvider({ children }: { children: ReactNode }) {
             }
 
             if (allData.length > 0) {
-                const newRows = mapRows(allData);
+                // protectRow: jangan timpa ketikan yang belum/baru tersimpan
+                const newRows = mapRows(allData).map(protectRow);
                 setRows(prev => {
                     // Gabungkan dengan data yang sudah ada, hindari duplikat
                     const existingIds = new Set(newRows.map(r => r.id));
@@ -178,7 +213,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [protectRow]);
 
     // Lazy-load: fetch SEMUA baris baru dimulai saat ada halaman yang benar-benar
     // memakai store ini (dipicu usePesanan), BUKAN saat provider mount. Provider ini
@@ -208,7 +243,8 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                 const firstChunk = await fetchRange(0, 999);
                 if (firstChunk && !cancelled()) {
                     setRows(prev => {
-                        const mapped = mapRows(firstChunk);
+                        // protectRow: jangan timpa ketikan yang belum/baru tersimpan
+                        const mapped = mapRows(firstChunk).map(protectRow);
                         const existingIds = new Set(mapped.map(r => r.id));
                         const filteredPrev = prev.filter(r => r.id >= 1000000000 || !existingIds.has(r.id));
                         return [...mapped, ...filteredPrev].sort((a, b) => a.id - b.id);
@@ -227,7 +263,8 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                     const data = await fetchRange(from, from + 999);
                     if (data && data.length > 0) {
                         setRows(prev => {
-                            const mapped = mapRows(data);
+                            // protectRow: jangan timpa ketikan yang belum/baru tersimpan
+                            const mapped = mapRows(data).map(protectRow);
                             const existingIds = new Set(mapped.map(r => r.id));
                             const filteredPrev = prev.filter(r => r.id >= 1000000000 || !existingIds.has(r.id));
                             return [...filteredPrev, ...mapped].sort((a, b) => a.id - b.id);
@@ -244,7 +281,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                 if (!cancelled()) setLoading(false);
             }
         })();
-    }, []);
+    }, [protectRow]);
 
     // Realtime Subscription — ikut lazy: baru connect setelah data mulai dimuat,
     // supaya halaman yang tidak memakai pesanan tidak membuka channel sia-sia.
@@ -269,6 +306,10 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                         // Field yang dilindungi = pending (belum dikirim) ATAU sedang dikirim ke DB
                         const localPatches = pendingPatches.current[existingId] || {};
                         const inFlightKeys = savingKeys.current[existingId] || new Set<string>();
+                        // + grace recent-save: echo lama (nilai beda dari yang baru
+                        // tersimpan) jangan menimpa balik dalam 8 dtk pertama.
+                        const rs = recentSaves.current[existingId] || {};
+                        const nowTs = Date.now();
 
                         const mapped: Partial<PesananRow> = {};
                         if ("id" in row) mapped.id = row.id;
@@ -286,6 +327,8 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                         allFields.forEach(f => {
                             // Skip jika field sedang pending ATAU sedang dalam proses save
                             if (f in localPatches || inFlightKeys.has(f)) return;
+                            // Skip echo telat yang membawa nilai lama (≠ nilai yang baru disimpan)
+                            if (rs[f] && rs[f].until > nowTs && row[f] !== rs[f].value) return;
                             if (f in row) {
                                 (mapped as any)[f] = boolFields.has(f) ? !!row[f] : row[f];
                             }
@@ -385,9 +428,12 @@ export function PesananProvider({ children }: { children: ReactNode }) {
         // Tandai key ini sebagai "sedang dalam penerbangan" agar Realtime tidak menimpanya
         if (!savingKeys.current[id]) savingKeys.current[id] = new Set();
         keysToSave.forEach(k => savingKeys.current[id].add(k));
+        // Simpan juga NILAI-nya — dipakai protectRow saat data server masuk mid-flight
+        inFlightPatches.current[id] = { ...(inFlightPatches.current[id] || {}), ...finalPatch };
 
         savingRef.current[id] = true;
         let resolvedId = id;
+        let flushFailed = false;
         try {
             const cleanPatch: any = { ...finalPatch };
             // Konversi empty string ke null HANYA untuk field yang MEMANG ADA di patch
@@ -459,23 +505,49 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                             savingKeys.current[newRealId] = savingKeys.current[id];
                             delete savingKeys.current[id];
                         }
+                        if (inFlightPatches.current[id]) {
+                            inFlightPatches.current[newRealId] = inFlightPatches.current[id];
+                            delete inFlightPatches.current[id];
+                        }
                     }
                 }
             }
+            // BERHASIL: catat nilai yang baru tersimpan (grace 8 dtk) supaya echo
+            // realtime yang telat / chunk load tidak menimpa balik dengan nilai lama.
+            const until = Date.now() + 8000;
+            if (!recentSaves.current[resolvedId]) recentSaves.current[resolvedId] = {};
+            keysToSave.forEach(k => {
+                recentSaves.current[resolvedId][k] = { value: (finalPatch as Record<string, unknown>)[k], until };
+            });
+            if (failedRef.current.has(resolvedId) || failedRef.current.has(id)) {
+                failedRef.current.delete(resolvedId);
+                failedRef.current.delete(id);
+                setFailedRowIds(new Set(failedRef.current));
+            }
         } catch (err: any) {
             console.error("Flush Row Error:", err);
-            if (err?.message && err.message !== "Failed to fetch") {
-                alert("Simpan Gagal: " + (err.message || "Masalah Database"));
+            flushFailed = true;
+            // Alert hanya saat baris PERTAMA KALI gagal (bukan tiap percobaan ulang)
+            // dan bukan karena jaringan putus (itu di-retry diam-diam + badge merah).
+            const firstFailure = !failedRef.current.has(id);
+            failedRef.current.add(id);
+            setFailedRowIds(new Set(failedRef.current));
+            if (firstFailure && err?.message && err.message !== "Failed to fetch") {
+                alert("Simpan Gagal: " + (err.message || "Masalah Database") + "\nBaris ditandai merah & akan dicoba ulang otomatis.");
             }
         } finally {
             // Hapus savingKeys setelah selesai (berhasil atau gagal)
             keysToSave.forEach(k => savingKeys.current[resolvedId]?.delete(k));
             if (savingKeys.current[resolvedId]?.size === 0) delete savingKeys.current[resolvedId];
+            delete inFlightPatches.current[resolvedId];
+            delete inFlightPatches.current[id];
 
             savingRef.current[resolvedId] = false;
-            // Jika ada patch baru yang masuk selama proses save, flush ulang
+            // Jika masih ada patch (baru masuk saat save, atau dikembalikan karena
+            // gagal), flush ulang — dengan jeda lebih panjang bila barusan gagal
+            // supaya tidak menghujani jaringan/DB tiap 100ms.
             if (pendingPatches.current[resolvedId] && Object.keys(pendingPatches.current[resolvedId]).length > 0) {
-                setTimeout(() => flushRow(resolvedId), 100);
+                setTimeout(() => flushRow(resolvedId), flushFailed ? 2500 : 100);
             }
         }
     }, [setRows]);
@@ -521,36 +593,45 @@ export function PesananProvider({ children }: { children: ReactNode }) {
             }
         }
 
-        try {
-            // 1. Bulk Update
-            if (updates.length > 0) {
-                const { error } = await supabase.from("pesanan_rows").upsert(updates);
-                if (error) throw error;
+        // 1. Update PER BARIS — bukan satu upsert batch. Batch upsert Supabase
+        //    menuntut semua objek punya kolom yang SAMA; padahal tiap baris pending
+        //    kolom berubahnya beda-beda, jadi batch justru gagal total tepat saat
+        //    tombol darurat ini paling dibutuhkan. Per baris juga membuat kegagalan
+        //    terisolasi: satu baris error, baris lain tetap tersimpan.
+        let failedCount = 0;
+        for (const u of updates) {
+            const { id, ...patch } = u;
+            const { error } = await supabase.from("pesanan_rows").update(patch).eq("id", id);
+            if (error) {
+                console.error("Flush All (update) gagal utk baris", id, error);
+                failedCount++;
+                failedRef.current.add(id);
+            } else {
+                delete pendingPatches.current[id];
+                failedRef.current.delete(id);
             }
+        }
 
-            // 2. Bulk Insert (Sequential for ID recovery, or just let realtime handle it)
-            // But to recover IDs we need to know which one is which.
-            // For simplicity and safety, we'll do inserts one by one or trust realtime
-            if (inserts.length > 0) {
-                for (let i = 0; i < inserts.length; i++) {
-                    const tempId = originalTempIds[i];
-                    const rowPayload = { ...inserts[i], sync_id: String(tempId) };
-                    const { data, error } = await supabase.from("pesanan_rows").insert(rowPayload).select("id").single();
-                    if (error) throw error;
-                    if (data?.id) {
-                        const newRealId = data.id;
-                        setRows(prev => prev.map(r => r.id === tempId ? { ...r, id: newRealId } : r));
-                        delete pendingPatches.current[tempId];
-                    }
-                }
+        // 2. Insert baris baru satu per satu (untuk pemulihan ID via sync_id)
+        for (let i = 0; i < inserts.length; i++) {
+            const tempId = originalTempIds[i];
+            const rowPayload = { ...inserts[i], sync_id: String(tempId) };
+            const { data, error } = await supabase.from("pesanan_rows").insert(rowPayload).select("id").single();
+            if (error) {
+                console.error("Flush All (insert) gagal utk baris", tempId, error);
+                failedCount++;
+                failedRef.current.add(tempId);
+            } else if (data?.id) {
+                const newRealId = data.id;
+                setRows(prev => prev.map(r => r.id === tempId ? { ...r, id: newRealId } : r));
+                delete pendingPatches.current[tempId];
+                failedRef.current.delete(tempId);
             }
+        }
 
-            // Clear pending patches for updates that succeeded
-            updates.forEach(u => delete pendingPatches.current[u.id]);
-
-        } catch (err: any) {
-            console.error("Flush All Error:", err);
-            alert("Terjadi masalah saat menyimpan data. Beberapa baris mungkin belum tersimpan.");
+        setFailedRowIds(new Set(failedRef.current));
+        if (failedCount > 0) {
+            alert(`${failedCount} baris gagal tersimpan (ditandai merah). Periksa koneksi lalu klik Simpan Semua lagi.`);
         }
     }, [setRows]);
 
@@ -611,7 +692,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
     }, []);
 
     return (
-        <PesananCtx.Provider value={{ rows, loading, updateRow, flushRow, flushAllRows, addRows, addRow, importRows, fetchFilter, ensureLoaded }}>
+        <PesananCtx.Provider value={{ rows, loading, failedRowIds, updateRow, flushRow, flushAllRows, addRows, addRow, importRows, fetchFilter, ensureLoaded }}>
             {children}
         </PesananCtx.Provider>
     );

@@ -25,7 +25,7 @@ const TableRow = memo(function TableRow({
     row, ri, active, selBounds, isFilling, fillEndRow,
     onMouseDown, onMouseEnter, onFocus, onChange, onPaste,
     onFillHandleMouseDown, inputRefSetter, onFlushRow, onValidateAndCorrect,
-    viewMode, inputStartIdx, browsePage,
+    viewMode, inputStartIdx, browsePage, saveFailed,
 }: {
     row: PesananRow; ri: number;
     active: Pos | null; selBounds: ReturnType<typeof normSel> | null;
@@ -40,6 +40,7 @@ const TableRow = memo(function TableRow({
     onFlushRow: (id: number) => void;
     onValidateAndCorrect: (id: number, key: ColKey, val: string) => void;
     viewMode: string; inputStartIdx: number | null; browsePage: number;
+    saveFailed: boolean;
 }) {
     const isFilled = row.customer || row.deskripsi;
     const isTemp = row.id >= 1000000000;
@@ -56,6 +57,34 @@ const TableRow = memo(function TableRow({
 
     // Kolom yang sedang diketik user — jangan di-overwrite oleh sync eksternal
     const editingCols = useRef(new Set<ColKey>());
+
+    // ── Komit berkala saat mengetik (safety net) ────────────────
+    // Nilai tetap dikomit ke store + di-flush tiap jeda ketik 600ms — bukan
+    // hanya saat blur. Kalau tab/aplikasi ditutup tanpa sempat pindah sel,
+    // maksimal yang hilang cuma ketikan ≤600ms terakhir, bukan seluruh sel.
+    const commitTimers = useRef<Partial<Record<ColKey, ReturnType<typeof setTimeout>>>>({});
+    const latest = useRef({ row, onChange, onFlushRow, localVals });
+    useEffect(() => { latest.current = { row, onChange, onFlushRow, localVals }; });
+    useEffect(() => () => {
+        // Unmount (mis. pindah halaman tanpa blur): komit kolom yang masih diketik.
+        const timers = commitTimers.current;
+        Object.values(timers).forEach((t) => t && clearTimeout(t));
+        const { row: r, onChange: commit, onFlushRow: flush, localVals: vals } = latest.current;
+        let committed = false;
+        editingCols.current.forEach((k) => {
+            if (vals[k] !== (r[k] as string)) { commit(r.id, k, vals[k]); committed = true; }
+        });
+        if (committed) flush(r.id);
+    }, []);
+    const scheduleCommit = (key: ColKey, v: string) => {
+        const t = commitTimers.current[key];
+        if (t) clearTimeout(t);
+        commitTimers.current[key] = setTimeout(() => {
+            delete commitTimers.current[key];
+            const { row: r, onChange: commit, onFlushRow: flush } = latest.current;
+            if (v !== (r[key] as string)) { commit(r.id, key, v); flush(r.id); }
+        }, 600);
+    };
 
     // Sync dari store ketika ada perubahan eksternal (paste, realtime, fill-down)
     // tapi SKIP kolom yang sedang diketik user
@@ -76,12 +105,15 @@ const TableRow = memo(function TableRow({
 
     return (
         <tr style={{ background: bg }}>
-            <td style={{
-                height: 28, textAlign: "center", fontSize: 11, color: "#B89678", fontWeight: 600,
-                background: "#F8F4EE", borderRight: "2px solid #C5A882", borderBottom: "1px solid #E6D5BE",
-                userSelect: "none", padding: "2px 4px",
-            }}>
-                {viewMode === "input" ? (inputStartIdx ?? 0) + ri + 1 : (browsePage - 1) * PAGE_SIZE + ri + 1}
+            <td title={saveFailed ? "⚠ Baris ini gagal tersimpan — akan dicoba ulang otomatis. Periksa koneksi internet." : undefined}
+                style={{
+                    height: 28, textAlign: "center", fontSize: 11, fontWeight: saveFailed ? 800 : 600,
+                    color: saveFailed ? "white" : "#B89678",
+                    background: saveFailed ? "#DC2626" : "#F8F4EE",
+                    borderRight: "2px solid #C5A882", borderBottom: "1px solid #E6D5BE",
+                    userSelect: "none", padding: "2px 4px",
+                }}>
+                {saveFailed ? "⚠" : viewMode === "input" ? (inputStartIdx ?? 0) + ri + 1 : (browsePage - 1) * PAGE_SIZE + ri + 1}
             </td>
             {COL_KEYS.map((key, ci) => {
                 const isActive = active?.r === ri && active?.c === ci;
@@ -105,10 +137,11 @@ const TableRow = memo(function TableRow({
                             inputMode={key === "qty" || key === "ukuran" ? "decimal" : "text"}
                             value={localVals[key]}
                             onChange={(e) => {
-                                // Hanya update state lokal — TIDAK panggil parent onChange
-                                // Ini mencegah re-render parent + rekomputasi filteredRows tiap huruf
+                                // Update state lokal per huruf (tanpa re-render parent),
+                                // plus komit+flush terjadwal tiap jeda ketik 600ms.
                                 const v = e.target.value;
                                 setLocalVals(prev => ({ ...prev, [key]: v }));
+                                scheduleCommit(key, v);
                             }}
                             onPaste={(e) => {
                                 // Ambil nilai cell pertama dari clipboard untuk update tampilan lokal
@@ -127,6 +160,8 @@ const TableRow = memo(function TableRow({
                             }}
                             onBlur={() => {
                                 editingCols.current.delete(key);
+                                const t = commitTimers.current[key];
+                                if (t) { clearTimeout(t); delete commitTimers.current[key]; }
                                 const finalVal = localVals[key];
                                 // Sync ke store hanya jika nilai berubah dari store
                                 if (finalVal !== (row[key] as string)) {
@@ -163,7 +198,7 @@ const TableRow = memo(function TableRow({
    MAIN PAGE
 ================================================================ */
 function PesananPage() {
-    const { rows, loading, updateRow, addRows, flushAllRows, flushRow, fetchFilter } = usePesanan();
+    const { rows, loading, failedRowIds, updateRow, addRows, flushAllRows, flushRow, fetchFilter } = usePesanan();
     const [savedFlash, setSavedFlash] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [active, setActive] = useState<Pos | null>(null);
@@ -178,6 +213,24 @@ function PesananPage() {
     const [inputStartIdx, setInputStartIdx] = useState<number | null>(null);
 
     const inputRefs = useRef<(HTMLInputElement | null)[][]>([]);
+
+    // Saat tab/aplikasi kehilangan fokus (pindah app di HP/tablet, tutup tab):
+    // blur sel aktif supaya ketikan terakhir terkomit, lalu flush semua pending.
+    // Best-effort — di desktop hampir selalu sempat terkirim.
+    useEffect(() => {
+        const commitAll = () => {
+            const el = document.activeElement as HTMLElement | null;
+            if (el && typeof el.blur === "function") el.blur();
+            flushAllRows();
+        };
+        const onVis = () => { if (document.visibilityState === "hidden") commitAll(); };
+        document.addEventListener("visibilitychange", onVis);
+        window.addEventListener("pagehide", commitAll);
+        return () => {
+            document.removeEventListener("visibilitychange", onVis);
+            window.removeEventListener("pagehide", commitAll);
+        };
+    }, [flushAllRows]);
 
     const now = new Date();
     const [month, setMonth] = useState<number | "all">(now.getMonth() + 1);
@@ -615,6 +668,7 @@ function PesananPage() {
                                 onMouseDown={onCellMouseDown}
                                 onMouseEnter={onCellMouseEnter}
                                 onFocus={handleFocus}
+                                saveFailed={failedRowIds.has(row.id)}
                                 onChange={handleChange}
                                 onPaste={handlePaste}
                                 onFillHandleMouseDown={onFillHandleMouseDown}
