@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react";
 import { supabase } from "@/lib/supabase-client";
 
 /* ================================================================
@@ -85,6 +85,8 @@ type Ctx = {
     addSJ: (sj: Omit<SuratJalanRow, "id" | "statusPengiriman" | "nomorResi" | "catatanPengiriman" | "tanggalDiterima" | "updatedAt">) => Promise<string>;
     updateSJStatus: (id: string, partial: Partial<SuratJalanRow>) => void;
     deleteSJ: (id: string) => void;
+    /** Dipanggil otomatis oleh useSuratJalan — memulai fetch data saat pertama kali dipakai (lazy-load). */
+    ensureLoaded: () => void;
 };
 
 const SJCtx = createContext<Ctx | null>(null);
@@ -93,8 +95,23 @@ export function SuratJalanProvider({ children }: { children: ReactNode }) {
     const [suratJalans, setSuratJalans] = useState<SuratJalanRow[]>([]);
     const [loading, setLoading] = useState(true);
 
+    // Lazy-load: fetch header + item baru dimulai saat ada halaman yang memakai
+    // useSuratJalan — bukan saat provider mount.
+    const startedRef = useRef(false);
+    const cancelledRef = useRef(false);
+    const [started, setStarted] = useState(false);
     useEffect(() => {
-        let cancelled = false;
+        // Reset saat (re)mount — StrictMode dev menjalankan cleanup lalu setup ulang;
+        // tanpa reset, ref tertinggal true dan hasil fetch dibuang selamanya.
+        cancelledRef.current = false;
+        return () => { cancelledRef.current = true; };
+    }, []);
+
+    const ensureLoaded = useCallback(() => {
+        if (startedRef.current) return;
+        startedRef.current = true;
+        setStarted(true);
+        const cancelled = () => cancelledRef.current;
         (async () => {
             try {
                 // Paginasi header (hindari cap 1000 → SJ lama tidak hilang)
@@ -109,23 +126,23 @@ export function SuratJalanProvider({ children }: { children: ReactNode }) {
                     if (data && data.length) { headers.push(...data); if (data.length < 1000) break; from += 1000; }
                     else break;
                 }
-                if (cancelled) return;
+                if (cancelled()) return;
 
                 const ids = headers.map(h => h.id as string);
                 const itemsData = ids.length > 0 ? await fetchAllSJItems(ids) : [];
-                if (cancelled) return;
+                if (cancelled()) return;
 
                 setSuratJalans(headers.map(h =>
                     dbToSuratJalan(h, itemsData.filter(it => (it as Record<string, unknown>).surat_jalan_id === h.id))
                 ));
             } catch (e) { console.error("Surat Jalan fetch error:", e); }
-            finally { if (!cancelled) setLoading(false); }
+            finally { if (!cancelled()) setLoading(false); }
         })();
-        return () => { cancelled = true; };
     }, []);
 
-    // Realtime Subscriptions
+    // Realtime Subscriptions — ikut lazy: baru connect setelah data mulai dimuat.
     useEffect(() => {
+        if (!started) return;
         const channel = supabase
             .channel("realtime_surat_jalan_store")
             // 1. Headers (surat_jalan)
@@ -162,14 +179,12 @@ export function SuratJalanProvider({ children }: { children: ReactNode }) {
                     } : sj));
                 }
             })
-            .subscribe((status) => {
-                console.log("Surat Jalan Store Realtime Status:", status);
-            });
+            .subscribe();
 
         return () => {
             supabase.removeChannel(channel);
         };
-    }, []);
+    }, [started]);
 
     const addSJ = useCallback(async (sj: Omit<SuratJalanRow, "id" | "statusPengiriman" | "nomorResi" | "catatanPengiriman" | "tanggalDiterima" | "updatedAt">): Promise<string> => {
         const id = `SJ-${Date.now()}`;
@@ -270,7 +285,7 @@ export function SuratJalanProvider({ children }: { children: ReactNode }) {
     }, [suratJalans]);
 
     return (
-        <SJCtx.Provider value={{ suratJalans, loading, addSJ, updateSJStatus, deleteSJ }}>
+        <SJCtx.Provider value={{ suratJalans, loading, addSJ, updateSJStatus, deleteSJ, ensureLoaded }}>
             {children}
         </SJCtx.Provider>
     );
@@ -278,6 +293,11 @@ export function SuratJalanProvider({ children }: { children: ReactNode }) {
 
 export function useSuratJalan() {
     const ctx = useContext(SJCtx);
+    // Halaman yang memakai hook ini otomatis memicu fetch pertama (lazy-load).
+    // Effect dipanggil SEBELUM guard throw (rules-of-hooks: urutan hook wajib
+    // konsisten antar-render), dengan dep stabil (ensureLoaded = useCallback).
+    const ensureLoaded = ctx?.ensureLoaded;
+    useEffect(() => { ensureLoaded?.(); }, [ensureLoaded]);
     if (!ctx) throw new Error("useSuratJalan must be used inside SuratJalanProvider");
     return ctx;
 }

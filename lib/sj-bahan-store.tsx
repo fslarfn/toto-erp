@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react";
 import { supabase } from "@/lib/supabase-client";
 
 /* ================================================================
@@ -58,6 +58,8 @@ type Ctx = {
     addSJBahan: (sj: Omit<SJBahanRow, "id">) => Promise<string>;
     updateSJBahan: (id: string, updates: Partial<SJBahanRow>) => void;
     deleteSJBahan: (id: string) => void;
+    /** Dipanggil otomatis oleh useSJBahan — memulai fetch data saat pertama kali dipakai (lazy-load). */
+    ensureLoaded: () => void;
 };
 
 /** Ambil semua item dgn chunk id + paginasi .range (hindari cap 1000). */
@@ -86,8 +88,22 @@ export function SJBahanProvider({ children }: { children: ReactNode }) {
     const [sjBahan, setSjBahan] = useState<SJBahanRow[]>([]);
     const [loading, setLoading] = useState(true);
 
+    // Lazy-load: fetch baru dimulai saat ada halaman yang memakai useSJBahan.
+    const startedRef = useRef(false);
+    const cancelledRef = useRef(false);
+    const [started, setStarted] = useState(false);
     useEffect(() => {
-        let cancelled = false;
+        // Reset saat (re)mount — StrictMode dev menjalankan cleanup lalu setup ulang;
+        // tanpa reset, ref tertinggal true dan hasil fetch dibuang selamanya.
+        cancelledRef.current = false;
+        return () => { cancelledRef.current = true; };
+    }, []);
+
+    const ensureLoaded = useCallback(() => {
+        if (startedRef.current) return;
+        startedRef.current = true;
+        setStarted(true);
+        const cancelled = () => cancelledRef.current;
         (async () => {
             try {
                 const headers: Record<string, unknown>[] = [];
@@ -101,23 +117,23 @@ export function SJBahanProvider({ children }: { children: ReactNode }) {
                     if (data && data.length) { headers.push(...data); if (data.length < 1000) break; from += 1000; }
                     else break;
                 }
-                if (cancelled) return;
+                if (cancelled()) return;
 
                 const ids = headers.map(h => h.id as string);
                 const itemsData = ids.length > 0 ? await fetchAllSJBahanItems(ids) : [];
-                if (cancelled) return;
+                if (cancelled()) return;
 
                 setSjBahan(headers.map(h =>
                     dbToSJBahan(h, itemsData.filter(it => (it as Record<string, unknown>).sj_bahan_id === h.id))
                 ));
             } catch (e) { console.error("SJ Bahan fetch error:", e); }
-            finally { if (!cancelled) setLoading(false); }
+            finally { if (!cancelled()) setLoading(false); }
         })();
-        return () => { cancelled = true; };
     }, []);
 
-    // Realtime Subscriptions
+    // Realtime Subscriptions — ikut lazy: baru connect setelah data mulai dimuat.
     useEffect(() => {
+        if (!started) return;
         const channel = supabase
             .channel("realtime_sj_bahan_store")
             // 1. Headers (sj_bahan)
@@ -166,14 +182,12 @@ export function SJBahanProvider({ children }: { children: ReactNode }) {
                     } : sj));
                 }
             })
-            .subscribe((status) => {
-                console.log("Surat Jalan Bahan Store Realtime Status:", status);
-            });
+            .subscribe();
 
         return () => {
             supabase.removeChannel(channel);
         };
-    }, []);
+    }, [started]);
 
     const addSJBahan = useCallback(async (sj: Omit<SJBahanRow, "id">): Promise<string> => {
         const id = `SJB-${Date.now()}`;
@@ -238,7 +252,7 @@ export function SJBahanProvider({ children }: { children: ReactNode }) {
     }, []);
 
     return (
-        <SJBahanCtx.Provider value={{ sjBahan, loading, addSJBahan, updateSJBahan, deleteSJBahan }}>
+        <SJBahanCtx.Provider value={{ sjBahan, loading, addSJBahan, updateSJBahan, deleteSJBahan, ensureLoaded }}>
             {children}
         </SJBahanCtx.Provider>
     );
@@ -246,6 +260,11 @@ export function SJBahanProvider({ children }: { children: ReactNode }) {
 
 export function useSJBahan() {
     const ctx = useContext(SJBahanCtx);
+    // Halaman yang memakai hook ini otomatis memicu fetch pertama (lazy-load).
+    // Effect dipanggil SEBELUM guard throw (rules-of-hooks: urutan hook wajib
+    // konsisten antar-render), dengan dep stabil (ensureLoaded = useCallback).
+    const ensureLoaded = ctx?.ensureLoaded;
+    useEffect(() => { ensureLoaded?.(); }, [ensureLoaded]);
     if (!ctx) throw new Error("useSJBahan must be used inside SJBahanProvider");
     return ctx;
 }

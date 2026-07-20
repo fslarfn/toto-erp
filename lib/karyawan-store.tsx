@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react";
 import { supabase } from "@/lib/supabase-client";
 import { pushNotify } from "@/lib/notify";
 
@@ -65,6 +65,8 @@ type Ctx = {
     addKasbon: (k: Omit<KasbonRecord, "id">) => void;
     updateKasbon: (id: number, patch: Partial<KasbonRecord>) => void;
     deleteKasbon: (id: number) => void;
+    /** Dipanggil otomatis oleh useKaryawan — memulai fetch data saat pertama kali dipakai (lazy-load). */
+    ensureLoaded: () => void;
 };
 
 const KaryawanCtx = createContext<Ctx | null>(null);
@@ -90,9 +92,23 @@ export function KaryawanProvider({ children }: { children: ReactNode }) {
     const [kasbon, setKasbon] = useState<KasbonRecord[]>([]);
     const [loading, setLoading] = useState(true);
 
-    // Load from Supabase
+    // Lazy-load: fetch baru dimulai saat ada halaman yang memakai useKaryawan —
+    // bukan saat provider mount (provider ini ada di ROOT layout).
+    const startedRef = useRef(false);
+    const cancelledRef = useRef(false);
+    const [started, setStarted] = useState(false);
     useEffect(() => {
-        let cancelled = false;
+        // Reset saat (re)mount — StrictMode dev menjalankan cleanup lalu setup ulang;
+        // tanpa reset, ref tertinggal true dan hasil fetch dibuang selamanya.
+        cancelledRef.current = false;
+        return () => { cancelledRef.current = true; };
+    }, []);
+
+    const ensureLoaded = useCallback(() => {
+        if (startedRef.current) return;
+        startedRef.current = true;
+        setStarted(true);
+        const cancelled = () => cancelledRef.current;
         (async () => {
             try {
                 const [k, g, b] = await Promise.all([
@@ -100,7 +116,7 @@ export function KaryawanProvider({ children }: { children: ReactNode }) {
                     fetchAllPaged((f, t) => supabase.from("gaji").select("*").order("id").range(f, t)),
                     fetchAllPaged((f, t) => supabase.from("kasbon").select("*").order("id").range(f, t)),
                 ]);
-                if (!cancelled) {
+                if (!cancelled()) {
                     setKaryawan(k as unknown as DataKaryawan[]);
                     setGaji(g as unknown as GajiRecord[]);
                     setKasbon(b as unknown as KasbonRecord[]);
@@ -108,14 +124,14 @@ export function KaryawanProvider({ children }: { children: ReactNode }) {
             } catch {
                 // keep empty
             } finally {
-                if (!cancelled) setLoading(false);
+                if (!cancelled()) setLoading(false);
             }
         })();
-        return () => { cancelled = true; };
     }, []);
 
-    // Realtime Subscriptions
+    // Realtime Subscriptions — ikut lazy: baru connect setelah data mulai dimuat.
     useEffect(() => {
+        if (!started) return;
         const channel = supabase
             .channel("realtime_karyawan_store")
             // 1. Karyawan
@@ -139,14 +155,12 @@ export function KaryawanProvider({ children }: { children: ReactNode }) {
                 else if (eventType === "UPDATE") setKasbon(prev => prev.map(x => x.id === (n as any).id ? { ...x, ...(n as any) } : x));
                 else if (eventType === "DELETE") setKasbon(prev => prev.filter(x => x.id !== (o as any).id));
             })
-            .subscribe((status) => {
-                console.log("Karyawan Store Realtime Status:", status);
-            });
+            .subscribe();
 
         return () => {
             supabase.removeChannel(channel);
         };
-    }, []);
+    }, [started]);
 
     const addKaryawan = useCallback((k: Omit<DataKaryawan, "id">) => {
         // We rely solely on Real-time to add the item to the list
@@ -208,6 +222,7 @@ export function KaryawanProvider({ children }: { children: ReactNode }) {
             karyawan, gaji, kasbon, loading,
             addKaryawan, updateKaryawan, deleteKaryawan,
             upsertGaji, addKasbon, updateKasbon, deleteKasbon,
+            ensureLoaded,
         }}>
             {children}
         </KaryawanCtx.Provider>
@@ -216,6 +231,11 @@ export function KaryawanProvider({ children }: { children: ReactNode }) {
 
 export function useKaryawan() {
     const ctx = useContext(KaryawanCtx);
+    // Halaman yang memakai hook ini otomatis memicu fetch pertama (lazy-load).
+    // Effect dipanggil SEBELUM guard throw (rules-of-hooks: urutan hook wajib
+    // konsisten antar-render), dengan dep stabil (ensureLoaded = useCallback).
+    const ensureLoaded = ctx?.ensureLoaded;
+    useEffect(() => { ensureLoaded?.(); }, [ensureLoaded]);
     if (!ctx) throw new Error("useKaryawan must be used inside KaryawanProvider");
     return ctx;
 }

@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react";
 import { supabase } from "@/lib/supabase-client";
 
 /* ================================================================
@@ -66,6 +66,8 @@ type Ctx = {
     deleteTagihan: (id: string) => void;
     /** Catat pembayaran (cicilan). amount bisa negatif utk koreksi; di-clamp 0..grandTotal. */
     payTagihan: (id: string, amount: number) => void;
+    /** Dipanggil otomatis oleh useTagihanBahan — memulai fetch data saat pertama kali dipakai (lazy-load). */
+    ensureLoaded: () => void;
 };
 
 const TagihanBahanCtx = createContext<Ctx | null>(null);
@@ -94,9 +96,22 @@ export function TagihanBahanProvider({ children }: { children: ReactNode }) {
     const [tagihanList, setTagihanList] = useState<TagihanBahan[]>([]);
     const [loading, setLoading] = useState(true);
 
-    // Load from Supabase
+    // Lazy-load: fetch baru dimulai saat ada halaman yang memakai useTagihanBahan.
+    const startedRef = useRef(false);
+    const cancelledRef = useRef(false);
+    const [started, setStarted] = useState(false);
     useEffect(() => {
-        let cancelled = false;
+        // Reset saat (re)mount — StrictMode dev menjalankan cleanup lalu setup ulang;
+        // tanpa reset, ref tertinggal true dan hasil fetch dibuang selamanya.
+        cancelledRef.current = false;
+        return () => { cancelledRef.current = true; };
+    }, []);
+
+    const ensureLoaded = useCallback(() => {
+        if (startedRef.current) return;
+        startedRef.current = true;
+        setStarted(true);
+        const cancelled = () => cancelledRef.current;
         (async () => {
             try {
                 const headers: Record<string, unknown>[] = [];
@@ -110,11 +125,11 @@ export function TagihanBahanProvider({ children }: { children: ReactNode }) {
                     if (data && data.length) { headers.push(...data); if (data.length < 1000) break; from += 1000; }
                     else break;
                 }
-                if (cancelled) return;
+                if (cancelled()) return;
 
                 const ids = headers.map(h => h.id as string);
                 const itemsData = ids.length > 0 ? await fetchAllTagihanItems(ids) : [];
-                if (cancelled) return;
+                if (cancelled()) return;
 
                 setTagihanList(headers.map(h =>
                     dbToTagihan(h, itemsData.filter(it => (it as Record<string, unknown>).tagihan_id === h.id))
@@ -122,14 +137,14 @@ export function TagihanBahanProvider({ children }: { children: ReactNode }) {
             } catch (e) {
                 console.error("Tagihan Bahan fetch error:", e);
             } finally {
-                if (!cancelled) setLoading(false);
+                if (!cancelled()) setLoading(false);
             }
         })();
-        return () => { cancelled = true; };
     }, []);
 
-    // Realtime Subscriptions
+    // Realtime Subscriptions — ikut lazy: baru connect setelah data mulai dimuat.
     useEffect(() => {
+        if (!started) return;
         const channel = supabase
             .channel("realtime_tagihan_bahan_store")
             // 1. Headers (tagihan_bahan)
@@ -165,14 +180,12 @@ export function TagihanBahanProvider({ children }: { children: ReactNode }) {
                     } : h));
                 }
             })
-            .subscribe((status) => {
-                console.log("Tagihan Bahan Store Realtime Status:", status);
-            });
+            .subscribe();
 
         return () => {
             supabase.removeChannel(channel);
         };
-    }, []);
+    }, [started]);
 
     const addTagihan = useCallback((t: Omit<TagihanBahan, "id">): string => {
         const id = `TB-${Date.now()}`;
@@ -244,7 +257,7 @@ export function TagihanBahanProvider({ children }: { children: ReactNode }) {
     }, []);
 
     return (
-        <TagihanBahanCtx.Provider value={{ tagihanList, loading, addTagihan, updateTagihan, deleteTagihan, payTagihan }}>
+        <TagihanBahanCtx.Provider value={{ tagihanList, loading, addTagihan, updateTagihan, deleteTagihan, payTagihan, ensureLoaded }}>
             {children}
         </TagihanBahanCtx.Provider>
     );
@@ -252,6 +265,11 @@ export function TagihanBahanProvider({ children }: { children: ReactNode }) {
 
 export function useTagihanBahan() {
     const ctx = useContext(TagihanBahanCtx);
+    // Halaman yang memakai hook ini otomatis memicu fetch pertama (lazy-load).
+    // Effect dipanggil SEBELUM guard throw (rules-of-hooks: urutan hook wajib
+    // konsisten antar-render), dengan dep stabil (ensureLoaded = useCallback).
+    const ensureLoaded = ctx?.ensureLoaded;
+    useEffect(() => { ensureLoaded?.(); }, [ensureLoaded]);
     if (!ctx) throw new Error("useTagihanBahan must be used inside TagihanBahanProvider");
     return ctx;
 }

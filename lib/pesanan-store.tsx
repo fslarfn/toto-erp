@@ -73,6 +73,8 @@ type Ctx = {
     addRow: (data: Partial<PesananRow>) => Promise<void>;
     importRows: (data: Partial<PesananRow>[]) => void;
     fetchFilter: (year: number, month: number | "all") => Promise<void>;
+    /** Dipanggil otomatis oleh usePesanan — memulai fetch data saat pertama kali dipakai. */
+    ensureLoaded: () => void;
 };
 
 const PesananCtx = createContext<Ctx | null>(null);
@@ -178,19 +180,33 @@ export function PesananProvider({ children }: { children: ReactNode }) {
         }
     }, []);
 
-    // Load from Supabase on mount - FETCH ALL for Dashboard/Tagihan
+    // Lazy-load: fetch SEMUA baris baru dimulai saat ada halaman yang benar-benar
+    // memakai store ini (dipicu usePesanan), BUKAN saat provider mount. Provider ini
+    // membungkus seluruh /dashboard, jadi tanpa ini setiap halaman (termasuk
+    // workspace Alucurv) ikut mengunduh belasan ribu baris pesanan_rows.
+    const startedRef = useRef(false);
+    const cancelledRef = useRef(false);
+    const [started, setStarted] = useState(false);
     useEffect(() => {
-        let cancelled = false;
+        // Reset saat (re)mount — StrictMode dev menjalankan cleanup lalu setup ulang;
+        // tanpa reset, ref tertinggal true dan hasil fetch dibuang selamanya.
+        cancelledRef.current = false;
+        return () => { cancelledRef.current = true; };
+    }, []);
+
+    const ensureLoaded = useCallback(() => {
+        if (startedRef.current) return;
+        startedRef.current = true;
+        setStarted(true);
+        const cancelled = () => cancelledRef.current;
         (async () => {
             try {
-                let allData: any[] = [];
                 let from = 0;
                 let hasMore = true;
 
                 // Load first chunk fast
                 const firstChunk = await fetchRange(0, 999);
-                if (firstChunk && !cancelled) {
-                    allData = [...firstChunk];
+                if (firstChunk && !cancelled()) {
                     setRows(prev => {
                         const mapped = mapRows(firstChunk);
                         const existingIds = new Set(mapped.map(r => r.id));
@@ -207,10 +223,9 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                 }
 
                 // Load remaining data in background
-                while (hasMore && !cancelled) {
+                while (hasMore && !cancelled()) {
                     const data = await fetchRange(from, from + 999);
                     if (data && data.length > 0) {
-                        allData = [...allData, ...data];
                         setRows(prev => {
                             const mapped = mapRows(data);
                             const existingIds = new Set(mapped.map(r => r.id));
@@ -226,15 +241,15 @@ export function PesananProvider({ children }: { children: ReactNode }) {
             } catch (err) {
                 console.error("Initial Fetch Error:", err);
             } finally {
-                if (!cancelled) setLoading(false);
+                if (!cancelled()) setLoading(false);
             }
         })();
-        return () => { cancelled = true; };
     }, []);
 
-    // Realtime Subscription
+    // Realtime Subscription — ikut lazy: baru connect setelah data mulai dimuat,
+    // supaya halaman yang tidak memakai pesanan tidak membuka channel sia-sia.
     useEffect(() => {
-        console.log("Supabase Realtime: Connecting...");
+        if (!started) return;
         const channel = supabase
             .channel("realtime_pesanan")
             .on(
@@ -314,15 +329,12 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                     });
                 }
             )
-            .on("system", { event: "*" }, (payload) => console.log("Realtime System Event:", payload))
-            .subscribe((status) => {
-                console.log("Supabase Realtime Status:", status);
-            });
+            .subscribe();
 
         return () => {
             supabase.removeChannel(channel);
         };
-    }, []);
+    }, [started]);
 
     // Safety Lock: Mencegah penutupan tab jika ada data belum tersimpan
     useEffect(() => {
@@ -599,7 +611,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
     }, []);
 
     return (
-        <PesananCtx.Provider value={{ rows, loading, updateRow, flushRow, flushAllRows, addRows, addRow, importRows, fetchFilter }}>
+        <PesananCtx.Provider value={{ rows, loading, updateRow, flushRow, flushAllRows, addRows, addRow, importRows, fetchFilter, ensureLoaded }}>
             {children}
         </PesananCtx.Provider>
     );
@@ -607,6 +619,11 @@ export function PesananProvider({ children }: { children: ReactNode }) {
 
 export function usePesanan() {
     const ctx = useContext(PesananCtx);
+    // Halaman yang memakai hook ini otomatis memicu fetch pertama (lazy-load).
+    // Effect dipanggil SEBELUM guard throw (rules-of-hooks: urutan hook wajib
+    // konsisten antar-render), dengan dep stabil (ensureLoaded = useCallback).
+    const ensureLoaded = ctx?.ensureLoaded;
+    useEffect(() => { ensureLoaded?.(); }, [ensureLoaded]);
     if (!ctx) throw new Error("usePesanan must be used inside PesananProvider");
     return ctx;
 }
