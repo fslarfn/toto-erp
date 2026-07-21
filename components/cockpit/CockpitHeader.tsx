@@ -27,22 +27,22 @@ export default function CockpitHeader() {
   return (
     <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
       <div className="max-w-2xl">
-        <h1 className="text-3xl md:text-4xl font-black tracking-tighter text-[#3E2C23]">
+        <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-[#5C4033]">
           Executive Cockpit
         </h1>
-        <p className="text-sm md:text-base text-[#8B6B52] mt-2 font-medium leading-relaxed">
+        <p className="text-sm md:text-base text-[#8B5E34] mt-2 font-medium leading-relaxed">
           Analisis kesehatan finansial & pergerakan operasional CV TOTO secara real-time.
         </p>
       </div>
       <div className="flex items-center gap-3 bg-white/50 p-2 pr-2.5 rounded-2xl border border-[#E8DCCF] backdrop-blur-sm self-start md:self-center">
         <div className="px-3">
-          <div className="text-[10px] font-bold text-[#8B6B52] uppercase tracking-widest">Update Terakhir</div>
-          <div className="text-xs font-black text-[#3E2C23]">{format(lastUpdated, "HH:mm:ss")}</div>
+          <div className="text-[10px] font-bold text-[#8B5E34] uppercase tracking-wider">Update Terakhir</div>
+          <div className="text-xs font-extrabold text-[#5C4033]">{format(lastUpdated, "HH:mm:ss")}</div>
         </div>
         <button
           onClick={handleRefresh}
           disabled={isRefreshing}
-          className="flex items-center gap-2 rounded-xl bg-[#A67B5B] hover:bg-[#8D684C] text-white text-xs font-black uppercase tracking-widest px-5 py-2.5 shadow-md shadow-[#A67B5B]/20 transition-all active:scale-95 disabled:opacity-50"
+          className="flex items-center gap-2 rounded-xl bg-[#A67B5B] hover:bg-[#8B5E34] text-white text-xs font-bold px-5 py-2.5 shadow-md shadow-[#A67B5B]/20 transition-all active:scale-95 disabled:opacity-50"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
           Refresh

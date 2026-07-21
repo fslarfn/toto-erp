@@ -50,18 +50,18 @@ export default function CashForecastCard() {
             <TrendingUp className="w-5 h-5 text-[#A67B5B]" />
           </div>
           <div>
-            <h3 className="text-[11px] font-bold tracking-wider text-[#8B6B52] uppercase leading-tight">
+            <h3 className="text-[11px] font-bold tracking-wider text-[#8B5E34] uppercase leading-tight">
               Proyeksi Kas 14 Hari
             </h3>
-            <div className="text-[11px] text-[#8B6B52] mt-0.5 font-medium">Estimasi saldo akhir periode</div>
+            <div className="text-[11px] text-[#8B5E34] mt-0.5 font-medium">Estimasi saldo akhir periode</div>
           </div>
         </div>
-        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${growth >= 0 ? 'text-emerald-700 bg-emerald-50 border-emerald-100' : 'text-rose-700 bg-rose-50 border-rose-100'}`}>
+        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${growth >= 0 ? 'text-[#15803D] bg-[#DCFCE7] border-[#BBF7D0]' : 'text-[#B91C1C] bg-[#FEF2F2] border-[#FECACA]'}`}>
           {growth >= 0 ? '▲' : '▼'} {Math.abs(growth).toFixed(1)}%
         </span>
       </div>
 
-      <div className="text-3xl md:text-[32px] font-extrabold tracking-tight text-[#3E2C23] leading-none mb-6">
+      <div className="text-3xl md:text-[32px] font-extrabold tracking-tight text-[#5C4033] leading-none mb-6 tabular-nums">
         {formatRp(activePoint)}
       </div>
 

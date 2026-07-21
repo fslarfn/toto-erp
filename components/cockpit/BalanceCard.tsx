@@ -36,20 +36,20 @@ export default function BalanceCard() {
             <Wallet className="w-5 h-5 text-[#A67B5B]" />
           </div>
           <div>
-            <h3 className="text-[11px] font-bold tracking-wider text-[#8B6B52] uppercase leading-tight">
+            <h3 className="text-[11px] font-bold tracking-wider text-[#8B5E34] uppercase leading-tight">
               Total Kas & Bank
             </h3>
-            <div className="text-[11px] text-[#8B6B52] mt-0.5 font-medium">vs 7 hari lalu</div>
+            <div className="text-[11px] text-[#8B5E34] mt-0.5 font-medium">vs 7 hari lalu</div>
           </div>
         </div>
         {delta !== 0 && (
-          <span className={`inline-flex items-center gap-1 text-[10px] font-bold ${delta > 0 ? 'text-emerald-700 bg-emerald-50' : 'text-rose-700 bg-rose-50'} px-2.5 py-1 rounded-full border ${delta > 0 ? 'border-emerald-100' : 'border-rose-100'}`}>
+          <span className={`inline-flex items-center gap-1 text-[10px] font-bold ${delta > 0 ? 'text-[#15803D] bg-[#DCFCE7]' : 'text-[#B91C1C] bg-[#FEF2F2]'} px-2.5 py-1 rounded-full border ${delta > 0 ? 'border-[#BBF7D0]' : 'border-[#FECACA]'}`}>
             {delta > 0 ? '▲' : '▼'} {Math.abs(percentDelta).toFixed(1)}%
           </span>
         )}
       </div>
       
-      <div className="text-3xl md:text-[32px] font-extrabold tracking-tight text-[#3E2C23] leading-none mb-1">
+      <div className="text-3xl md:text-[32px] font-extrabold tracking-tight text-[#5C4033] leading-none mb-1 tabular-nums">
         {formatRp(total_now)}
       </div>
 
@@ -57,10 +57,10 @@ export default function BalanceCard() {
         {accounts.slice(0, 3).map((a) => (
           <div key={a.id} className="flex items-center justify-between text-sm">
             <div className="min-w-0">
-              <div className="font-bold text-[#3E2C23] truncate">{a.name}</div>
-              <div className="text-[10px] text-[#8B6B52] uppercase tracking-wider font-semibold">{a.bank || 'Tunai'}</div>
+              <div className="font-bold text-[#5C4033] truncate">{a.name}</div>
+              <div className="text-[10px] text-[#8B5E34] uppercase tracking-wider font-semibold">{a.bank || 'Tunai'}</div>
             </div>
-            <div className="font-bold text-[#3E2C23] ml-4 shrink-0">{formatRp(a.balance)}</div>
+            <div className="font-bold text-[#5C4033] ml-4 shrink-0">{formatRp(a.balance)}</div>
           </div>
         ))}
       </div>
