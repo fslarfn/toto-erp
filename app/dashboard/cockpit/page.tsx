@@ -39,9 +39,7 @@ export default function CockpitPage() {
   }
 
   return (
-    <div className="min-h-full w-full bg-[#F5EBDD] text-[#3E2C23] font-sans">
-      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-      
+    <div className="min-h-full w-full bg-[#F5EBDD] text-[#5C4033] font-sans">
       <div className="p-4 md:p-8 xl:p-10 max-w-[1600px] mx-auto">
         
         {/* HEADER SECTION */}
@@ -63,7 +61,7 @@ export default function CockpitPage() {
 
         {/* FOOTER ACCENT */}
         <div className="mt-12 text-center">
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#8B6B52] opacity-30">
+          <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#8B5E34] opacity-30">
             Internal Management Cockpit · CV TOTO ALUMINIUM
           </p>
         </div>

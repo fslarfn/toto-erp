@@ -39,10 +39,10 @@ export default function ProfitTargetCard() {
             <TrendingUp className="w-5 h-5 text-[#A67B5B]" />
           </div>
           <div>
-            <h3 className="text-[11px] font-bold tracking-wider text-[#8B6B52] uppercase leading-tight">
+            <h3 className="text-[11px] font-bold tracking-wider text-[#8B5E34] uppercase leading-tight">
               Laba Bulan Ini
             </h3>
-            <div className="text-[11px] text-[#8B6B52] mt-0.5 font-medium">Target: {formatRp(target)}</div>
+            <div className="text-[11px] text-[#8B5E34] mt-0.5 font-medium">Target: {formatRp(target)}</div>
           </div>
         </div>
         {user?.role === 'owner' && (
@@ -50,20 +50,20 @@ export default function ProfitTargetCard() {
         )}
       </div>
 
-      <div className={`text-3xl md:text-[32px] font-extrabold tracking-tight leading-none mb-1 ${profit >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+      <div className={`text-3xl md:text-[32px] font-extrabold tracking-tight leading-none mb-1 ${profit >= 0 ? "text-[#15803D]" : "text-[#B91C1C]"}`}>
         {formatRp(profit)}
       </div>
 
       <div className="mt-4">
         <div className="flex items-center justify-between text-[11px] mb-1.5 uppercase font-bold tracking-tight">
-          <span className="text-[#8B6B52]">Pencapaian Target</span>
-          <span className={`${progress >= 100 ? 'text-emerald-700' : 'text-amber-700'}`}>
+          <span className="text-[#8B5E34]">Pencapaian Target</span>
+          <span className={`${progress >= 100 ? 'text-[#15803D]' : 'text-[#A16207]'}`}>
             {progress.toFixed(0)}%
           </span>
         </div>
         <div className="h-2 bg-[#F1E7DA] rounded-full overflow-hidden">
           <div 
-            className={`h-full ${progress >= 100 ? 'bg-emerald-500' : 'bg-amber-500'} rounded-full transition-all duration-700`} 
+            className={`h-full ${progress >= 100 ? 'bg-[#15803D]' : 'bg-[#CA8A04]'} rounded-full transition-all duration-700`} 
             style={{ width: `${progress}%` }} 
           />
         </div>
@@ -71,12 +71,12 @@ export default function ProfitTargetCard() {
 
       <div className="mt-auto pt-4 border-t border-[#F1E7DA] grid grid-cols-2 gap-4 text-sm" style={{ marginTop: '1.5rem' }}>
         <div>
-          <div className="text-[10px] text-[#8B6B52] uppercase font-bold tracking-wider mb-1">Inflow</div>
-          <div className="font-extrabold text-emerald-700 text-base">{formatRp(income)}</div>
+          <div className="text-[10px] text-[#8B5E34] uppercase font-bold tracking-wider mb-1">Inflow</div>
+          <div className="font-extrabold text-[#15803D] text-base">{formatRp(income)}</div>
         </div>
         <div>
-          <div className="text-[10px] text-[#8B6B52] uppercase font-bold tracking-wider mb-1">Outflow</div>
-          <div className="font-extrabold text-rose-700 text-base">{formatRp(expense)}</div>
+          <div className="text-[10px] text-[#8B5E34] uppercase font-bold tracking-wider mb-1">Outflow</div>
+          <div className="font-extrabold text-[#B91C1C] text-base">{formatRp(expense)}</div>
         </div>
       </div>
     </article>

@@ -29,42 +29,42 @@ export default function StuckOrdersCard() {
             <Clock className="w-5 h-5 text-[#A67B5B]" />
           </div>
           <div>
-            <h3 className="text-[11px] font-bold tracking-wider text-[#8B6B52] uppercase leading-tight">
+            <h3 className="text-[11px] font-bold tracking-wider text-[#8B5E34] uppercase leading-tight">
               Order Mandek
             </h3>
-            <div className="text-[11px] text-[#8B6B52] mt-0.5 font-medium">Pesanan &gt;7 hari tanpa progres</div>
+            <div className="text-[11px] text-[#8B5E34] mt-0.5 font-medium">Pesanan &gt;7 hari tanpa progres</div>
           </div>
         </div>
-        <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-100">
+        <span className="text-[10px] font-bold text-[#B91C1C] bg-[#FEF2F2] px-2.5 py-1 rounded-full border border-[#FECACA]">
           {totalStuck}
         </span>
       </div>
 
-      <div className="text-3xl md:text-[32px] font-extrabold tracking-tight text-[#3E2C23] leading-none mb-1">
+      <div className="text-3xl md:text-[32px] font-extrabold tracking-tight text-[#5C4033] leading-none mb-1 tabular-nums">
         {totalStuck} <span className="text-lg font-medium opacity-40">Order</span>
       </div>
 
       <div className="mt-auto space-y-2 pt-4" style={{ borderTop: '1px solid #F1E7DA', marginTop: '1.5rem' }}>
         {data && data.length > 0 ? (
           data.slice(0, 3).map((o) => (
-            <div key={o.id} className="flex items-center justify-between gap-3 p-2.5 rounded-xl border border-[#F1E7DA]" style={{ background: '#FBF4EA' }}>
+            <div key={o.id} className="flex items-center justify-between gap-3 p-2.5 rounded-xl border border-[#F1E7DA]" style={{ background: '#F9F4EE' }}>
               <div className="min-w-0 flex-1">
-                <div className="text-[9px] font-black opacity-30 uppercase tracking-tighter mb-0.5">#{o.no_invoice || "???"}</div>
-                <div className="text-[11px] font-extrabold text-[#3E2C23] truncate uppercase leading-tight">{o.customer_name}</div>
+                <div className="text-[9px] font-extrabold opacity-30 uppercase tracking-tight mb-0.5">#{o.no_invoice || "???"}</div>
+                <div className="text-[11px] font-extrabold text-[#5C4033] truncate uppercase leading-tight">{o.customer_name}</div>
               </div>
               <div className="text-right shrink-0">
-                <div className="text-[10px] font-black text-rose-600 uppercase leading-none mb-1">{o.age_days} Hari</div>
-                <div className="text-[9px] font-bold text-[#8B6B52] uppercase tracking-tighter opacity-70">{o.status.replace("_", " ")}</div>
+                <div className="text-[10px] font-extrabold text-[#B91C1C] uppercase leading-none mb-1 tabular-nums">{o.age_days} Hari</div>
+                <div className="text-[9px] font-bold text-[#8B5E34] uppercase tracking-tight opacity-70">{o.status.replace("_", " ")}</div>
               </div>
             </div>
           ))
         ) : (
-          <div className="py-6 text-center text-xs text-[#8B6B52] italic font-medium">Tidak ada order mandek</div>
+          <div className="py-6 text-center text-xs text-[#8B5E34] italic font-medium">Tidak ada order mandek</div>
         )}
 
         <button 
           onClick={() => router.push("/dashboard/status-barang")}
-          className="w-full pt-2 text-[10px] font-black uppercase tracking-[0.15em] text-[#A67B5B] hover:text-[#8D684C] transition-colors text-center"
+          className="w-full pt-2 text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#A67B5B] hover:text-[#8B5E34] transition-colors text-center"
         >
           Lihat Semua &rarr;
         </button>

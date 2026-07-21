@@ -33,10 +33,10 @@ export default function TopDebtorsCard() {
             <Users className="w-5 h-5 text-[#A67B5B]" />
           </div>
           <div>
-            <h3 className="text-[11px] font-bold tracking-wider text-[#8B6B52] uppercase leading-tight">
+            <h3 className="text-[11px] font-bold tracking-wider text-[#8B5E34] uppercase leading-tight">
               Top 5 Penghutang
             </h3>
-            <div className="text-[11px] text-[#8B6B52] mt-0.5 font-medium">Berdasarkan nominal piutang</div>
+            <div className="text-[11px] text-[#8B5E34] mt-0.5 font-medium">Berdasarkan nominal piutang</div>
           </div>
         </div>
       </div>
@@ -45,21 +45,21 @@ export default function TopDebtorsCard() {
         {debtors.length > 0 ? (
           debtors.map((debtor, i) => (
             <div key={i} className="flex items-center gap-3 group">
-              <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-[11px] font-black shadow-sm transition-transform group-hover:scale-110"
+              <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-[11px] font-extrabold shadow-sm transition-transform group-hover:scale-110"
                    style={{ background: '#A67B5B' }}>
                 {debtor.customer_name.substring(0, 2).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-bold text-[#3E2C23] truncate uppercase leading-tight">{debtor.customer_name}</div>
-                <div className={`text-[10px] font-bold mt-0.5 ${debtor.oldest_days > 60 ? "text-rose-600" : (debtor.oldest_days > 30 ? "text-amber-600" : "text-emerald-600")}`}>
+                <div className="text-sm font-bold text-[#5C4033] truncate uppercase leading-tight">{debtor.customer_name}</div>
+                <div className={`text-[10px] font-bold mt-0.5 ${debtor.oldest_days > 60 ? "text-[#B91C1C]" : (debtor.oldest_days > 30 ? "text-[#A16207]" : "text-[#15803D]")}`}>
                   ● {debtor.oldest_days} hari
                 </div>
               </div>
-              <div className="text-sm font-black text-[#3E2C23] ml-2">{formatRpShort(debtor.total_outstanding)}</div>
+              <div className="text-sm font-extrabold text-[#5C4033] ml-2">{formatRpShort(debtor.total_outstanding)}</div>
             </div>
           ))
         ) : (
-          <div className="text-center py-8 text-[#8B6B52]/30 italic text-[11px] font-bold uppercase tracking-widest">
+          <div className="text-center py-8 text-[#8B5E34]/30 italic text-[11px] font-bold uppercase tracking-wider">
             Semua piutang teratasi!
           </div>
         )}
