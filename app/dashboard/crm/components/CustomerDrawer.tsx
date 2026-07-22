@@ -8,9 +8,10 @@ import Link from "next/link";
 import { X, MapPin, MessageCircle, Plus, ShoppingBag, Wallet, Send, Pencil } from "lucide-react";
 import type { Customer } from "@/types";
 import {
-    daysSince, tierOf, marketerById, ordersOf, orderRowValue, isoDate,
+    daysSince, tierOf, ordersOf, orderRowValue, isoDate,
     DORMANT_DAYS, type CustomerStat, type OrderRowLike,
 } from "@/lib/crm-analytics";
+import { findMarketer, type Marketer } from "@/lib/crm-marketers";
 import { waGreeting, waPiutang, waLink } from "@/lib/crm-wa";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { typeMeta } from "./shared";
@@ -20,11 +21,12 @@ interface Props {
     c: Customer;
     stat: CustomerStat;
     rows: OrderRowLike[];
+    marketers: Marketer[];
     onClose: () => void;
     onEdit: () => void;
 }
 
-export default function CustomerDrawer({ c, stat, rows, onClose, onEdit }: Props) {
+export default function CustomerDrawer({ c, stat, rows, marketers, onClose, onEdit }: Props) {
     const [t, setT] = useState<"order" | "piutang" | "wa">("order");
 
     // Esc utk menutup — drawer dipakai intensif dgn keyboard.
@@ -38,7 +40,7 @@ export default function CustomerDrawer({ c, stat, rows, onClose, onEdit }: Props
     const dormant = hasOrder && daysSince(stat.last) >= DORMANT_DAYS;
     const tier = tierOf(stat.total);
     const tm = typeMeta(c.type);
-    const mk = marketerById(c.marketingId ?? "");
+    const mk = findMarketer(marketers, c.marketingId);
     const waChat = waLink(c.phone, waGreeting(c.name, c.pic));
     const invs = Array.from(stat.unpaidInvoices);
     const waTagih = waLink(c.phone, waPiutang(c.name, c.pic, stat.unpaid, invs));

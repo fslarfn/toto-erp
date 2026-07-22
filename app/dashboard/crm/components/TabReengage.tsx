@@ -6,9 +6,10 @@ import { useMemo } from "react";
 import { MessageCircle, MapPin } from "lucide-react";
 import type { Customer } from "@/types";
 import {
-    normalizeName, daysSince, marketerById, DORMANT_DAYS, DORMANT_LONG_DAYS,
+    normalizeName, daysSince, DORMANT_DAYS, DORMANT_LONG_DAYS,
     type CustomerStat,
 } from "@/lib/crm-analytics";
+import { findMarketer, type Marketer } from "@/lib/crm-marketers";
 import { waGreeting, waLink } from "@/lib/crm-wa";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
@@ -21,9 +22,10 @@ interface DormantRow {
 interface Props {
     stats: Map<string, CustomerStat>;
     byName: Map<string, Customer>;
+    marketers: Marketer[];
 }
 
-export default function TabReengage({ stats, byName }: Props) {
+export default function TabReengage({ stats, byName, marketers }: Props) {
     const dormant = useMemo<DormantRow[]>(() =>
         Array.from(stats.values())
             .filter((a) => a.last && daysSince(a.last) >= DORMANT_DAYS)
@@ -65,7 +67,7 @@ export default function TabReengage({ stats, byName }: Props) {
                     <div className="card-header">{g.label} ({g.items.length.toLocaleString("id-ID")})</div>
                     <div>
                         {g.items.map((d) => {
-                            const mk = d.c ? marketerById(d.c.marketingId ?? "") : undefined;
+                            const mk = d.c ? findMarketer(marketers, d.c.marketingId) : undefined;
                             const wa = d.c?.phone ? waLink(d.c.phone, waGreeting(d.stat.name, d.c.pic)) : null;
                             return (
                                 <div key={d.stat.name} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 18px", borderTop: "1px solid #F3EADB", flexWrap: "wrap" }}>
