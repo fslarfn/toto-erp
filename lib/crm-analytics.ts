@@ -24,16 +24,8 @@ export const DORMANT_LONG_DAYS = 180;
 /** Default bonus marketing (persen dari omset) — bisa diubah di UI. */
 export const DEFAULT_BONUS_RATE = 0.5;
 
-/** Daftar marketing (PIC). Menambah orang cukup di sini — kolom
- *  customers.marketing_id sengaja TEXT bebas, tanpa migrasi. */
-export const MARKETERS = [
-    { id: "toto",   name: "Toto",   color: "#4E6B57" },
-    { id: "faisal", name: "Faisal", color: "#7A5C3A" },
-    { id: "livia",  name: "Livia",  color: "#8A5A6B" },
-    { id: "dika",   name: "Dika",   color: "#5A6E8A" },
-] as const;
-export type MarketerId = (typeof MARKETERS)[number]["id"];
-export const marketerById = (id: string) => MARKETERS.find((m) => m.id === id);
+// Daftar marketing (PIC) kini dari tabel crm_marketers —
+// lihat lib/crm-marketers.ts (fetchMarketers, findMarketer).
 
 /* ================= Tipe ================= */
 
@@ -304,11 +296,14 @@ export function availableMonths(rows: OrderRowLike[]): string[] {
 
 /** Rollup omset per marketing dari pesanan_rows (atribusi lewat
  *  customers.marketing_id — level customer, bukan per order).
- *  period = 'YYYY-MM' (satu bulan), 'YYYY' (satu tahun), '' = sepanjang waktu. */
+ *  period = 'YYYY-MM' (satu bulan), 'YYYY' (satu tahun), '' = sepanjang waktu.
+ *  marketers = daftar dari crm_marketers; id tak dikenal / nonaktif
+ *  otomatis jatuh ke ember "belum di-assign" ('') agar total tetap klop. */
 export function marketingRollup(
     customers: Customer[],
     rows: OrderRowLike[],
-    period: string
+    period: string,
+    marketers: { id: string }[]
 ): MarketingRollupResult {
     const byName = marketingByName(customers);
     const omsetPerCustomer = new Map<string, number>(); // key: nama ternormalisasi
@@ -323,7 +318,7 @@ export function marketingRollup(
         totalOmset += val;
     }
     const perMarketer = new Map<string, MarketerRollup>();
-    for (const m of MARKETERS) perMarketer.set(m.id, { marketingId: m.id, omset: 0, customerCount: 0, bonus: 0 });
+    for (const m of marketers) perMarketer.set(m.id, { marketingId: m.id, omset: 0, customerCount: 0, bonus: 0 });
     perMarketer.set("", { marketingId: "", omset: 0, customerCount: 0, bonus: 0 });
     omsetPerCustomer.forEach((omset, nameKey) => {
         const mid = byName.get(nameKey) ?? ""; // order tanpa master → belum di-assign

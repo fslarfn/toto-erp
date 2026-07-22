@@ -11,9 +11,10 @@ import { usePesanan } from "@/lib/pesanan-store";
 import type { Customer, CustomerType } from "@/types";
 import {
     buildStats, enrichCustomers, emptyCustomerStat, normalizeName, daysSince,
-    DORMANT_DAYS, MARKETERS, type CustomerStat,
+    DORMANT_DAYS, type CustomerStat,
 } from "@/lib/crm-analytics";
 import { fetchRegionCoords, type RegionCoord } from "@/lib/crm-refs";
+import { fetchMarketers, DEFAULT_MARKETERS, type Marketer } from "@/lib/crm-marketers";
 import { TYPE_OPTS, inputSt, labelSt } from "./components/shared";
 import CustomerDrawer from "./components/CustomerDrawer";
 import TabDirektori from "./components/TabDirektori";
@@ -49,6 +50,12 @@ export default function CrmPage() {
     // Referensi kota (utk datalist form & auto-isi provinsi).
     const [regions, setRegions] = useState<RegionCoord[]>([]);
     useEffect(() => { fetchRegionCoords().then(setRegions).catch(() => { /* tabel belum ada → datalist kosong saja */ }); }, []);
+
+    // Daftar marketing dari tabel crm_marketers (fallback bawaan bila belum ada).
+    const [marketers, setMarketers] = useState<Marketer[]>(DEFAULT_MARKETERS);
+    const reloadMarketers = () => { fetchMarketers().then(setMarketers).catch(() => {}); };
+    useEffect(() => { reloadMarketers(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    const activeMarketers = useMemo(() => marketers.filter((m) => m.active), [marketers]);
     const provinsiOf = (kota: string): string =>
         regions.find((r) => r.kota.toLowerCase() === kota.trim().toLowerCase())?.provinsi ?? "";
 
@@ -121,7 +128,11 @@ export default function CrmPage() {
                 <div><label style={labelSt}>Marketing (PIC Internal)</label>
                     <select style={inputSt} value={form.marketingId} onChange={(e) => setForm((p) => ({ ...p, marketingId: e.target.value }))}>
                         <option value="">— Belum di-assign —</option>
-                        {MARKETERS.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        {activeMarketers.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        {/* Marketing nonaktif yang masih ter-assign di customer ini — tampilkan agar tidak "hilang" saat edit */}
+                        {form.marketingId && !activeMarketers.some((m) => m.id === form.marketingId) && (
+                            <option value={form.marketingId}>{marketers.find((m) => m.id === form.marketingId)?.name ?? form.marketingId} (nonaktif)</option>
+                        )}
                     </select>
                 </div>
                 <div><label style={labelSt}>Kota / Wilayah</label>
@@ -168,11 +179,11 @@ export default function CrmPage() {
                 ))}
             </div>
 
-            {tab === "direktori" && <TabDirektori enriched={enriched} loading={loading} onDetail={setDetail} onEdit={openEdit} onDelete={handleDelete} showToast={showToast} />}
-            {tab === "marketing" && <TabMarketing enriched={enriched} rows={rows} onDetail={setDetail} showToast={showToast} />}
+            {tab === "direktori" && <TabDirektori enriched={enriched} marketers={marketers} loading={loading} onDetail={setDetail} onEdit={openEdit} onDelete={handleDelete} showToast={showToast} />}
+            {tab === "marketing" && <TabMarketing enriched={enriched} rows={rows} marketers={marketers} onReloadMarketers={reloadMarketers} onDetail={setDetail} showToast={showToast} />}
             {tab === "peta" && <TabPeta enriched={enriched} coords={regions} showToast={showToast} />}
-            {tab === "piutang" && <TabPiutang stats={stats} byName={byName} />}
-            {tab === "reengage" && <TabReengage stats={stats} byName={byName} />}
+            {tab === "piutang" && <TabPiutang stats={stats} byName={byName} marketers={marketers} />}
+            {tab === "reengage" && <TabReengage stats={stats} byName={byName} marketers={marketers} />}
 
             {/* Modal Tambah / Edit */}
             {(showAdd || editing) && (
@@ -200,6 +211,7 @@ export default function CrmPage() {
                     c={detail}
                     stat={statOf(detail.name)}
                     rows={rows}
+                    marketers={marketers}
                     onClose={() => setDetail(null)}
                     onEdit={() => { const d = detail; setDetail(null); openEdit(d); }}
                 />

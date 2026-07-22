@@ -6,10 +6,11 @@ import { useState, useMemo } from "react";
 import { AlertTriangle, MapPin } from "lucide-react";
 import type { Customer } from "@/types";
 import {
-    directoryKpi, findDuplicateGroups, marketerById,
+    directoryKpi, findDuplicateGroups,
     DORMANT_DAYS, TIER_A_MIN, TIER_B_MIN,
     type EnrichedCustomer, type Tier,
 } from "@/lib/crm-analytics";
+import { findMarketer, type Marketer } from "@/lib/crm-marketers";
 import { waGreeting, waLink } from "@/lib/crm-wa";
 import { formatCurrency } from "@/lib/utils";
 import { usePaged, PageNav } from "@/components/layout/PageNav";
@@ -41,6 +42,7 @@ const FILTER_OPTS: [FilterKey, string][] = [
 
 interface Props {
     enriched: EnrichedCustomer[];
+    marketers: Marketer[];
     loading: boolean;
     onDetail: (c: Customer) => void;
     onEdit: (c: Customer) => void;
@@ -48,7 +50,7 @@ interface Props {
     showToast: (m: string) => void;
 }
 
-export default function TabDirektori({ enriched, loading, onDetail, onEdit, onDelete, showToast }: Props) {
+export default function TabDirektori({ enriched, marketers, loading, onDetail, onEdit, onDelete, showToast }: Props) {
     const [filter, setFilter] = useState<FilterKey>("semua");
     const [search, setSearch] = useState("");
     const [showMerge, setShowMerge] = useState(false);
@@ -143,7 +145,7 @@ export default function TabDirektori({ enriched, loading, onDetail, onEdit, onDe
                             ) : paged.map((e) => {
                                 const c = e.c;
                                 const tm = typeMeta(c.type);
-                                const mk = marketerById(c.marketingId ?? "");
+                                const mk = findMarketer(marketers, c.marketingId);
                                 const wa = waLink(c.phone, waGreeting(c.name, c.pic));
                                 return (
                                     <tr key={c.id} style={dupIds.has(c.id) ? { background: "#FCF7EC" } : undefined}>

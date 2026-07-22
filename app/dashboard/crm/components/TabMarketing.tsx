@@ -4,13 +4,14 @@
 // tabel penagihan customer binaan, callout belum tertagih, dan
 // "Kunci & catat bonus" → snapshot ke tabel marketing_bonus.
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { Percent, Wallet, AlertCircle, Send, Lock, Check, Clock, MapPin } from "lucide-react";
+import { Percent, Wallet, AlertCircle, Send, Lock, Check, Clock, MapPin, UserPlus, Settings2 } from "lucide-react";
 import type { Customer } from "@/types";
 import {
-    MARKETERS, marketerById, marketingRollup, customersOfMarketer, availableMonths,
+    marketingRollup, customersOfMarketer, availableMonths,
     monthLabel, currentMonthKey, computeBonus, DEFAULT_BONUS_RATE,
     type EnrichedCustomer, type OrderRowLike,
 } from "@/lib/crm-analytics";
+import { findMarketer, addMarketer, setMarketerActive, type Marketer } from "@/lib/crm-marketers";
 import { fetchMarketingBonuses, lockMarketingBonus, type MarketingBonusRecord } from "@/lib/crm-refs";
 import { waPiutang, waLink } from "@/lib/crm-wa";
 import { useAuth } from "@/lib/auth";
@@ -30,13 +31,23 @@ const selectSt: React.CSSProperties = {
 interface Props {
     enriched: EnrichedCustomer[];
     rows: OrderRowLike[];
+    marketers: Marketer[];
+    onReloadMarketers: () => void;
     onDetail: (c: Customer) => void;
     showToast: (m: string) => void;
 }
 
-export default function TabMarketing({ enriched, rows, onDetail, showToast }: Props) {
+export default function TabMarketing({ enriched, rows, marketers, onReloadMarketers, onDetail, showToast }: Props) {
     const { user } = useAuth();
-    const [active, setActive] = useState<string>(MARKETERS[0].id);
+    const activeMarketers = useMemo(() => marketers.filter((m) => m.active), [marketers]);
+    const [active, setActive] = useState<string>(activeMarketers[0]?.id ?? "");
+    const [showKelola, setShowKelola] = useState(false);
+    // Jaga pilihan tetap valid saat daftar berubah (mis. marketing dinonaktifkan).
+    useEffect(() => {
+        if (activeMarketers.length && !activeMarketers.some((m) => m.id === active)) {
+            setActive(activeMarketers[0].id);
+        }
+    }, [activeMarketers, active]);
     const [rate, setRate] = useState<number>(DEFAULT_BONUS_RATE);
     const months = useMemo(() => availableMonths(rows), [rows]);
     // Tahun tersedia: dari data (sudah dibatasi rentang wajar) + tahun berjalan.
@@ -70,11 +81,11 @@ export default function TabMarketing({ enriched, rows, onDetail, showToast }: Pr
     const periodLabel = !period ? "" : monthNum ? monthLabel(period) : `Tahun ${year}`;
 
     const customers = useMemo(() => enriched.map((e) => e.c), [enriched]);
-    const rollup = useMemo(() => marketingRollup(customers, rows, period), [customers, rows, period]);
+    const rollup = useMemo(() => marketingRollup(customers, rows, period, activeMarketers), [customers, rows, period, activeMarketers]);
     const list = useMemo(() => customersOfMarketer(enriched, rows, active, period), [enriched, rows, active, period]);
 
     const unassigned = rollup.perMarketer.get("");
-    const activeMk = marketerById(active) ?? MARKETERS[0];
+    const activeMk = findMarketer(activeMarketers, active) ?? { id: "", name: "—", color: "#8A7B6E", active: true };
     const activeOmset = rollup.perMarketer.get(active)?.omset ?? 0;
 
     // Piutang periode terpilih saja — selaras dgn omset & bonus.
@@ -130,13 +141,18 @@ export default function TabMarketing({ enriched, rows, onDetail, showToast }: Pr
                         {years.map((y) => <option key={y} value={y}>{y}</option>)}
                     </select>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 7, background: "#fff", border: "1px solid #E8DDD0", borderRadius: 9, padding: "7px 12px" }}>
-                    <Percent size={14} color="#8A7B6E" />
-                    <span style={{ fontSize: 12.5, color: "#8A7B6E" }}>Bonus</span>
-                    <input type="number" step="0.1" min="0" value={rate}
-                        onChange={(e) => setRate(parseFloat(e.target.value) || 0)}
-                        style={{ width: 48, border: "none", outline: "none", fontSize: 13, fontWeight: 700, color: "#A67B5B", background: "transparent" }} />
-                    <span style={{ fontSize: 13, color: "#8A7B6E" }}>%</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 7, background: "#fff", border: "1px solid #E8DDD0", borderRadius: 9, padding: "7px 12px" }}>
+                        <Percent size={14} color="#8A7B6E" />
+                        <span style={{ fontSize: 12.5, color: "#8A7B6E" }}>Bonus</span>
+                        <input type="number" step="0.1" min="0" value={rate}
+                            onChange={(e) => setRate(parseFloat(e.target.value) || 0)}
+                            style={{ width: 48, border: "none", outline: "none", fontSize: 13, fontWeight: 700, color: "#A67B5B", background: "transparent" }} />
+                        <span style={{ fontSize: 13, color: "#8A7B6E" }}>%</span>
+                    </div>
+                    <button onClick={() => setShowKelola(true)} className="btn btn-secondary" style={{ fontSize: 12.5 }} title="Tambah / nonaktifkan marketing">
+                        <Settings2 size={14} style={{ marginRight: 5 }} />Kelola marketing
+                    </button>
                 </div>
             </div>
 
@@ -147,7 +163,7 @@ export default function TabMarketing({ enriched, rows, onDetail, showToast }: Pr
                     <div style={{ fontSize: "1.25rem", fontWeight: 800, marginTop: 6 }}>{formatCurrency(rollup.totalOmset)}</div>
                     <div style={{ fontSize: 11, opacity: 0.85, marginTop: 3 }}>Total bonus {rate}%: {formatCurrency(computeBonus(rollup.totalOmset, rate))}</div>
                 </div>
-                {MARKETERS.map((m) => {
+                {activeMarketers.map((m) => {
                     const r = rollup.perMarketer.get(m.id);
                     const om = r?.omset ?? 0;
                     const share = rollup.totalOmset ? Math.round((om / rollup.totalOmset) * 100) : 0;
@@ -180,7 +196,7 @@ export default function TabMarketing({ enriched, rows, onDetail, showToast }: Pr
             {/* Pill marketing + callout belum tertagih */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {MARKETERS.map((m) => (
+                    {activeMarketers.map((m) => (
                         <button key={m.id} onClick={() => setActive(m.id)}
                             style={{ fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: "7px 15px", borderRadius: 999, border: `1px solid ${active === m.id ? m.color : "#E8DDD0"}`, background: active === m.id ? m.color : "#fff", color: active === m.id ? "#fff" : "#8A7B6E" }}>{m.name}</button>
                     ))}
@@ -269,6 +285,94 @@ export default function TabMarketing({ enriched, rows, onDetail, showToast }: Pr
                 dan nominal tagihan hanya menghitung order periode itu. Atribusi marketing lewat kolom Marketing
                 tiap customer (tab Direktori). Bonus terkunci tersimpan per bulan di tabel marketing_bonus.
             </p>
+
+            {showKelola && (
+                <KelolaMarketing marketers={marketers} onClose={() => setShowKelola(false)}
+                    onChanged={onReloadMarketers} showToast={showToast} />
+            )}
         </>
+    );
+}
+
+/* ===== Modal Kelola Marketing: tambah & nonaktifkan (daftar di tabel crm_marketers) ===== */
+function KelolaMarketing({ marketers, onClose, onChanged, showToast }: {
+    marketers: Marketer[];
+    onClose: () => void;
+    onChanged: () => void;
+    showToast: (m: string) => void;
+}) {
+    const [nama, setNama] = useState("");
+    const [busy, setBusy] = useState(false);
+
+    const handleAdd = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!nama.trim()) return;
+        setBusy(true);
+        try {
+            await addMarketer(nama, marketers);
+            showToast(`✅ Marketing "${nama.trim()}" ditambahkan`);
+            setNama("");
+            onChanged();
+        } catch (err: unknown) {
+            alert(err instanceof Error ? err.message : "Gagal menambah marketing.");
+        } finally { setBusy(false); }
+    };
+
+    const handleToggle = async (m: Marketer) => {
+        if (m.active) {
+            const ok = confirm(
+                `Nonaktifkan ${m.name} dari daftar marketing?\n\n`
+                + `• ${m.name} hilang dari kartu, pill, dan pilihan form.\n`
+                + `• Customer binaannya akan terhitung "belum di-assign" di rekap — re-assign lewat tab Direktori.\n`
+                + `• Riwayat bonus yang sudah terkunci TIDAK terhapus.\n\n`
+                + `Lanjutkan?`
+            );
+            if (!ok) return;
+        }
+        setBusy(true);
+        try {
+            await setMarketerActive(m.id, !m.active);
+            showToast(m.active ? `➖ ${m.name} dinonaktifkan` : `✅ ${m.name} diaktifkan lagi`);
+            onChanged();
+        } catch (err: unknown) {
+            alert(err instanceof Error ? err.message : "Gagal mengubah status.");
+        } finally { setBusy(false); }
+    };
+
+    return (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}
+            onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+            <div style={{ background: "white", borderRadius: 12, width: "100%", maxWidth: 460, border: "1px solid #E6D5BE", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+                <div style={{ padding: "16px 20px", borderBottom: "1px solid #E6D5BE", background: "#FDF8F3", borderRadius: "12px 12px 0 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontWeight: 700, fontSize: 15, color: "#5C4033" }}>⚙️ Kelola Marketing</span>
+                    <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "#B89678" }}>×</button>
+                </div>
+                <div style={{ padding: 20 }}>
+                    {marketers.map((m) => (
+                        <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: "1px solid #F3EADB", opacity: m.active ? 1 : 0.55 }}>
+                            <span style={{ width: 22, height: 22, borderRadius: "50%", background: m.color, color: "#fff", display: "grid", placeItems: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{m.name[0]}</span>
+                            <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: "#3C2F2F" }}>
+                                {m.name}{!m.active && <span style={{ fontSize: 10.5, fontWeight: 700, color: "#B8860B", marginLeft: 6 }}>NONAKTIF</span>}
+                            </span>
+                            <button onClick={() => handleToggle(m)} disabled={busy} className="btn btn-ghost"
+                                style={{ fontSize: 11.5, color: m.active ? "#B91C1C" : "#15803D", padding: "3px 8px" }}>
+                                {m.active ? "Nonaktifkan" : "Aktifkan"}
+                            </button>
+                        </div>
+                    ))}
+                    <form onSubmit={handleAdd} style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                        <input value={nama} onChange={(e) => setNama(e.target.value)} placeholder="Nama marketing baru…"
+                            style={{ flex: 1, border: "1.5px solid #D1BFA3", borderRadius: 8, padding: "8px 12px", fontSize: 13, color: "#3C2F2F", background: "#FFFBF7", outline: "none" }} />
+                        <button type="submit" disabled={busy || !nama.trim()} className="btn btn-primary" style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
+                            <UserPlus size={13} style={{ marginRight: 4 }} />{busy ? "Menyimpan…" : "Tambah"}
+                        </button>
+                    </form>
+                    <p style={{ fontSize: 11, color: "#B89678", marginTop: 10, lineHeight: 1.5 }}>
+                        Marketing baru langsung muncul di kartu rekap & pilihan form customer.
+                        Hanya owner/finance yang bisa mengubah daftar ini.
+                    </p>
+                </div>
+            </div>
+        </div>
     );
 }

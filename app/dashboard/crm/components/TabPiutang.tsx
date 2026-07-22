@@ -7,7 +7,8 @@
 import { useState, useMemo } from "react";
 import { Send, MapPin } from "lucide-react";
 import type { Customer } from "@/types";
-import { normalizeName, daysSince, marketerById, type CustomerStat } from "@/lib/crm-analytics";
+import { normalizeName, daysSince, type CustomerStat } from "@/lib/crm-analytics";
+import { findMarketer, type Marketer } from "@/lib/crm-marketers";
 import { waPiutang, waLink } from "@/lib/crm-wa";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
@@ -26,9 +27,10 @@ const BUCKETS = [
 interface Props {
     stats: Map<string, CustomerStat>;
     byName: Map<string, Customer>;
+    marketers: Marketer[];
 }
 
-export default function TabPiutang({ stats, byName }: Props) {
+export default function TabPiutang({ stats, byName, marketers }: Props) {
     const [bucketFilter, setBucketFilter] = useState<number | null>(null);
 
     const debtors = useMemo<Debtor[]>(() =>
@@ -70,7 +72,7 @@ export default function TabPiutang({ stats, byName }: Props) {
                     {shown.length === 0 ? (
                         <div style={{ textAlign: "center", padding: 30, color: "#15803D", fontSize: 13 }}>🎉 Tidak ada piutang{bucketFilter !== null ? " di kelompok ini" : ". Semua lunas!"}</div>
                     ) : shown.map((d) => {
-                        const mk = d.c ? marketerById(d.c.marketingId ?? "") : undefined;
+                        const mk = d.c ? findMarketer(marketers, d.c.marketingId) : undefined;
                         const invs = Array.from(d.stat.unpaidInvoices);
                         const wa = d.c?.phone ? waLink(d.c.phone, waPiutang(d.stat.name, d.c.pic, d.stat.unpaid, invs)) : null;
                         return (
