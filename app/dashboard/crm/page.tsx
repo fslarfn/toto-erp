@@ -1,67 +1,37 @@
 "use client";
-import { useState, useMemo } from "react";
-import { useCrm, normalizeName } from "@/lib/crm-store";
+// ============================================================
+// CRM Customer — CRM Terpadu (kerangka 5 tab, Tahap 3).
+// Direktori · Per Marketing · Peta Wilayah · Pengingat Piutang · Re-engagement
+// Konten tab di app/dashboard/crm/components/; derivasi angka di lib/crm-analytics.
+// ============================================================
+import { useState, useMemo, useEffect } from "react";
+import { Users, Wallet, Map as MapIcon, AlertCircle, TrendingUp } from "lucide-react";
+import { useCrm } from "@/lib/crm-store";
 import { usePesanan } from "@/lib/pesanan-store";
 import type { Customer, CustomerType } from "@/types";
-import { formatCurrency, formatDate } from "@/lib/utils";
-import { usePaged, PageNav } from "@/components/layout/PageNav";
+import {
+    buildStats, enrichCustomers, emptyCustomerStat, normalizeName, daysSince,
+    DORMANT_DAYS, MARKETERS, type CustomerStat,
+} from "@/lib/crm-analytics";
+import { fetchRegionCoords, type RegionCoord } from "@/lib/crm-refs";
+import { TYPE_OPTS, inputSt, labelSt } from "./components/shared";
+import CustomerDrawer from "./components/CustomerDrawer";
+import TabDirektori from "./components/TabDirektori";
+import TabMarketing from "./components/TabMarketing";
+import TabPeta from "./components/TabPeta";
+import TabPiutang from "./components/TabPiutang";
+import TabReengage from "./components/TabReengage";
 
-const TYPE_OPTS: { value: CustomerType; label: string; color: string }[] = [
-    { value: "retail", label: "Retail", color: "#2563EB" },
-    { value: "proyek", label: "Proyek", color: "#15803D" },
-    { value: "kontraktor", label: "Kontraktor", color: "#A16207" },
-    { value: "reseller", label: "Reseller", color: "#7C3AED" },
-    { value: "lainnya", label: "Lainnya", color: "#6B7280" },
-];
-const typeMeta = (t: CustomerType) => TYPE_OPTS.find((o) => o.value === t) ?? TYPE_OPTS[4];
+type TabKey = "direktori" | "marketing" | "peta" | "piutang" | "reengage";
 
-function parseIdNum(s: string | undefined): number {
-    if (!s) return 0;
-    const str = s.trim();
-    if (str.includes(",")) return parseFloat(str.replace(/\./g, "").replace(",", ".")) || 0;
-    if (/^\d{1,3}(\.\d{3})+$/.test(str)) return parseFloat(str.replace(/\./g, "")) || 0;
-    return parseFloat(str.replace(/[^0-9.]/g, "")) || 0;
-}
-
-// Sapaan WA default (re-engagement: tanya kabar → tawarkan order lagi).
-// Tanpa emoji — beberapa klien WhatsApp merusak emoji yang dikirim via wa.me.
-function waGreeting(name: string, pic: string): string {
-    const sapaan = (pic || name || "Bapak/Ibu").trim();
-    return `Halo ${sapaan}, apa kabar? Semoga sehat selalu dan usahanya lancar.\n\n`
-        + `Kami dari *CV TOTO Aluminium Manufacture*. Apakah ada kebutuhan pesanan aluminium lagi yang bisa kami bantu? `
-        + `Kami siap melayani.`;
-}
-
-// Pesan pengingat piutang.
-function waPiutang(name: string, pic: string, amount: number, invoices: string[]): string {
-    const sapaan = (pic || name || "Bapak/Ibu").trim();
-    const inv = invoices.length ? ` (invoice: ${invoices.join(", ")})` : "";
-    return `Halo ${sapaan}, mohon maaf mengganggu.\n\n`
-        + `Kami dari *CV TOTO Aluminium Manufacture* ingin mengingatkan tagihan yang masih belum lunas sebesar *${formatCurrency(amount)}*${inv}.\n\n`
-        + `Mohon konfirmasi pembayarannya ya. Terima kasih.`;
-}
-
-function waLink(phone: string, text: string): string | null {
-    let p = (phone || "").replace(/[^0-9]/g, "");
-    if (!p) return null;
-    if (p.startsWith("0")) p = "62" + p.slice(1);
-    else if (p.startsWith("8")) p = "62" + p;
-    return `https://wa.me/${p}?text=${encodeURIComponent(text)}`;
-}
-
-type FormState = { name: string; phone: string; type: CustomerType; pic: string; address: string; notes: string };
-const emptyForm: FormState = { name: "", phone: "", type: "retail", pic: "", address: "", notes: "" };
-
-type Agg = { name: string; count: number; total: number; unpaid: number; last: string; oldestUnpaid: string; invoices: Set<string>; unpaidInvoices: Set<string> };
-const emptyAgg = (name = ""): Agg => ({ name, count: 0, total: 0, unpaid: 0, last: "", oldestUnpaid: "", invoices: new Set(), unpaidInvoices: new Set() });
+type FormState = { name: string; phone: string; type: CustomerType; pic: string; address: string; notes: string; marketingId: string; kota: string };
+const emptyForm: FormState = { name: "", phone: "", type: "retail", pic: "", address: "", notes: "", marketingId: "", kota: "" };
 
 export default function CrmPage() {
     const { customers, loading, addCustomer, updateCustomer, deleteCustomer, importNames } = useCrm();
     const { rows } = usePesanan();
 
-    const [tab, setTab] = useState<"direktori" | "piutang" | "reengage">("direktori");
-    const [waFilter, setWaFilter] = useState<"all" | "with" | "without">("all");
-    const [search, setSearch] = useState("");
+    const [tab, setTab] = useState<TabKey>("direktori");
     const [form, setForm] = useState<FormState>(emptyForm);
     const [showAdd, setShowAdd] = useState(false);
     const [editing, setEditing] = useState<Customer | null>(null);
@@ -71,30 +41,16 @@ export default function CrmPage() {
 
     const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(""), 3000); };
 
-    // Agregasi order per customer (cocok via nama ternormalisasi).
-    const agg = useMemo(() => {
-        const map = new Map<string, Agg>();
-        for (const r of rows) {
-            if (!(r.customer || r.deskripsi) || !r.customer) continue;
-            const key = normalizeName(r.customer);
-            if (!key) continue;
-            const val = parseIdNum(r.harga) * parseIdNum(r.ukuran) * parseIdNum(r.qty);
-            const e = map.get(key) ?? emptyAgg(r.customer.trim());
-            e.count += 1;
-            e.total += val;
-            if (r.no_inv) e.invoices.add(r.no_inv.trim());
-            if (!r.is_paid) {
-                e.unpaid += val;
-                if (r.no_inv) e.unpaidInvoices.add(r.no_inv.trim());
-                if (r.tanggal && (!e.oldestUnpaid || r.tanggal < e.oldestUnpaid)) e.oldestUnpaid = r.tanggal;
-            }
-            if (r.tanggal && r.tanggal > e.last) e.last = r.tanggal;
-            map.set(key, e);
-        }
-        return map;
-    }, [rows]);
+    // Agregasi order per customer — satu kali hitung, dipakai semua tab.
+    const stats = useMemo(() => buildStats(rows), [rows]);
+    const statOf = (name: string): CustomerStat => stats.get(normalizeName(name)) ?? emptyCustomerStat(name);
+    const enriched = useMemo(() => enrichCustomers(customers, stats), [customers, stats]);
 
-    const statOf = (name: string) => agg.get(normalizeName(name)) ?? emptyAgg(name);
+    // Referensi kota (utk datalist form & auto-isi provinsi).
+    const [regions, setRegions] = useState<RegionCoord[]>([]);
+    useEffect(() => { fetchRegionCoords().then(setRegions).catch(() => { /* tabel belum ada → datalist kosong saja */ }); }, []);
+    const provinsiOf = (kota: string): string =>
+        regions.find((r) => r.kota.toLowerCase() === kota.trim().toLowerCase())?.provinsi ?? "";
 
     // Lookup customer master by nama ternormalisasi (untuk ambil no WA/PIC).
     const byName = useMemo(() => {
@@ -103,25 +59,9 @@ export default function CrmPage() {
         return m;
     }, [customers]);
 
-    const daysSince = (d: string) => {
-        if (!d) return 0;
-        return Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
-    };
-
-    const filtered = useMemo(() => {
-        let list = customers;
-        if (waFilter === "with") list = list.filter((c) => c.phone.trim());
-        else if (waFilter === "without") list = list.filter((c) => !c.phone.trim());
-        const q = search.toLowerCase().trim();
-        if (q) list = list.filter((c) => [c.name, c.phone, c.pic, c.address].join(" ").toLowerCase().includes(q));
-        return list;
-    }, [customers, search, waFilter]);
-
-    // Render dipotong per halaman — sebelumnya 2 ribu+ customer masuk DOM sekaligus.
-    // Kartu statistik di atas tetap dihitung dari seluruh data.
-    const { paged: pagedCustomers, page, setPage, totalPages } = usePaged(filtered, 50);
-
-    const withWa = customers.filter((c) => c.phone.trim()).length;
+    // Badge jumlah di tab (sumber sama dgn isi tabnya).
+    const piutangCount = useMemo(() => Array.from(stats.values()).filter((a) => a.unpaid > 0.01).length, [stats]);
+    const dormantCount = useMemo(() => Array.from(stats.values()).filter((a) => a.last && daysSince(a.last) >= DORMANT_DAYS).length, [stats]);
 
     // ── Handlers ──
     const handleAdd = async (e: React.FormEvent) => {
@@ -129,7 +69,7 @@ export default function CrmPage() {
         if (!form.name.trim()) { alert("Nama wajib diisi."); return; }
         setBusy(true);
         try {
-            await addCustomer({ name: form.name.trim(), phone: form.phone.trim(), address: form.address.trim(), type: form.type, pic: form.pic.trim(), notes: form.notes.trim() });
+            await addCustomer({ name: form.name.trim(), phone: form.phone.trim(), address: form.address.trim(), type: form.type, pic: form.pic.trim(), notes: form.notes.trim(), marketingId: form.marketingId, kota: form.kota.trim(), provinsi: provinsiOf(form.kota) });
             setShowAdd(false); setForm(emptyForm); showToast("✅ Customer ditambahkan");
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : "";
@@ -137,13 +77,13 @@ export default function CrmPage() {
         } finally { setBusy(false); }
     };
 
-    const openEdit = (c: Customer) => { setEditing(c); setForm({ name: c.name, phone: c.phone, type: c.type, pic: c.pic, address: c.address, notes: c.notes }); };
+    const openEdit = (c: Customer) => { setEditing(c); setForm({ name: c.name, phone: c.phone, type: c.type, pic: c.pic, address: c.address, notes: c.notes, marketingId: c.marketingId ?? "", kota: c.kota ?? "" }); };
     const handleEdit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!editing) return;
         setBusy(true);
         try {
-            await updateCustomer(editing.id, { name: form.name.trim(), phone: form.phone.trim(), address: form.address.trim(), type: form.type, pic: form.pic.trim(), notes: form.notes.trim() });
+            await updateCustomer(editing.id, { name: form.name.trim(), phone: form.phone.trim(), address: form.address.trim(), type: form.type, pic: form.pic.trim(), notes: form.notes.trim(), marketingId: form.marketingId, kota: form.kota.trim(), provinsi: provinsiOf(form.kota) || (editing.provinsi ?? "") });
             setEditing(null); setForm(emptyForm); showToast("✅ Customer diperbarui");
         } catch (err: unknown) {
             alert("Gagal memperbarui: " + (err instanceof Error ? err.message : ""));
@@ -167,9 +107,6 @@ export default function CrmPage() {
         finally { setBusy(false); }
     };
 
-    const inputSt: React.CSSProperties = { width: "100%", border: "1.5px solid #D1BFA3", borderRadius: 7, padding: "8px 12px", fontSize: 13, color: "#3C2F2F", background: "#FFFBF7", outline: "none", boxSizing: "border-box" };
-    const labelSt: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: "#B89678", letterSpacing: 1, textTransform: "uppercase", display: "block", marginBottom: 5 };
-
     const renderFormFields = () => (
         <>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
@@ -181,18 +118,36 @@ export default function CrmPage() {
                     </select>
                 </div>
                 <div><label style={labelSt}>PIC / Kontak</label><input style={inputSt} value={form.pic} onChange={(e) => setForm((p) => ({ ...p, pic: e.target.value }))} placeholder="cth: Bpk Andi" /></div>
+                <div><label style={labelSt}>Marketing (PIC Internal)</label>
+                    <select style={inputSt} value={form.marketingId} onChange={(e) => setForm((p) => ({ ...p, marketingId: e.target.value }))}>
+                        <option value="">— Belum di-assign —</option>
+                        {MARKETERS.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    </select>
+                </div>
+                <div><label style={labelSt}>Kota / Wilayah</label>
+                    <input style={inputSt} value={form.kota} onChange={(e) => setForm((p) => ({ ...p, kota: e.target.value }))} placeholder="cth: Bekasi" list="crm-kota-list" />
+                    <datalist id="crm-kota-list">{regions.map((r) => <option key={r.kota} value={r.kota} />)}</datalist>
+                </div>
             </div>
             <div style={{ marginBottom: "1rem" }}><label style={labelSt}>Alamat</label><input style={inputSt} value={form.address} onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))} placeholder="Alamat customer" /></div>
             <div><label style={labelSt}>Catatan</label><textarea style={{ ...inputSt, minHeight: 70 }} value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Catatan internal..." /></div>
         </>
     );
 
+    const TABS: { key: TabKey; label: string; Icon: typeof Users; count?: number }[] = [
+        { key: "direktori", label: "Direktori", Icon: Users },
+        { key: "marketing", label: "Per Marketing", Icon: Wallet },
+        { key: "peta", label: "Peta Wilayah", Icon: MapIcon },
+        { key: "piutang", label: "Pengingat Piutang", Icon: AlertCircle, count: piutangCount },
+        { key: "reengage", label: "Re-engagement", Icon: TrendingUp, count: dormantCount },
+    ];
+
     return (
         <div className="page-content space-y-5">
             <div className="page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
                 <div>
                     <h1 className="page-title-h1">CRM Customer</h1>
-                    <p className="page-subtitle">Master data & riwayat customer</p>
+                    <p className="page-subtitle">Master data, wilayah, marketing & piutang — satu tempat</p>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
                     <button onClick={handleImport} disabled={busy} className="btn btn-secondary" style={{ fontSize: 13 }}>⬇️ Import dari Pesanan</button>
@@ -200,184 +155,24 @@ export default function CrmPage() {
                 </div>
             </div>
 
-            {/* Tab bar */}
-            <div style={{ display: "flex", gap: 4, borderBottom: "1px solid #E8DDD0" }}>
-                {([["direktori", "Direktori"], ["piutang", "Pengingat Piutang"], ["reengage", "Re-engagement"]] as const).map(([k, label]) => (
-                    <button key={k} onClick={() => setTab(k)} style={{ padding: "8px 16px", border: "none", background: "transparent", borderBottom: tab === k ? "2.5px solid #A67B5B" : "2.5px solid transparent", color: tab === k ? "#A67B5B" : "#9CA3AF", fontWeight: tab === k ? 700 : 500, fontSize: 13, cursor: "pointer" }}>{label}</button>
+            {/* Tab bar — 5 tab CRM Terpadu */}
+            <div style={{ display: "flex", gap: 4, borderBottom: "1px solid #E8DDD0", flexWrap: "wrap" }}>
+                {TABS.map(({ key, label, Icon, count }) => (
+                    <button key={key} onClick={() => setTab(key)}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", border: "none", background: "transparent", borderBottom: tab === key ? "2.5px solid #A67B5B" : "2.5px solid transparent", color: tab === key ? "#A67B5B" : "#9CA3AF", fontWeight: tab === key ? 700 : 500, fontSize: 13, cursor: "pointer" }}>
+                        <Icon size={15} /> {label}
+                        {count !== undefined && count > 0 && (
+                            <span style={{ fontSize: 10.5, fontWeight: 700, color: "#fff", background: "#B91C1C", borderRadius: 99, padding: "1px 6px" }}>{count}</span>
+                        )}
+                    </button>
                 ))}
             </div>
 
-            {tab === "direktori" && (<>
-            {/* Ringkasan — klik untuk filter */}
-            <div className="rgrid rgrid-3" style={{ gap: "0.875rem" }}>
-                {([
-                    { key: "all" as const, label: "Total Customer", val: customers.length, color: "var(--text-dark)" },
-                    { key: "with" as const, label: "Punya No. WA", val: withWa, color: "#15803D" },
-                    { key: "without" as const, label: "Belum Ada WA", val: customers.length - withWa, color: "#B91C1C" },
-                ]).map((c) => {
-                    const active = waFilter === c.key;
-                    return (
-                        <button key={c.key} onClick={() => setWaFilter(c.key)} className="stat-card"
-                            style={{ textAlign: "left", cursor: "pointer", border: active ? "2px solid #A67B5B" : "2px solid transparent", boxShadow: active ? "0 0 0 3px rgba(166,123,91,0.12)" : undefined, transition: "all .15s" }}>
-                            <div style={{ fontSize: 11, fontWeight: 600, color: "#B89678" }}>{c.label}{active ? " • aktif" : ""}</div>
-                            <div style={{ fontSize: "1.3rem", fontWeight: 800, color: c.color }}>{c.val}</div>
-                        </button>
-                    );
-                })}
-            </div>
-
-            {/* Tabel */}
-            <div className="card">
-                <div className="card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        Daftar Customer ({filtered.length})
-                        {waFilter !== "all" && (
-                            <button onClick={() => setWaFilter("all")} style={{ fontSize: 11, fontWeight: 600, color: "#A16207", background: "#FEF9C3", border: "1px solid #FDE68A", borderRadius: 99, padding: "2px 10px", cursor: "pointer" }}>
-                                Filter: {waFilter === "without" ? "Belum ada WA" : "Punya WA"} ✕
-                            </button>
-                        )}
-                    </span>
-                    <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="🔍 Cari nama / WA / PIC..." style={{ ...inputSt, width: 260 }} />
-                </div>
-                <div className="table-container">
-                    <table className="data-table">
-                        <thead>
-                            <tr>
-                                <th>Nama</th><th>Tipe</th><th>No. WA</th>
-                                <th style={{ textAlign: "right" }}>Total Order</th>
-                                <th style={{ textAlign: "right" }}>Piutang</th>
-                                <th>Order Terakhir</th>
-                                <th style={{ width: 150, textAlign: "center" }}>Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {loading ? (
-                                <tr><td colSpan={7} style={{ textAlign: "center", padding: 30, color: "#B89678" }}>Memuat…</td></tr>
-                            ) : filtered.length === 0 ? (
-                                <tr><td colSpan={7} style={{ textAlign: "center", padding: 30, color: "#B89678" }}>Belum ada customer. Klik <strong>Import dari Pesanan</strong> atau <strong>Tambah Customer</strong>.</td></tr>
-                            ) : pagedCustomers.map((c) => {
-                                const s = statOf(c.name);
-                                const tm = typeMeta(c.type);
-                                const wa = waLink(c.phone, waGreeting(c.name, c.pic));
-                                return (
-                                    <tr key={c.id}>
-                                        <td style={{ fontWeight: 600, color: "#3C2F2F" }}>
-                                            <button onClick={() => setDetail(c)} style={{ background: "none", border: "none", padding: 0, color: "#A67B5B", fontWeight: 700, cursor: "pointer", textAlign: "left" }}>{c.name}</button>
-                                            {c.pic && <div style={{ fontSize: 11, color: "#8A7B6E" }}>{c.pic}</div>}
-                                        </td>
-                                        <td><span className="badge" style={{ background: tm.color + "1A", color: tm.color, fontSize: 10 }}>{tm.label}</span></td>
-                                        <td>{c.phone ? (wa ? <a href={wa} target="_blank" rel="noreferrer" style={{ color: "#15803D", fontWeight: 600, textDecoration: "none" }}>💬 {c.phone}</a> : c.phone) : <span style={{ color: "#C5A882", fontSize: 12 }}>—</span>}</td>
-                                        <td style={{ textAlign: "right", fontWeight: 600 }}>{s.total > 0 ? formatCurrency(s.total) : "—"}</td>
-                                        <td style={{ textAlign: "right", fontWeight: 700, color: s.unpaid > 0 ? "#B91C1C" : "#15803D" }}>{s.unpaid > 0 ? formatCurrency(s.unpaid) : "—"}</td>
-                                        <td style={{ fontSize: 13 }}>{s.last ? formatDate(s.last) : "—"}</td>
-                                        <td style={{ textAlign: "center", whiteSpace: "nowrap" }}>
-                                            <button onClick={() => setDetail(c)} className="btn btn-ghost" style={{ color: "#4B5563", padding: 4 }} title="Detail 360">👁️</button>
-                                            <button onClick={() => openEdit(c)} className="btn btn-ghost" style={{ color: "#A67B5B", padding: 4 }} title="Edit">✏️</button>
-                                            <button onClick={() => handleDelete(c)} className="btn btn-ghost" style={{ color: "#ef4444", padding: 4 }} title="Hapus">🗑️</button>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                    <PageNav page={page} totalPages={totalPages} setPage={setPage} total={filtered.length} label="customer" />
-                </div>
-            </div>
-            </>)}
-
-            {/* ── Tab: PENGINGAT PIUTANG ── */}
-            {tab === "piutang" && (() => {
-                const list = Array.from(agg.values()).filter((a) => a.unpaid > 0.01).sort((x, y) => y.unpaid - x.unpaid);
-                const totalPiutang = list.reduce((s, a) => s + a.unpaid, 0);
-                return (
-                    <>
-                        <div className="rgrid rgrid-half" style={{ gap: "0.875rem" }}>
-                            <div className="stat-card"><div style={{ fontSize: 11, fontWeight: 600, color: "#B89678" }}>Total Piutang</div><div style={{ fontSize: "1.3rem", fontWeight: 800, color: "#B91C1C" }}>{formatCurrency(totalPiutang)}</div></div>
-                            <div className="stat-card"><div style={{ fontSize: 11, fontWeight: 600, color: "#B89678" }}>Customer Menunggak</div><div style={{ fontSize: "1.3rem", fontWeight: 800, color: "var(--text-dark)" }}>{list.length}</div></div>
-                        </div>
-                        <div className="card">
-                            <div className="card-header">Customer dengan Piutang ({list.length})</div>
-                            <div className="table-container">
-                                <table className="data-table">
-                                    <thead><tr><th>Customer</th><th style={{ textAlign: "right" }}>Piutang</th><th style={{ textAlign: "center" }}>Umur</th><th>Invoice Belum Lunas</th><th style={{ width: 150, textAlign: "center" }}>Aksi</th></tr></thead>
-                                    <tbody>
-                                        {list.length === 0 ? (
-                                            <tr><td colSpan={5} style={{ textAlign: "center", padding: 30, color: "#15803D" }}>🎉 Tidak ada piutang. Semua lunas!</td></tr>
-                                        ) : list.map((a) => {
-                                            const c = byName.get(normalizeName(a.name));
-                                            const umur = daysSince(a.oldestUnpaid);
-                                            const invs = Array.from(a.unpaidInvoices);
-                                            const wa = c?.phone ? waLink(c.phone, waPiutang(a.name, c.pic, a.unpaid, invs)) : null;
-                                            return (
-                                                <tr key={a.name}>
-                                                    <td style={{ fontWeight: 600 }}>{a.name}{c?.pic && <div style={{ fontSize: 11, color: "#8A7B6E" }}>{c.pic}</div>}</td>
-                                                    <td style={{ textAlign: "right", fontWeight: 700, color: "#B91C1C" }}>{formatCurrency(a.unpaid)}</td>
-                                                    <td style={{ textAlign: "center", fontSize: 12, color: umur > 60 ? "#B91C1C" : umur > 30 ? "#A16207" : "#6B7280", fontWeight: 600 }}>{umur > 0 ? `${umur} hr` : "—"}</td>
-                                                    <td style={{ fontSize: 12, color: "#5C4033" }}>{invs.length ? invs.join(", ") : "—"}</td>
-                                                    <td style={{ textAlign: "center" }}>
-                                                        {wa ? (
-                                                            <a href={wa} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ background: "#16a34a", fontSize: 12, padding: "5px 10px", whiteSpace: "nowrap" }}>💬 Ingatkan</a>
-                                                        ) : (
-                                                            <span style={{ fontSize: 11, color: "#C5A882" }}>{c ? "Belum ada WA" : "Tak di master"}</span>
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div className="card-body" style={{ fontSize: 11.5, color: "#8A7B6E" }}>{'💡 Tombol Ingatkan butuh No. WA di master customer. Yang "Tak di master" → Import/Tambah dulu di tab Direktori.'}</div>
-                        </div>
-                    </>
-                );
-            })()}
-
-            {/* ── Tab: RE-ENGAGEMENT ── */}
-            {tab === "reengage" && (() => {
-                const CUTOFF = 90;
-                const list = Array.from(agg.values()).filter((a) => a.last && daysSince(a.last) >= CUTOFF).sort((x, y) => daysSince(y.last) - daysSince(x.last));
-                return (
-                    <>
-                        <div className="rgrid rgrid-half" style={{ gap: "0.875rem" }}>
-                            <div className="stat-card"><div style={{ fontSize: 11, fontWeight: 600, color: "#B89678" }}>Perlu Di-follow-up (≥ {CUTOFF} hari)</div><div style={{ fontSize: "1.3rem", fontWeight: 800, color: "#A16207" }}>{list.length}</div></div>
-                            <div className="stat-card"><div style={{ fontSize: 11, fontWeight: 600, color: "#B89678" }}>Potensi Nilai (total historis)</div><div style={{ fontSize: "1.3rem", fontWeight: 800, color: "var(--text-dark)" }}>{formatCurrency(list.reduce((s, a) => s + a.total, 0))}</div></div>
-                        </div>
-                        <div className="card">
-                            <div className="card-header">Customer Lama Tidak Order ({list.length})</div>
-                            <div className="table-container">
-                                <table className="data-table">
-                                    <thead><tr><th>Customer</th><th>Order Terakhir</th><th style={{ textAlign: "center" }}>Lama Tidak Order</th><th style={{ textAlign: "right" }}>Total Nilai</th><th style={{ width: 150, textAlign: "center" }}>Aksi</th></tr></thead>
-                                    <tbody>
-                                        {list.length === 0 ? (
-                                            <tr><td colSpan={5} style={{ textAlign: "center", padding: 30, color: "#15803D" }}>Semua customer aktif (order &lt; {CUTOFF} hari). 👍</td></tr>
-                                        ) : list.map((a) => {
-                                            const c = byName.get(normalizeName(a.name));
-                                            const lama = daysSince(a.last);
-                                            const wa = c?.phone ? waLink(c.phone, waGreeting(a.name, c.pic)) : null;
-                                            return (
-                                                <tr key={a.name}>
-                                                    <td style={{ fontWeight: 600 }}>{a.name}{c?.pic && <div style={{ fontSize: 11, color: "#8A7B6E" }}>{c.pic}</div>}</td>
-                                                    <td style={{ fontSize: 13 }}>{a.last ? formatDate(a.last) : "—"}</td>
-                                                    <td style={{ textAlign: "center", fontSize: 12, fontWeight: 600, color: lama > 180 ? "#B91C1C" : "#A16207" }}>{lama} hr</td>
-                                                    <td style={{ textAlign: "right", fontWeight: 600 }}>{formatCurrency(a.total)}</td>
-                                                    <td style={{ textAlign: "center" }}>
-                                                        {wa ? (
-                                                            <a href={wa} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ background: "#16a34a", fontSize: 12, padding: "5px 10px", whiteSpace: "nowrap" }}>💬 Sapa</a>
-                                                        ) : (
-                                                            <span style={{ fontSize: 11, color: "#C5A882" }}>{c ? "Belum ada WA" : "Tak di master"}</span>
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </>
-                );
-            })()}
+            {tab === "direktori" && <TabDirektori enriched={enriched} loading={loading} onDetail={setDetail} onEdit={openEdit} onDelete={handleDelete} showToast={showToast} />}
+            {tab === "marketing" && <TabMarketing enriched={enriched} rows={rows} onDetail={setDetail} showToast={showToast} />}
+            {tab === "peta" && <TabPeta enriched={enriched} coords={regions} showToast={showToast} />}
+            {tab === "piutang" && <TabPiutang stats={stats} byName={byName} />}
+            {tab === "reengage" && <TabReengage stats={stats} byName={byName} />}
 
             {/* Modal Tambah / Edit */}
             {(showAdd || editing) && (
@@ -399,72 +194,16 @@ export default function CrmPage() {
                 </div>
             )}
 
-            {/* Modal Customer 360 */}
-            {detail && (() => {
-                const s = statOf(detail.name);
-                const tm = typeMeta(detail.type);
-                const recent = rows
-                    .filter((r) => normalizeName(r.customer) === normalizeName(detail.name) && r.customer)
-                    .sort((a, b) => (b.tanggal || "").localeCompare(a.tanggal || ""))
-                    .slice(0, 12);
-                const wa = waLink(detail.phone, waGreeting(detail.name, detail.pic));
-                return (
-                    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}
-                        onClick={(e) => { if (e.target === e.currentTarget) setDetail(null); }}>
-                        <div style={{ background: "white", borderRadius: 12, width: "100%", maxWidth: 720, maxHeight: "90vh", overflow: "hidden", display: "flex", flexDirection: "column", border: "1px solid #E6D5BE", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
-                            <div style={{ padding: "16px 20px", borderBottom: "1px solid #E6D5BE", background: "linear-gradient(135deg,#3B1F0F,#A67B5B)", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                                <div>
-                                    <div style={{ fontWeight: 800, fontSize: 17, color: "white" }}>{detail.name}</div>
-                                    <div style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", marginTop: 2 }}>
-                                        <span style={{ background: "rgba(255,255,255,0.2)", padding: "1px 8px", borderRadius: 99, marginRight: 6 }}>{tm.label}</span>
-                                        {detail.pic && `PIC: ${detail.pic}`}
-                                    </div>
-                                </div>
-                                <button onClick={() => setDetail(null)} style={{ background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 8, width: 30, height: 30, color: "white", fontSize: 16, cursor: "pointer" }}>×</button>
-                            </div>
-                            <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
-                                <div className="rgrid rgrid-4" style={{ gap: 10, marginBottom: 16 }}>
-                                    <div className="stat-card"><div style={{ fontSize: 10, color: "#B89678", fontWeight: 700 }}>JUMLAH ORDER</div><div style={{ fontSize: 18, fontWeight: 800 }}>{s.invoices.size || s.count}</div></div>
-                                    <div className="stat-card"><div style={{ fontSize: 10, color: "#B89678", fontWeight: 700 }}>TOTAL NILAI</div><div style={{ fontSize: 15, fontWeight: 800, color: "#15803D" }}>{formatCurrency(s.total)}</div></div>
-                                    <div className="stat-card"><div style={{ fontSize: 10, color: "#B89678", fontWeight: 700 }}>PIUTANG</div><div style={{ fontSize: 15, fontWeight: 800, color: s.unpaid > 0 ? "#B91C1C" : "#15803D" }}>{formatCurrency(s.unpaid)}</div></div>
-                                    <div className="stat-card"><div style={{ fontSize: 10, color: "#B89678", fontWeight: 700 }}>ORDER TERAKHIR</div><div style={{ fontSize: 13, fontWeight: 700 }}>{s.last ? formatDate(s.last) : "—"}</div></div>
-                                </div>
-
-                                <div style={{ display: "flex", gap: 16, fontSize: 13, color: "#5C4033", marginBottom: 16, flexWrap: "wrap" }}>
-                                    <div>📞 {detail.phone || "—"}</div>
-                                    <div>📍 {detail.address || "—"}</div>
-                                    {wa && <a href={wa} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ background: "#16a34a", fontSize: 12, padding: "5px 12px" }}>💬 Chat WhatsApp</a>}
-                                </div>
-                                {detail.notes && <div style={{ background: "#FFF9F0", border: "1px dashed #E8DDD0", borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#8A6D55", marginBottom: 16 }}>📝 {detail.notes}</div>}
-
-                                <div style={{ fontSize: 12, fontWeight: 800, color: "#5C4033", marginBottom: 8 }}>Riwayat Order Terakhir</div>
-                                <div className="table-container">
-                                    <table className="data-table">
-                                        <thead><tr><th>Tanggal</th><th>Deskripsi</th><th>No. Inv</th><th style={{ textAlign: "right" }}>Nilai</th><th>Bayar</th></tr></thead>
-                                        <tbody>
-                                            {recent.length === 0 ? (
-                                                <tr><td colSpan={5} style={{ textAlign: "center", padding: 20, color: "#B89678" }}>Belum ada order tercatat.</td></tr>
-                                            ) : recent.map((r) => (
-                                                <tr key={r.id}>
-                                                    <td style={{ fontSize: 12 }}>{r.tanggal ? formatDate(r.tanggal) : "—"}</td>
-                                                    <td style={{ fontSize: 12 }}>{r.deskripsi || "—"}</td>
-                                                    <td style={{ fontSize: 12 }}>{r.no_inv || "—"}</td>
-                                                    <td style={{ textAlign: "right", fontSize: 12, fontWeight: 600 }}>{formatCurrency(parseIdNum(r.harga) * parseIdNum(r.ukuran) * parseIdNum(r.qty))}</td>
-                                                    <td>{r.is_paid ? <span className="badge" style={{ background: "#DCFCE7", color: "#15803D", fontSize: 10 }}>Lunas</span> : <span className="badge" style={{ background: "#FEF2F2", color: "#991B1B", fontSize: 10 }}>Belum</span>}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                            <div style={{ padding: "12px 20px", borderTop: "1px solid #E6D5BE", background: "#FDF8F3", display: "flex", justifyContent: "flex-end", gap: 10 }}>
-                                <button onClick={() => { setDetail(null); openEdit(detail); }} className="btn btn-secondary" style={{ padding: "8px 18px" }}>✏️ Edit</button>
-                                <button onClick={() => setDetail(null)} className="btn btn-primary" style={{ padding: "8px 18px" }}>Tutup</button>
-                            </div>
-                        </div>
-                    </div>
-                );
-            })()}
+            {/* Drawer Customer 360 */}
+            {detail && (
+                <CustomerDrawer
+                    c={detail}
+                    stat={statOf(detail.name)}
+                    rows={rows}
+                    onClose={() => setDetail(null)}
+                    onEdit={() => { const d = detail; setDetail(null); openEdit(d); }}
+                />
+            )}
 
             {toast && (
                 <div style={{ position: "fixed", bottom: 28, right: 28, zIndex: 2000, background: "#DCFCE7", color: "#15803D", fontWeight: 600, fontSize: 13, padding: "12px 20px", borderRadius: 10, border: "1px solid #86EFAC", boxShadow: "0 4px 16px rgba(0,0,0,0.12)" }}>{toast}</div>

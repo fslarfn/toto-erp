@@ -20,6 +20,11 @@ function dbToCustomer(r: Record<string, unknown>): Customer {
         type: ((r.type as string) || "retail") as CustomerType,
         pic: (r.pic as string) || "",
         notes: (r.notes as string) || "",
+        marketingId: (r.marketing_id as string) || "",
+        kota: (r.kota as string) || "",
+        provinsi: (r.provinsi as string) || "",
+        latitude: r.latitude == null ? null : Number(r.latitude),
+        longitude: r.longitude == null ? null : Number(r.longitude),
         createdAt: (r.created_at as string) || undefined,
         updatedAt: (r.updated_at as string) || undefined,
     };
@@ -34,6 +39,11 @@ function customerToDb(c: Partial<Customer>): Record<string, unknown> {
     if (c.type !== undefined) d.type = c.type;
     if (c.pic !== undefined) d.pic = c.pic;
     if (c.notes !== undefined) d.notes = c.notes;
+    if (c.marketingId !== undefined) d.marketing_id = c.marketingId;
+    if (c.kota !== undefined) d.kota = c.kota;
+    if (c.provinsi !== undefined) d.provinsi = c.provinsi;
+    if (c.latitude !== undefined) d.latitude = c.latitude;
+    if (c.longitude !== undefined) d.longitude = c.longitude;
     return d;
 }
 
