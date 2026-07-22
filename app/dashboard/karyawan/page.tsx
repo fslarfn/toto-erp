@@ -1,8 +1,9 @@
 "use client";
 import DesktopOnly from "@/components/layout/DesktopOnly";
 import React, { useState, useMemo, useEffect } from "react";
+import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
-import { useKaryawan, DataKaryawan, StatusKaryawan, GajiRecord } from "@/lib/karyawan-store";
+import { useKaryawan, DataKaryawan, StatusKaryawan, GajiRecord, KasbonRecord } from "@/lib/karyawan-store";
 import { useStore } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase-client";
@@ -46,6 +47,43 @@ function fmtDate(d: string) {
     return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : d;
 }
 
+/** Alokasi potongan-gaji ke kasbon SATU karyawan — logika SAMA persis dgn
+ *  TabKasbon.kasbonWithAuto: kronologis, potongan hanya mengisi bon yang
+ *  sudah ada saat slip dibuat, kelebihan potongan historis diabaikan.
+ *  - excludePeriode: keluarkan record gaji periode berjalan…
+ *  - extraPotong (+tanggalnya): …lalu pakai angka potongan slip berjalan
+ *    langsung dari FORM — menghindari race realtime saat slip baru disimpan. */
+function hitungKasbonKaryawan(
+    kasbon: KasbonRecord[], gaji: GajiRecord[], kId: number,
+    opts: { excludePeriode?: string; extraPotong?: number; extraPotongTanggal?: string } = {}
+): { totalNominal: number; totalTerbayar: number; sisa: number } | null {
+    const list = kasbon.filter(b => b.karyawan_id === kId)
+        .map(b => ({ ...b, auto_bayar: 0 }))
+        .sort((a, b) => a.tanggal.localeCompare(b.tanggal) || a.id - b.id);
+    if (!list.length) return null;
+    const alokasi = (items: typeof list, potong: number, end: string) => {
+        let sisaPotong = potong;
+        for (const b of items) {
+            if (sisaPotong <= 0) break;
+            if (b.tanggal > end) continue; // bon dibuat setelah slip itu → tak mungkin terpotong di sana
+            const gap = b.nominal - (b.bayar || 0) - b.auto_bayar;
+            if (gap > 0) { const d = Math.min(gap, sisaPotong); b.auto_bayar += d; sisaPotong -= d; }
+        }
+    };
+    // Tahap 1: alokasikan potongan-potongan HISTORIS (periode lain).
+    gaji.filter(g => g.karyawan_id === kId && g.kasbon_potong > 0 && g.periode !== opts.excludePeriode)
+        .sort((a, b) => a.periode.localeCompare(b.periode))
+        .forEach(g => alokasi(list, g.kasbon_potong, periodeToDate(g.periode)));
+    // Bon AKTIF = masih ada sisa setelah riwayat. Keputusan owner: ringkasan
+    // slip hanya menghitung bon aktif — bon yang sudah lunas tidak dibawa.
+    const aktif = list.filter(b => b.nominal - (b.bayar || 0) - b.auto_bayar > 0);
+    // Tahap 2: alokasikan potongan slip BERJALAN ke bon aktif.
+    if ((opts.extraPotong ?? 0) > 0) alokasi(aktif, opts.extraPotong!, opts.extraPotongTanggal ?? "9999-12-31");
+    const totalNominal = aktif.reduce((s, b) => s + b.nominal, 0);
+    const totalTerbayar = aktif.reduce((s, b) => s + (b.bayar || 0) + b.auto_bayar, 0);
+    return { totalNominal, totalTerbayar, sisa: Math.max(0, totalNominal - totalTerbayar) };
+}
+
 const statusColor: Record<StatusKaryawan, { bg: string; color: string }> = {
     "Full-time": { bg: "#DCFCE7", color: "#15803D" },
     "Part-time": { bg: "#DBEAFE", color: "#1D4ED8" },
@@ -59,25 +97,37 @@ const inp: React.CSSProperties = {
     fontSize: 12, color: "#3C2F2F", background: "#FFFBF7", width: "100%", boxSizing: "border-box",
 };
 
-/* -- Print CSS (injected once) ----------------------------------- */
-const PRINT_STYLE = `
-@media print {
-    body * { visibility: hidden; }
-    #print-root, #print-root * { visibility: visible; }
-    #print-root { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; background: white; z-index: 99999; }
-    .no-print, .no-print * { display: none !important; }
-    @page { size: A4; margin: 12mm 14mm; }
-}
-`;
-
-function injectPrintStyle() {
-    if (typeof document === "undefined") return;
-    if (!document.getElementById("karyawan-print-style")) {
-        const s = document.createElement("style");
-        s.id = "karyawan-print-style";
-        s.innerHTML = PRINT_STYLE;
-        document.head.appendChild(s);
-    }
+/* -- Cetak via IFRAME tersembunyi ----------------------------------
+   Isi #print-root disalin ke dokumen mandiri di dalam iframe, lalu
+   iframe itulah yang di-print. Deterministik: yang tercetak HANYA slip/
+   rekap (1 dokumen bersih, pas A4) — tidak tergantung CSS/layout app,
+   tidak ada halaman kosong dari kerangka dashboard. */
+function printElemen(el: HTMLElement | null) {
+    if (!el) return;
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
+    const doc = iframe.contentDocument;
+    if (!doc) { iframe.remove(); return; }
+    doc.open();
+    doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>Cetak</title>
+<style>
+    @page { size: A4; margin: 10mm 12mm; }
+    html, body { margin: 0; padding: 0; background: white; }
+    * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+</style></head><body>${el.outerHTML}</body></html>`);
+    doc.close();
+    // Beri waktu iframe me-render, lalu print & bersihkan.
+    setTimeout(() => {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+        setTimeout(() => iframe.remove(), 3000);
+    }, 250);
 }
 
 /* ================================================================
@@ -96,10 +146,10 @@ function PrintRekapModal({ rows, periode, onClose }: {
     // periode = label siap tampil ("20 – 25 Jul 2026" / "Juli 2026").
     const label = periode;
     const total = rows.reduce((s, r) => s + r.bersih, 0);
-    const doPrint = () => { injectPrintStyle(); setTimeout(() => window.print(), 100); };
+    const doPrint = () => printElemen(document.getElementById("print-root"));
 
-    return (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    return createPortal(
+        <div className="print-portal" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ background: "white", width: "min(96vw,860px)", maxHeight: "92vh", overflow: "auto", borderRadius: 12, boxShadow: "0 24px 80px rgba(0,0,0,0.35)" }}>
                 {/* Toolbar (hidden when printing) */}
                 <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 20px", borderBottom: "1px solid #E6D5BE" }}>
@@ -162,62 +212,45 @@ function PrintRekapModal({ rows, periode, onClose }: {
                     <div style={{ marginTop: 16, fontSize: 9, color: "#B89678", textAlign: "center" }}>Dicetak oleh sistem ERP TOTO - {new Date().toLocaleString("id-ID")}</div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }
 
 /* ================================================================
    PRINT: SLIP GAJI (individual) - redesigned per payroll.html ref
 ================================================================ */
-function PrintSlipModal({ row, periode, catatanTelat, onClose }: {
-    row: GajiInfo; periode: string; catatanTelat?: string; onClose: () => void;
+function PrintSlipModal({ row, periode, periodeKey, periodeEnd, catatanTelat, onClose }: {
+    row: GajiInfo; periode: string; periodeKey?: string; periodeEnd?: string; catatanTelat?: string; onClose: () => void;
 }) {
     const { kasbon: allKasbon, gaji: allGaji } = useKaryawan();
-    const doPrint = () => { injectPrintStyle(); setTimeout(() => window.print(), 100); };
+    const doPrint = () => printElemen(document.getElementById("print-root"));
     const k = row.karyawan;
     const kId = k.id;
     const pendapatan = row.base + row.lembur + row.tunjangan;
     const potonganTotal = row.kasbon + row.potongan + row.bpjs_tk + row.bpjs_kes;
     const today = new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" });
 
-    // Replikasi logika TabKasbon.kasbonWithAuto, difilter ke karyawan ini saja.
-    // auto_bayar sudah include kasbon_potong slip ini karena hitungDanSimpan()
-    // dipanggil sebelum modal terbuka — sehingga sisa yang tampil sudah akurat.
+    // Logika alokasi SAMA dgn tab Kasbon (hitungKasbonKaryawan). Potongan slip
+    // berjalan diambil dari row.kasbon (form) — bukan dari record gaji yang
+    // datang via realtime — sehingga tidak ada race saat slip baru disimpan.
     const kasbonInfo = useMemo(() => {
-        const myKasbon = allKasbon.filter(b => b.karyawan_id === kId);
-        if (myKasbon.length === 0) return null;
-
-        const totalGajiPotong = allGaji
-            .filter(g => g.karyawan_id === kId && g.kasbon_potong > 0)
-            .reduce((s, g) => s + g.kasbon_potong, 0);
-
-        let leftover = totalGajiPotong;
-        const withAuto = [...myKasbon]
-            .sort((a, b) => a.id - b.id)
-            .map(b => {
-                const gap = b.nominal - b.bayar;
-                let auto_bayar = 0;
-                if (gap > 0 && leftover > 0) {
-                    auto_bayar = Math.min(gap, leftover);
-                    leftover -= auto_bayar;
-                }
-                return { ...b, auto_bayar };
-            });
-
-        const active = withAuto.filter(b => b.nominal - b.bayar - b.auto_bayar > 0);
-        if (active.length === 0) return null;
-
-        const totalNominal = active.reduce((s, b) => s + b.nominal, 0);
-        const totalTerbayar = active.reduce((s, b) => s + b.bayar + b.auto_bayar, 0);
-        return { totalNominal, totalTerbayar, sisa: totalNominal - totalTerbayar };
-    }, [allKasbon, allGaji, kId]);
+        const info = hitungKasbonKaryawan(allKasbon, allGaji, kId, {
+            excludePeriode: periodeKey,
+            extraPotong: row.kasbon,
+            extraPotongTanggal: periodeEnd,
+        });
+        if (!info) return null;
+        if (info.sisa <= 0 && row.kasbon <= 0) return null; // tak ada tagihan & slip ini tak memotong
+        return info;
+    }, [allKasbon, allGaji, kId, periodeKey, periodeEnd, row.kasbon]);
 
     const tdL: React.CSSProperties = { padding: "6px 10px", borderBottom: "1px solid #E6D5BE", color: "#5C4033", fontSize: 11 };
     const tdR: React.CSSProperties = { ...tdL, textAlign: "right", fontWeight: 600 };
     const tdRed: React.CSSProperties = { ...tdR, color: "#B91C1C" };
 
-    return (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    return createPortal(
+        <div className="print-portal" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ background: "white", width: "min(96vw,540px)", maxHeight: "95vh", overflow: "auto", borderRadius: 12, boxShadow: "0 24px 80px rgba(0,0,0,0.35)" }}>
 
                 {/* Toolbar */}
@@ -340,7 +373,7 @@ function PrintSlipModal({ row, periode, catatanTelat, onClose }: {
                                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
                                         <tbody>
                                             <tr>
-                                                <td style={{ padding: "3px 0", color: "#78350F" }}>Total Nominal Kasbon</td>
+                                                <td style={{ padding: "3px 0", color: "#78350F" }}>Total Kasbon Aktif</td>
                                                 <td style={{ padding: "3px 0", textAlign: "right", color: "#78350F" }}>Rp {kasbonInfo.totalNominal.toLocaleString("id-ID")}</td>
                                             </tr>
                                             <tr>
@@ -379,7 +412,8 @@ function PrintSlipModal({ row, periode, catatanTelat, onClose }: {
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }
 
@@ -667,13 +701,10 @@ function TabDataGaji() {
 
     const getGaji = (kId: number) => gaji.find(g => g.karyawan_id === kId && g.periode === periode.key);
 
-    /* Sisa kasbon (belum teralokasi potongan gaji periode LAIN) — saran cicilan. */
-    const sisaKasbonOf = (kId: number) => {
-        const totalKasbon = kasbon.filter(b => b.karyawan_id === kId).reduce((s, b) => s + b.nominal - (b.bayar || 0), 0);
-        const totalPotong = gaji.filter(g => g.karyawan_id === kId && g.kasbon_potong > 0 && g.periode !== periode.key)
-            .reduce((s, g) => s + g.kasbon_potong, 0);
-        return Math.max(0, totalKasbon - totalPotong);
-    };
+    /* Sisa kasbon (di luar potongan periode berjalan) — logika alokasi sama
+       dgn tab Kasbon, jadi angkanya selalu cocok dgn kolom Sisa di sana. */
+    const sisaKasbonOf = (kId: number) =>
+        hitungKasbonKaryawan(kasbon, gaji, kId, { excludePeriode: periode.key })?.sisa ?? 0;
 
     /* -- Form: angka final (default dari absensi / record tersimpan) -- */
     const [form, setForm] = useState({ hari_kerja: 0, hari_lembur: 0, tunjangan: 0, kasbon_potong: 0, potongan_lain: 0, bpjs_tk: 0, bpjs_kes: 0 });
@@ -1120,7 +1151,7 @@ function TabDataGaji() {
                     kasbon: form.kasbon_potong, potongan: form.potongan_lain,
                     bpjs_tk: form.bpjs_tk, bpjs_kes: form.bpjs_kes,
                     bersihPos: totalPendapatan, bersihNeg: totalPotongan, bersih,
-                }} periode={periodeLabel} catatanTelat={slipTelat} onClose={() => setPrintSlip(false)} />
+                }} periode={periodeLabel} periodeKey={periode.key} periodeEnd={periode.selesai} catatanTelat={slipTelat} onClose={() => setPrintSlip(false)} />
             )}
             {showCatat && (
                 <CatatKeuanganModal
