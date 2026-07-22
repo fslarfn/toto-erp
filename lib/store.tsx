@@ -25,7 +25,8 @@ interface AppStore {
     addMaterial: (m: Omit<Material, "id">) => void;
     updateMaterial: (id: string, updates: Partial<Material>) => void;
     deleteMaterial: (id: string) => void;
-    addCashFlow: (c: CashFlowInput) => void;
+    /** Mengembalikan record yang dibuat (id dipakai penaut, mis. gaji.cash_flow_id). */
+    addCashFlow: (c: CashFlowInput) => CashFlow;
     updateCashFlow: (id: string, updates: Partial<CashFlow>) => void;
     deleteCashFlow: (id: string) => void;
     /** Mutasi antar-kas: catat sebagai pasangan expense(sumber)+income(tujuan). */
@@ -473,6 +474,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // (lihat lib/balance.computeBalance) → tidak ada lagi mutasi balance manual.
         setCashFlow(prev => [newCf, ...prev]);
         supabase.from("cash_flow").insert(cashFlowToDb(newCf)).then();
+        return newCf;
     }, [bankAccounts]);
 
     const addTransfer = useCallback((p: { fromAccountId: string; toAccountId: string; amount: number; date: string; description?: string; createdBy?: string }) => {

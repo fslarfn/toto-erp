@@ -31,7 +31,7 @@ export type DataKaryawan = {
 export type GajiRecord = {
     id: number;
     karyawan_id: number;
-    periode: string;
+    periode: string;          // lama: 'YYYY-MM-Wn' · baru: 'YYYY-MM-DD~YYYY-MM-DD'
     gaji_pokok: number;
     hari_kerja: number;
     hari_lembur: number;
@@ -42,6 +42,15 @@ export type GajiRecord = {
     bpjs_tk?: number;
     bpjs_kes?: number;
     catatan: string;
+    // Integrasi absensi (kolom aditif 20260722_gaji_absensi.sql) — opsional
+    // agar data/pemanggil lama tetap valid.
+    periode_mulai?: string;
+    periode_selesai?: string;
+    tanggal_gajian?: string;
+    telat_count?: number;
+    telat_menit?: number;
+    sumber_hitung?: string;   // 'absensi' | 'manual'
+    cash_flow_id?: string;    // tautan entri pengeluaran di Keuangan (anti dobel)
 };
 
 export type KasbonRecord = {

@@ -1,8 +1,16 @@
 "use client";
 import DesktopOnly from "@/components/layout/DesktopOnly";
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import * as XLSX from "xlsx";
-import { useKaryawan, DataKaryawan, StatusKaryawan } from "@/lib/karyawan-store";
+import { useKaryawan, DataKaryawan, StatusKaryawan, GajiRecord } from "@/lib/karyawan-store";
+import { useStore } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
+import { supabase } from "@/lib/supabase-client";
+import {
+    bulanPeriode, periodeKustom, mingguPeriode, isoAddDays, tipeGajianOf, tarifHarianOf,
+    hitungKehadiran, keteranganTelat, HALF_DAY_CUTOFF,
+    type PeriodeGaji, type TipeGajian, type AbsensiLike, type KehadiranSummary,
+} from "@/lib/gaji-absensi";
 
 /* ================================================================
    MENU KARYAWAN - 3 Tab
@@ -19,8 +27,12 @@ function fmtRp(v: number) {
     if (!v) return "-";
     return "Rp " + Math.round(v).toLocaleString("id-ID");
 }
-/** "2026-07-W2" -> perkiraan tanggal akhir minggu itu ("2026-07-14"), dibatasi akhir bulan. */
+/** Tanggal akhir sebuah periode gaji — dipakai alokasi kasbon (auto_bayar).
+ *  Format baru 'YYYY-MM-DD~YYYY-MM-DD' → tanggal selesai.
+ *  Format lama 'YYYY-MM-Wn' → perkiraan akhir minggu itu, dibatasi akhir bulan. */
 function periodeToDate(periode: string): string {
+    const r = periode.match(/^\d{4}-\d{2}-\d{2}~(\d{4}-\d{2}-\d{2})$/);
+    if (r) return r[1];
     const m = periode.match(/^(\d{4})-(\d{2})-W(\d)$/);
     if (!m) return periode;
     const [, y, mo, w] = m;
@@ -81,8 +93,8 @@ type GajiInfo = {
 function PrintRekapModal({ rows, periode, onClose }: {
     rows: GajiInfo[]; periode: string; onClose: () => void;
 }) {
-    const [mm, yy] = periode.split("-");
-    const label = `${MONTH_NAMES[+mm - 1]} ${yy}`;
+    // periode = label siap tampil ("20 – 25 Jul 2026" / "Juli 2026").
+    const label = periode;
     const total = rows.reduce((s, r) => s + r.bersih, 0);
     const doPrint = () => { injectPrintStyle(); setTimeout(() => window.print(), 100); };
 
@@ -157,8 +169,8 @@ function PrintRekapModal({ rows, periode, onClose }: {
 /* ================================================================
    PRINT: SLIP GAJI (individual) - redesigned per payroll.html ref
 ================================================================ */
-function PrintSlipModal({ row, periode, onClose }: {
-    row: GajiInfo; periode: string; onClose: () => void;
+function PrintSlipModal({ row, periode, catatanTelat, onClose }: {
+    row: GajiInfo; periode: string; catatanTelat?: string; onClose: () => void;
 }) {
     const { kasbon: allKasbon, gaji: allGaji } = useKaryawan();
     const doPrint = () => { injectPrintStyle(); setTimeout(() => window.print(), 100); };
@@ -311,6 +323,13 @@ function PrintSlipModal({ row, periode, onClose }: {
                             <span style={{ fontWeight: 900, fontSize: 18, color: "white" }}>Rp {row.bersih.toLocaleString("id-ID")}</span>
                         </div>
 
+                        {/* Keterangan telat — tidak memotong gaji (keputusan owner) */}
+                        {catatanTelat && (
+                            <div style={{ marginBottom: 14, background: "#FFFBEB", border: "1px dashed #D9B96A", borderRadius: 8, padding: "8px 14px", fontSize: 10.5, color: "#92400E" }}>
+                                ⏰ {catatanTelat}
+                            </div>
+                        )}
+
                         {/* Informasi Kasbon — hanya tampil jika karyawan punya kasbon aktif */}
                         {kasbonInfo && (
                             <div style={{ marginBottom: 18, border: "1.5px solid #FDE68A", borderRadius: 8, overflow: "hidden" }}>
@@ -370,7 +389,7 @@ function PrintSlipModal({ row, periode, onClose }: {
 const EMPTY_K: Omit<DataKaryawan, "id"> = {
     nama: "", jabatan: "", divisi: "Produksi", status: "Full-time",
     gaji_pokok: 0, gaji_harian: 0, tanggal_join: "", email: "", no_hp: "",
-    alamat: "", bpjs_tk: 0, bpjs_kes: 0, catatan: "",
+    alamat: "", bpjs_tk: 0, bpjs_kes: 0, catatan: "", periode_gaji: "",
 };
 
 function KaryawanModal({ initial, onSave, onClose }: {
@@ -428,6 +447,14 @@ function KaryawanModal({ initial, onSave, onClose }: {
                         <label style={{ fontSize: 10, fontWeight: 700, color: "#B89678", letterSpacing: 1, display: "block", marginBottom: 3 }}>STATUS</label>
                         <select value={f.status} onChange={e => set("status", e.target.value as StatusKaryawan)} style={inp}>
                             {STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
+                        </select>
+                    </div>
+                    <div style={{ gridColumn: "1 / -1" }}>
+                        <label style={{ fontSize: 10, fontWeight: 700, color: "#B89678", letterSpacing: 1, display: "block", marginBottom: 3 }}>TIPE GAJIAN</label>
+                        <select value={f.periode_gaji ?? ""} onChange={e => set("periode_gaji", e.target.value)} style={inp}>
+                            <option value="">Otomatis (punya gaji harian → mingguan, selain itu bulanan)</option>
+                            <option value="mingguan">Mingguan (gajian tiap Sabtu)</option>
+                            <option value="bulanan">Bulanan (gajian akhir bulan)</option>
                         </select>
                     </div>
                     {[
@@ -562,113 +589,198 @@ function TabDataKaryawan() {
 }
 
 /* ================================================================
-   TAB 2: DATA GAJI - mekanisme mirip payroll.html
+   TAB 2: DATA GAJI — otomatis dari absensi.
+   Periode mingguan Senin–Sabtu (gajian Sabtu, bisa digeser Jumat)
+   atau bulanan penuh. Hari kerja/lembur terisi dari absensi
+   (setengah hari bila pulang < 13:00; Minggu = lembur), semua angka
+   tetap bisa dioverride sebelum disimpan. Telat tidak memotong —
+   hanya keterangan slip. Total tersimpan bisa dicatat ke Keuangan.
 ================================================================ */
+const TIPE_LABEL: Record<TipeGajian, string> = { mingguan: "Mingguan", bulanan: "Bulanan" };
+const HARI_PENDEK = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
+const hariChip = (iso: string) => `${HARI_PENDEK[new Date(iso + "T00:00:00").getDay()]} ${Number(iso.slice(8, 10))}`;
+
 function TabDataGaji() {
-    const { karyawan, gaji, upsertGaji, kasbon, updateKasbon } = useKaryawan();
+    const { karyawan, gaji, upsertGaji, kasbon } = useKaryawan();
+    const { bankAccounts, addCashFlow } = useStore();
+    const { user } = useAuth();
     const now = new Date();
-    const [month, setMonth] = useState(now.getMonth() + 1);
-    const [year, setYear] = useState(now.getFullYear());
-    const [week, setWeek] = useState(1);
-    const [selectedKId, setSelectedKId] = useState<number>(karyawan[0]?.id ?? 0);
-    const [form, setForm] = useState({ 
-        hari_kerja: 6, hari_lembur: 0, tunjangan: 0, 
-        kasbon_potong: 0, potongan_lain: 0,
-        bpjs_tk: 0, bpjs_kes: 0 
-    });
+
+    /* -- Periode -- */
+    const [tipe, setTipe] = useState<TipeGajian>("mingguan");
+    // Mingguan = rentang kalender bebas; default minggu berjalan (Senin–Sabtu).
+    const todayISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const defaultMinggu = useMemo(() => mingguPeriode(todayISO), [todayISO]);
+    const [rMulai, setRMulai] = useState(defaultMinggu.mulai);
+    const [rSelesai, setRSelesai] = useState(defaultMinggu.selesai);
+    const [bMonth, setBMonth] = useState(now.getMonth() + 1);
+    const [bYear, setBYear] = useState(now.getFullYear());
+    const years = Array.from({ length: 4 }, (_, i) => now.getFullYear() - 1 + i);
+    const periode: PeriodeGaji = tipe === "mingguan"
+        ? periodeKustom(rMulai, rSelesai)
+        : bulanPeriode(bYear, bMonth);
+    // Tanggal gajian: default Sabtu / akhir bulan — geser ke Jumat bila Sabtu libur.
+    const [tglGajian, setTglGajian] = useState(periode.gajian);
+    useEffect(() => { setTglGajian(periode.gajian); }, [periode.gajian]);
+
+    /* -- Absensi periode (fetch langsung — rentang kecil) -- */
+    const [absensi, setAbsensi] = useState<AbsensiLike[]>([]);
+    const [absLoading, setAbsLoading] = useState(true);
+    useEffect(() => {
+        let cancel = false;
+        setAbsLoading(true);
+        (async () => {
+            const all: AbsensiLike[] = [];
+            let from = 0;
+            while (true) {
+                const { data, error } = await supabase.from("absensi")
+                    .select("karyawan_id, tanggal, jam_masuk, jam_keluar, is_telat, selisih_menit, overtime_hours")
+                    .gte("tanggal", periode.mulai).lte("tanggal", periode.selesai)
+                    .order("id", { ascending: true }).range(from, from + 999);
+                if (error || !data) break;
+                all.push(...(data as unknown as AbsensiLike[]));
+                if (data.length < 1000) break;
+                from += 1000;
+            }
+            if (!cancel) { setAbsensi(all); setAbsLoading(false); }
+        })();
+        return () => { cancel = true; };
+    }, [periode.mulai, periode.selesai]);
+
+    /* -- Rekap kehadiran per karyawan (mesin: lib/gaji-absensi) -- */
+    const kehadiranOf = useMemo(() => {
+        const byK: Record<number, AbsensiLike[]> = {};
+        absensi.forEach(a => { (byK[a.karyawan_id] ??= []).push(a); });
+        const m = new Map<number, KehadiranSummary>();
+        Object.entries(byK).forEach(([id, rows]) => m.set(Number(id), hitungKehadiran(rows, periode)));
+        return m;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [absensi, periode.mulai, periode.selesai]);
+
+    /* -- Karyawan sesuai tipe gajian -- */
+    const listKaryawan = useMemo(() => karyawan.filter(k => tipeGajianOf(k) === tipe), [karyawan, tipe]);
+    const [selectedKId, setSelectedKId] = useState<number>(0);
+    useEffect(() => {
+        if (listKaryawan.length && !listKaryawan.some(k => k.id === selectedKId)) setSelectedKId(listKaryawan[0].id);
+    }, [listKaryawan, selectedKId]);
+    const selectedK = listKaryawan.find(k => k.id === selectedKId);
+
+    const getGaji = (kId: number) => gaji.find(g => g.karyawan_id === kId && g.periode === periode.key);
+
+    /* Sisa kasbon (belum teralokasi potongan gaji periode LAIN) — saran cicilan. */
+    const sisaKasbonOf = (kId: number) => {
+        const totalKasbon = kasbon.filter(b => b.karyawan_id === kId).reduce((s, b) => s + b.nominal - (b.bayar || 0), 0);
+        const totalPotong = gaji.filter(g => g.karyawan_id === kId && g.kasbon_potong > 0 && g.periode !== periode.key)
+            .reduce((s, g) => s + g.kasbon_potong, 0);
+        return Math.max(0, totalKasbon - totalPotong);
+    };
+
+    /* -- Form: angka final (default dari absensi / record tersimpan) -- */
+    const [form, setForm] = useState({ hari_kerja: 0, hari_lembur: 0, tunjangan: 0, kasbon_potong: 0, potongan_lain: 0, bpjs_tk: 0, bpjs_kes: 0 });
     const [hasResult, setHasResult] = useState(false);
     const [printRekap, setPrintRekap] = useState(false);
     const [printSlip, setPrintSlip] = useState(false);
+    const [showCatat, setShowCatat] = useState(false);
 
-    const years = Array.from({ length: 4 }, (_, i) => now.getFullYear() - 1 + i);
-    const periode = `${year}-${String(month).padStart(2, "0")}-W${week}`;
-    const periodeLabel = `Minggu ${week}, ${MONTH_NAMES[month - 1]} ${year}`;
-
-    const getGaji = (kId: number) => gaji.find(g => g.karyawan_id === kId && g.periode === periode);
-    const selectedK = karyawan.find(k => k.id === selectedKId);
-
-    /* Auto-fill form saat pilih karyawan / ganti periode */
-    React.useEffect(() => {
+    const keh = kehadiranOf.get(selectedKId);
+    useEffect(() => {
+        if (absLoading) return;
         const g = getGaji(selectedKId);
+        const kh = kehadiranOf.get(selectedKId);
+        const k = listKaryawan.find(x => x.id === selectedKId);
         if (g) {
             setForm({
-                hari_kerja: g.hari_kerja ?? 6,
-                hari_lembur: g.hari_lembur ?? 0,
-                tunjangan: g.tunjangan ?? 0,
-                kasbon_potong: g.kasbon_potong ?? 0,
+                hari_kerja: g.hari_kerja ?? 0, hari_lembur: g.hari_lembur ?? 0,
+                tunjangan: g.tunjangan ?? 0, kasbon_potong: g.kasbon_potong ?? 0,
                 potongan_lain: g.potongan_lain ?? 0,
-                bpjs_tk: g.bpjs_tk ?? selectedK?.bpjs_tk ?? 0,
-                bpjs_kes: g.bpjs_kes ?? selectedK?.bpjs_kes ?? 0,
+                bpjs_tk: g.bpjs_tk ?? k?.bpjs_tk ?? 0, bpjs_kes: g.bpjs_kes ?? k?.bpjs_kes ?? 0,
             });
             setHasResult(true);
         } else {
             setForm({
-                hari_kerja: 6, hari_lembur: 0, tunjangan: 0,
-                kasbon_potong: 0, potongan_lain: 0,
-                bpjs_tk: selectedK?.bpjs_tk ?? 0,
-                bpjs_kes: selectedK?.bpjs_kes ?? 0,
+                hari_kerja: kh?.hariKerja ?? 0, hari_lembur: kh?.hariLembur ?? 0,
+                tunjangan: 0, kasbon_potong: 0, potongan_lain: 0,
+                bpjs_tk: k?.bpjs_tk ?? 0, bpjs_kes: k?.bpjs_kes ?? 0,
             });
             setHasResult(false);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedKId, periode]);
+    }, [selectedKId, periode.key, absLoading, kehadiranOf, gaji]);
 
-    /* Hitung - effective daily rate: pakai gaji_harian, kalau 0 ambil dari gaji_pokok/26 */
-    const effectiveHarian = selectedK
-        ? (selectedK.gaji_harian || Math.round(selectedK.gaji_pokok / 26))
-        : 0;
-    const base = effectiveHarian * form.hari_kerja;
-    const lemburNominal = effectiveHarian * form.hari_lembur;
+    /* -- Hitungan -- */
+    const effectiveHarian = selectedK ? tarifHarianOf(selectedK.gaji_harian, selectedK.gaji_pokok) : 0;
+    const tarifLembur = selectedK ? (selectedK.tarif_lembur || effectiveHarian) : 0;
+    const base = Math.round(effectiveHarian * form.hari_kerja);
+    const lemburNominal = Math.round(tarifLembur * form.hari_lembur);
     const totalPendapatan = base + lemburNominal + form.tunjangan;
     const totalPotongan = form.kasbon_potong + form.potongan_lain + form.bpjs_tk + form.bpjs_kes;
     const bersih = totalPendapatan - totalPotongan;
 
     const hitungDanSimpan = () => {
         if (!selectedK) return;
+        const kh = kehadiranOf.get(selectedK.id);
+        const autoMatch = !!kh && form.hari_kerja === kh.hariKerja && form.hari_lembur === kh.hariLembur;
         upsertGaji({
-            karyawan_id: selectedK.id, periode,
-            gaji_pokok: base,
-            hari_kerja: form.hari_kerja,
-            hari_lembur: form.hari_lembur,
-            lembur: lemburNominal,
-            tunjangan: form.tunjangan,
-            kasbon_potong: form.kasbon_potong,
-            potongan_lain: form.potongan_lain,
-            bpjs_tk: form.bpjs_tk,
-            bpjs_kes: form.bpjs_kes,
+            karyawan_id: selectedK.id, periode: periode.key,
+            gaji_pokok: base, hari_kerja: form.hari_kerja, hari_lembur: form.hari_lembur,
+            lembur: lemburNominal, tunjangan: form.tunjangan,
+            kasbon_potong: form.kasbon_potong, potongan_lain: form.potongan_lain,
+            bpjs_tk: form.bpjs_tk, bpjs_kes: form.bpjs_kes,
             catatan: "",
+            periode_mulai: periode.mulai, periode_selesai: periode.selesai,
+            tanggal_gajian: tglGajian,
+            telat_count: kh?.telatCount ?? 0, telat_menit: kh?.telatMenit ?? 0,
+            sumber_hitung: autoMatch ? "absensi" : "manual",
         });
         setHasResult(true);
     };
 
-    /* Build rows for summary table + rekap print */
-    const gajiRows: GajiInfo[] = karyawan.map(k => {
+    /* -- Rekap semua karyawan tipe ini (tersimpan; kalau belum → preview absensi) -- */
+    const gajiRows: GajiInfo[] = listKaryawan.map(k => {
         const g = getGaji(k.id);
-        const hk = g?.hari_kerja ?? 6;
-        const effHarian = k.gaji_harian || Math.round(k.gaji_pokok / 26);
-        const base = effHarian * hk;
-        const lembur = g?.lembur ?? 0;
+        const kh = kehadiranOf.get(k.id);
+        const effHarian = tarifHarianOf(k.gaji_harian, k.gaji_pokok);
+        const hk = g?.hari_kerja ?? kh?.hariKerja ?? 0;
+        const hl = g?.hari_lembur ?? kh?.hariLembur ?? 0;
+        const b = g?.gaji_pokok ?? Math.round(effHarian * hk);
+        const lembur = g?.lembur ?? Math.round((k.tarif_lembur || effHarian) * hl);
         const tunjangan = g?.tunjangan ?? 0;
-        const kasbon = g?.kasbon_potong ?? 0;
+        const kasbonP = g?.kasbon_potong ?? 0;
         const potongan = g?.potongan_lain ?? 0;
         const bTk = g?.bpjs_tk ?? k.bpjs_tk ?? 0;
         const bKes = g?.bpjs_kes ?? k.bpjs_kes ?? 0;
-        const bersih = base + lembur + tunjangan - kasbon - potongan - bTk - bKes;
-        return { karyawan: k, base, lembur, tunjangan, kasbon, potongan, bpjs_tk: bTk, bpjs_kes: bKes, bersihPos: base + lembur + tunjangan, bersihNeg: kasbon + potongan + bTk + bKes, bersih };
+        const net = b + lembur + tunjangan - kasbonP - potongan - bTk - bKes;
+        return { karyawan: k, base: b, lembur, tunjangan, kasbon: kasbonP, potongan, bpjs_tk: bTk, bpjs_kes: bKes, bersihPos: b + lembur + tunjangan, bersihNeg: kasbonP + potongan + bTk + bKes, bersih: net };
     });
     const totalBersih = gajiRows.reduce((s, r) => s + r.bersih, 0);
+    const savedRows = listKaryawan.map(k => getGaji(k.id)).filter(Boolean) as GajiRecord[];
+    const savedTotal = savedRows.reduce((s, g) => s + (g.gaji_pokok + g.lembur + g.tunjangan - g.kasbon_potong - g.potongan_lain - (g.bpjs_tk ?? 0) - (g.bpjs_kes ?? 0)), 0);
+    const sudahDicatat = savedRows.find(g => (g.cash_flow_id ?? "") !== "")?.cash_flow_id ?? "";
 
-    /* Current employee's GajiInfo for print slip */
-    const selectedRow: GajiInfo = {
-        karyawan: selectedK ?? karyawan[0],
-        base, lembur: lemburNominal, tunjangan: form.tunjangan,
-        kasbon: form.kasbon_potong, potongan: form.potongan_lain,
-        bpjs_tk: form.bpjs_tk, bpjs_kes: form.bpjs_kes,
-        bersihPos: totalPendapatan, bersihNeg: totalPotongan, bersih,
+    /* -- Catat total tersimpan ke Keuangan (cash_flow, kategori Gaji) -- */
+    const catatKeKeuangan = (accountId: string, amount: number, date: string) => {
+        const acc = bankAccounts.find(b => b.id === accountId);
+        if (!acc || savedRows.length === 0) return;
+        const cf = addCashFlow({
+            type: "expense", category: "Gaji", amount,
+            description: `Gaji karyawan ${TIPE_LABEL[tipe].toLowerCase()} periode ${periode.label} (${savedRows.length} orang)`,
+            date, bankAccount: acc.name, accountId: acc.id,
+            createdBy: user?.name ?? user?.username ?? "",
+        });
+        supabase.from("gaji").update({ cash_flow_id: cf.id }).in("id", savedRows.map(g => g.id)).then();
+        setShowCatat(false);
+        alert(`✅ Tercatat di Keuangan: ${fmtRp(amount)} dari ${acc.name}.`);
     };
+
+    /* -- Slip: keterangan telat (dari record tersimpan / absensi) -- */
+    const slipTelat = (() => {
+        const g = getGaji(selectedKId);
+        return keteranganTelat(g?.telat_count ?? keh?.telatCount ?? 0, g?.telat_menit ?? keh?.telatMenit ?? 0);
+    })();
 
     const exportExcel = () => {
         const data = gajiRows.map(r => ({
+            "Nama": r.karyawan.nama,
             "Hari Kerja": getGaji(r.karyawan.id)?.hari_kerja ?? "-",
             "Gaji Harian/Pokok": r.base, "Hari Lembur": getGaji(r.karyawan.id)?.hari_lembur ?? 0,
             "Lembur": r.lembur, "Tunjangan": r.tunjangan,
@@ -677,80 +789,143 @@ function TabDataGaji() {
             "Gaji Bersih": r.bersih,
         }));
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), `Gaji ${periode}`);
-        XLSX.writeFile(wb, `gaji-${periode}.xlsx`);
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), "Gaji");
+        XLSX.writeFile(wb, `gaji-${tipe}-${periode.mulai}.xlsx`);
     };
 
     const lbl: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: "#B89678", letterSpacing: 1, display: "block", marginBottom: 4 };
     const field: React.CSSProperties = { ...inp, marginBottom: 0 };
+    const hint: React.CSSProperties = { fontSize: 10, color: "#A67B5B", marginTop: 3, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" };
+    const periodeLabel = `${TIPE_LABEL[tipe]} ${periode.label}`;
 
     return (
         <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
 
             {/* -- Toolbar -- */}
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px", background: "white", borderBottom: "1px solid #E6D5BE", flexShrink: 0, flexWrap: "wrap" }}>
-                {/* Period pill */}
-                <div style={{ display: "flex", gap: 4, alignItems: "center", background: "#FEF3E8", borderRadius: 7, padding: "4px 12px", border: "1px solid #D1BFA3" }}>
-                    <span style={{ fontSize: 11, color: "#B89678", fontWeight: 700 }}></span>
-                    <select value={week} onChange={e => setWeek(+e.target.value)}
-                        style={{ border: "none", borderRadius: 4, padding: "3px 6px", fontSize: 11, color: "#5C4033", background: "transparent", fontWeight: 700, cursor: "pointer" }}>
-                        {[1, 2, 3, 4, 5].map(w => <option key={w} value={w}>Minggu {w}</option>)}
-                    </select>
-                    <select value={month} onChange={e => setMonth(+e.target.value)}
-                        style={{ border: "none", borderRadius: 4, padding: "3px 6px", fontSize: 11, color: "#5C4033", background: "transparent", cursor: "pointer" }}>
-                        {MONTH_NAMES.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
-                    </select>
-                    <select value={year} onChange={e => setYear(+e.target.value)}
-                        style={{ border: "none", borderRadius: 4, padding: "3px 6px", fontSize: 11, color: "#5C4033", background: "transparent", cursor: "pointer" }}>
-                        {years.map(y => <option key={y}>{y}</option>)}
-                    </select>
+                {/* Tipe gajian */}
+                <div style={{ display: "flex", gap: 3, background: "#FEF3E8", borderRadius: 7, padding: 3, border: "1px solid #D1BFA3" }}>
+                    {(["mingguan", "bulanan"] as TipeGajian[]).map(t => (
+                        <button key={t} onClick={() => setTipe(t)}
+                            style={{ border: "none", borderRadius: 5, padding: "4px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", background: tipe === t ? "#A67B5B" : "transparent", color: tipe === t ? "white" : "#A67B5B" }}>
+                            {TIPE_LABEL[t]}
+                        </button>
+                    ))}
                 </div>
+                {/* Periode — kalender bebas: pilih mulai → selesai otomatis +5 hari (bisa diubah) */}
+                {tipe === "mingguan" ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: "#B89678", letterSpacing: 0.5 }}>PERIODE</span>
+                        <input type="date" value={rMulai}
+                            onChange={e => { const v = e.target.value; if (!v) return; setRMulai(v); setRSelesai(isoAddDays(v, 5)); }}
+                            title="Tanggal awal periode (Senin)"
+                            style={{ border: "1px solid #D1BFA3", borderRadius: 6, padding: "4px 6px", fontSize: 11, fontWeight: 700, color: "#5C4033", background: "#FFFBF7" }} />
+                        <span style={{ fontSize: 11, color: "#B89678" }}>s.d.</span>
+                        <input type="date" value={rSelesai} min={rMulai}
+                            onChange={e => { const v = e.target.value; if (!v) return; setRSelesai(v); }}
+                            title="Tanggal akhir periode (mis. Sabtu, atau 31 di akhir bulan)"
+                            style={{ border: "1px solid #D1BFA3", borderRadius: 6, padding: "4px 6px", fontSize: 11, fontWeight: 700, color: "#5C4033", background: "#FFFBF7" }} />
+                    </div>
+                ) : (
+                    <div style={{ display: "flex", gap: 4 }}>
+                        <select value={bMonth} onChange={e => setBMonth(+e.target.value)}
+                            style={{ border: "1px solid #D1BFA3", borderRadius: 6, padding: "5px 8px", fontSize: 11, fontWeight: 700, color: "#5C4033", background: "#FFFBF7" }}>
+                            {MONTH_NAMES.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
+                        </select>
+                        <select value={bYear} onChange={e => setBYear(+e.target.value)}
+                            style={{ border: "1px solid #D1BFA3", borderRadius: 6, padding: "5px 8px", fontSize: 11, fontWeight: 700, color: "#5C4033", background: "#FFFBF7" }}>
+                            {years.map(y => <option key={y}>{y}</option>)}
+                        </select>
+                    </div>
+                )}
+                {/* Tanggal gajian (geser ke Jumat bila Sabtu libur) */}
+                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: "#B89678", letterSpacing: 0.5 }}>GAJIAN</span>
+                    <input type="date" value={tglGajian} onChange={e => setTglGajian(e.target.value)}
+                        title="Default Sabtu / akhir bulan — geser bila hari itu libur"
+                        style={{ border: "1px solid #D1BFA3", borderRadius: 6, padding: "4px 6px", fontSize: 11, color: "#5C4033", background: "#FFFBF7" }} />
+                </div>
+                {absLoading && <span style={{ fontSize: 11, color: "#B89678" }}>⏳ memuat absensi…</span>}
                 {/* Total */}
                 <div style={{ background: "#F0FDF4", borderLeft: "4px solid #15803D", borderRadius: 6, padding: "5px 12px" }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: "#B89678", letterSpacing: 1 }}>TOTAL GAJI MINGGU INI</div>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: "#B89678", letterSpacing: 1 }}>TOTAL {TIPE_LABEL[tipe].toUpperCase()} · {savedRows.length}/{listKaryawan.length} TERSIMPAN</div>
                     <div style={{ fontSize: 15, fontWeight: 800, color: "#15803D" }}>{fmtRp(totalBersih)}</div>
                 </div>
-                <button onClick={exportExcel} style={{ marginLeft: "auto", border: "1px solid #D1BFA3", borderRadius: 6, padding: "5px 12px", fontSize: 11, background: "#F5EBDD", color: "#5C4033", cursor: "pointer", fontWeight: 600 }}>⬇ Excel</button>
-                <button onClick={() => setPrintRekap(true)} style={{ border: "none", borderRadius: 6, padding: "5px 14px", fontSize: 11, background: "#A67B5B", color: "white", cursor: "pointer", fontWeight: 700 }}>🖨️ Cetak Rekap</button>
+                <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                    <button onClick={exportExcel} style={{ border: "1px solid #D1BFA3", borderRadius: 6, padding: "5px 12px", fontSize: 11, background: "#F5EBDD", color: "#5C4033", cursor: "pointer", fontWeight: 600 }}>⬇ Excel</button>
+                    <button onClick={() => setPrintRekap(true)} style={{ border: "none", borderRadius: 6, padding: "5px 14px", fontSize: 11, background: "#A67B5B", color: "white", cursor: "pointer", fontWeight: 700 }}>🖨️ Cetak Rekap</button>
+                    <button onClick={() => setShowCatat(true)} disabled={savedRows.length === 0}
+                        title={savedRows.length === 0 ? "Simpan gaji minimal 1 karyawan dulu" : sudahDicatat ? "Periode ini sudah pernah dicatat ke Keuangan" : "Catat total gaji tersimpan sebagai pengeluaran di Keuangan"}
+                        style={{ border: "none", borderRadius: 6, padding: "5px 14px", fontSize: 11, background: sudahDicatat ? "#DCFCE7" : "#15803D", color: sudahDicatat ? "#15803D" : "white", cursor: savedRows.length === 0 ? "not-allowed" : "pointer", fontWeight: 700, opacity: savedRows.length === 0 ? 0.5 : 1 }}>
+                        {sudahDicatat ? "✓ Tercatat di Keuangan" : "💰 Catat ke Keuangan"}
+                    </button>
+                </div>
             </div>
 
-            {/* -- Body: Calculator (left) + Result (right) -- */}
+            {/* -- Body: Kalkulator (kiri) + Hasil (kanan) -- */}
             <div style={{ flex: 1, overflow: "auto", padding: 20, background: "#F5EBDD" }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, maxWidth: 900, margin: "0 auto" }}>
 
-                    {/* -- LEFT: Kalkulator Gaji (mirip payroll.html) -- */}
+                    {/* -- KIRI: Kalkulator -- */}
                     <div style={{ background: "white", borderRadius: 12, padding: 24, boxShadow: "0 2px 12px rgba(0,0,0,0.07)" }}>
-                        <div style={{ fontSize: 16, fontWeight: 800, color: "#5C4033", marginBottom: 18, display: "flex", alignItems: "center", gap: 8 }}>
-                            Kalkulator Gaji Karyawan
-                        </div>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: "#5C4033", marginBottom: 18 }}>Gaji dari Absensi</div>
 
                         {/* Pilih Karyawan */}
                         <div style={{ marginBottom: 14 }}>
-                            <label style={lbl}>PILIH KARYAWAN</label>
+                            <label style={lbl}>PILIH KARYAWAN ({TIPE_LABEL[tipe].toUpperCase()})</label>
                             <select value={selectedKId} onChange={e => setSelectedKId(+e.target.value)} style={field}>
-                                {karyawan.map(k => <option key={k.id} value={k.id}>{k.nama} - {k.jabatan}</option>)}
+                                {listKaryawan.map(k => <option key={k.id} value={k.id}>{k.nama} - {k.jabatan}</option>)}
                             </select>
                             {selectedK && (
-                                <div style={{ marginTop: 6, padding: "6px 10px", background: "#FEF3E8", borderRadius: 6, fontSize: 11, color: "#A67B5B", display: "flex", gap: 16 }}>
+                                <div style={{ marginTop: 6, padding: "6px 10px", background: "#FEF3E8", borderRadius: 6, fontSize: 11, color: "#A67B5B", display: "flex", gap: 14, flexWrap: "wrap" }}>
                                     <span>📁 {selectedK.divisi}</span>
-                                    <span>💰 Rp {effectiveHarian.toLocaleString("id-ID")}/hari{selectedK.gaji_pokok && !selectedK.gaji_harian ? ` (dari pokok ${fmtRp(selectedK.gaji_pokok)}/26)` : ''}</span>
+                                    <span>💰 Rp {effectiveHarian.toLocaleString("id-ID")}/hari{selectedK.gaji_pokok && !selectedK.gaji_harian ? ` (pokok/26)` : ""}</span>
+                                    {keh && keh.telatCount > 0 && <span style={{ color: "#B8860B" }}>⏰ telat {keh.telatCount}× ({keh.telatMenit} mnt)</span>}
+                                </div>
+                            )}
+                            {/* Rincian kehadiran periode ini */}
+                            {selectedK && !absLoading && (
+                                <div style={{ marginTop: 6, display: "flex", gap: 4, flexWrap: "wrap" }}>
+                                    {(keh?.detail ?? []).length === 0 ? (
+                                        <span style={{ fontSize: 10.5, color: "#C5A882" }}>Tidak ada absensi pada periode ini.</span>
+                                    ) : keh!.detail.map(h => (
+                                        <span key={h.tanggal}
+                                            title={`${h.tanggal} · masuk ${h.jamMasuk || "-"} · pulang ${h.jamKeluar || "-"}${h.nilai === 0.5 ? ` · setengah hari (pulang < ${HALF_DAY_CUTOFF})` : ""}${h.isMinggu ? " · Minggu → lembur" : ""}${h.lembur > 0 && !h.isMinggu ? ` · lembur ${h.lembur} hr` : ""}${h.telat ? ` · telat ${h.telatMenit} mnt` : ""}`}
+                                            style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 99, background: h.isMinggu || h.lembur > 0 ? "#FEF9C3" : "#DCFCE7", color: h.isMinggu || h.lembur > 0 ? "#A16207" : "#15803D", border: h.telat ? "1px dashed #B8860B" : "1px solid transparent" }}>
+                                            {hariChip(h.tanggal)}{h.nilai === 0.5 ? "·½" : ""}{h.lembur > 0 && !h.isMinggu ? ` +L${h.lembur}` : ""}{h.telat ? " ⏰" : ""}
+                                        </span>
+                                    ))}
                                 </div>
                             )}
                         </div>
 
-                        {/* Input 2-column grid */}
+                        {/* Input grid */}
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
                             <div>
                                 <label style={lbl}>HARI KERJA</label>
-                                <input type="number" min={0} max={7} step={1} value={form.hari_kerja}
+                                <input type="number" min={0} max={31} step={0.5} value={form.hari_kerja}
                                     onChange={e => { setForm(p => ({ ...p, hari_kerja: +e.target.value })); setHasResult(false); }}
                                     style={field} />
+                                <div style={hint}>
+                                    <span>dari absensi: {keh?.hariKerja ?? 0} hr</span>
+                                    {keh && form.hari_kerja !== keh.hariKerja && (
+                                        <button onClick={() => setForm(p => ({ ...p, hari_kerja: keh.hariKerja }))}
+                                            style={{ border: "1px dashed #D1BFA3", background: "none", borderRadius: 5, padding: "0 6px", fontSize: 9.5, color: "#A67B5B", cursor: "pointer" }}>↻ pakai</button>
+                                    )}
+                                </div>
                             </div>
                             <div>
                                 <label style={lbl}>HARI LEMBUR</label>
-                                <input type="number" min={0} max={7} step={0.5} value={form.hari_lembur}
+                                <input type="number" min={0} max={10} step={0.5} value={form.hari_lembur}
                                     onChange={e => { setForm(p => ({ ...p, hari_lembur: +e.target.value })); setHasResult(false); }}
-                                    placeholder="0 (bisa 0.5)" style={field} />
+                                    style={field} />
+                                <div style={hint}>
+                                    <span title="Lembur harian yang dicatat kiosk saat absen pulang + kehadiran hari Minggu">dari absensi: {keh?.hariLembur ?? 0} hr</span>
+                                    {keh && form.hari_lembur !== keh.hariLembur && (
+                                        <button onClick={() => setForm(p => ({ ...p, hari_lembur: keh.hariLembur }))}
+                                            style={{ border: "1px dashed #D1BFA3", background: "none", borderRadius: 5, padding: "0 6px", fontSize: 9.5, color: "#A67B5B", cursor: "pointer" }}>↻ pakai</button>
+                                    )}
+                                </div>
                             </div>
                             <div>
                                 <label style={lbl}>TUNJANGAN (Rp)</label>
@@ -762,7 +937,14 @@ function TabDataGaji() {
                                 <label style={lbl}>POTONGAN BON (Rp)</label>
                                 <input type="number" min={0} value={form.kasbon_potong || ""}
                                     onChange={e => { setForm(p => ({ ...p, kasbon_potong: +e.target.value })); setHasResult(false); }}
-                                    placeholder="0" style={field} />
+                                    placeholder="0 (cicilan bebas)" style={field} />
+                                {selectedK && sisaKasbonOf(selectedK.id) > 0 && (
+                                    <div style={hint}>
+                                        <span style={{ color: "#B8860B" }}>sisa kasbon {fmtRp(sisaKasbonOf(selectedK.id))}</span>
+                                        <button onClick={() => { const s = sisaKasbonOf(selectedK.id); setForm(p => ({ ...p, kasbon_potong: s })); setHasResult(false); }}
+                                            style={{ border: "1px dashed #D9B96A", background: "none", borderRadius: 5, padding: "0 6px", fontSize: 9.5, color: "#B8860B", cursor: "pointer" }}>potong semua</button>
+                                    </div>
+                                )}
                             </div>
                             <div>
                                 <label style={lbl}>POTONGAN LAIN (Rp)</label>
@@ -772,7 +954,7 @@ function TabDataGaji() {
                             </div>
                             <div />
                             <div style={{ borderTop: "1px dashed #E6D5BE", gridColumn: "1 / -1", marginTop: 4, paddingTop: 8 }}>
-                                <label style={{ ...lbl, color: "#A67B5B" }}>POTONGAN BPJS (OTOMATIS)</label>
+                                <label style={{ ...lbl, color: "#A67B5B" }}>POTONGAN BPJS (OTOMATIS DARI DATA KARYAWAN)</label>
                             </div>
                             <div>
                                 <label style={lbl}>BPJS TK (Rp)</label>
@@ -790,11 +972,11 @@ function TabDataGaji() {
 
                         <button onClick={hitungDanSimpan}
                             style={{ width: "100%", padding: "10px 0", borderRadius: 8, border: "none", background: "#A67B5B", color: "white", fontSize: 14, fontWeight: 800, cursor: "pointer", letterSpacing: 0.5 }}>
-                            Hitung Gaji
+                            💾 Simpan Gaji Periode Ini
                         </button>
                     </div>
 
-                    {/* -- RIGHT: Hasil Perhitungan -- */}
+                    {/* -- KANAN: Hasil -- */}
                     <div style={{ background: "white", borderRadius: 12, padding: 24, boxShadow: "0 2px 12px rgba(0,0,0,0.07)" }}>
                         <div style={{ fontSize: 16, fontWeight: 800, color: "#5C4033", marginBottom: 18, display: "flex", alignItems: "center", gap: 8 }}>
                             Hasil Perhitungan
@@ -802,15 +984,16 @@ function TabDataGaji() {
                         </div>
 
                         {!selectedK ? (
-                            <div style={{ color: "#C5A882", textAlign: "center", marginTop: 40, fontSize: 13 }}>Pilih karyawan terlebih dahulu</div>
+                            <div style={{ color: "#C5A882", textAlign: "center", marginTop: 40, fontSize: 13 }}>
+                                {listKaryawan.length === 0 ? `Tidak ada karyawan bertipe gajian ${TIPE_LABEL[tipe].toLowerCase()}.` : "Pilih karyawan terlebih dahulu"}
+                            </div>
                         ) : (
                             <>
-                                {/* Rincian */}
                                 <div style={{ borderBottom: "1px solid #E6D5BE", paddingBottom: 12, marginBottom: 12 }}>
-                                    <div style={{ fontSize: 10, fontWeight: 800, color: "#15803D", letterSpacing: 1, marginBottom: 8, textTransform: "uppercase" }}>{'>'} Pendapatan</div>
+                                    <div style={{ fontSize: 10, fontWeight: 800, color: "#15803D", letterSpacing: 1, marginBottom: 8, textTransform: "uppercase" }}>{'>'} Pendapatan · {periodeLabel}</div>
                                     {[
                                         { l: `Gaji Harian (Rp ${effectiveHarian.toLocaleString("id-ID")}) × ${form.hari_kerja} hari`, v: base },
-                                        ...(form.hari_lembur > 0 ? [{ l: `Lembur (Rp ${effectiveHarian.toLocaleString("id-ID")}) × ${form.hari_lembur} hari`, v: lemburNominal }] : []),
+                                        ...(form.hari_lembur > 0 ? [{ l: `Lembur (Rp ${tarifLembur.toLocaleString("id-ID")}) × ${form.hari_lembur} hari`, v: lemburNominal }] : []),
                                         ...(form.tunjangan > 0 ? [{ l: "Tunjangan", v: form.tunjangan }] : []),
                                     ].map(({ l, v }) => (
                                         <div key={l} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4, color: "#5C4033" }}>
@@ -841,7 +1024,12 @@ function TabDataGaji() {
                                     </div>
                                 )}
 
-                                {/* Take Home Pay */}
+                                {keh && keh.telatCount > 0 && (
+                                    <div style={{ fontSize: 10.5, color: "#92400E", background: "#FFFBEB", border: "1px dashed #D9B96A", borderRadius: 6, padding: "6px 10px", marginBottom: 12 }}>
+                                        ⏰ Telat {keh.telatCount}× (total {keh.telatMenit} menit) — tidak memotong gaji, tercantum di slip.
+                                    </div>
+                                )}
+
                                 <div style={{ background: "#A67B5B", borderRadius: 8, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                                     <span style={{ fontWeight: 800, fontSize: 12, color: "white", letterSpacing: 1 }}>TAKE HOME PAY</span>
                                     <span style={{ fontWeight: 900, fontSize: 18, color: "white" }}>Rp {bersih.toLocaleString("id-ID")}</span>
@@ -856,42 +1044,51 @@ function TabDataGaji() {
                     </div>
                 </div>
 
-                {/* -- Summary Table (semua karyawan periode ini) -- */}
+                {/* -- Rekap tabel -- */}
                 <div style={{ maxWidth: 900, margin: "16px auto 0", background: "white", borderRadius: 12, overflow: "hidden", boxShadow: "0 2px 12px rgba(0,0,0,0.07)" }}>
                     <div style={{ padding: "12px 20px", borderBottom: "1px solid #E6D5BE", fontWeight: 800, fontSize: 13, color: "#5C4033", display: "flex", justifyContent: "space-between" }}>
-                        <span>📊 Rekap {periodeLabel}</span>
-                        <span style={{ color: "#B89678", fontWeight: 600, fontSize: 11 }}>{gajiRows.filter(r => getGaji(r.karyawan.id)).length}/{karyawan.length} karyawan sudah dihitung</span>
+                        <span>📊 Rekap {periodeLabel} · gajian {fmtDate(tglGajian)}</span>
+                        <span style={{ color: "#B89678", fontWeight: 600, fontSize: 11 }}>{savedRows.length}/{listKaryawan.length} tersimpan</span>
                     </div>
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                         <thead>
                             <tr style={{ background: "#EDE0D4" }}>
-                                {["Nama", "Divisi", "Hari Kerja", "Hari Lembur", "Gaji Harian", "Take Home Pay", ""].map(h => (
-                                    <th key={h} style={{ padding: "8px 12px", textAlign: h === "Take Home Pay" || h === "Hari Kerja" || h === "Hari Lembur" ? "center" : "left", fontWeight: 700, fontSize: 11, color: "#5C4033", borderBottom: "2px solid #C5A882" }}>{h}</th>
+                                {["Nama", "Divisi", "Hadir", "Lembur", "Telat", "Tarif", "Take Home Pay", ""].map(h => (
+                                    <th key={h} style={{ padding: "8px 12px", textAlign: ["Hadir", "Lembur", "Telat", "Take Home Pay"].includes(h) ? "center" : "left", fontWeight: 700, fontSize: 11, color: "#5C4033", borderBottom: "2px solid #C5A882" }}>{h}</th>
                                 ))}
                             </tr>
                         </thead>
                         <tbody>
                             {gajiRows.map((r, i) => {
                                 const g = getGaji(r.karyawan.id);
+                                const kh = kehadiranOf.get(r.karyawan.id);
                                 const isSelected = r.karyawan.id === selectedKId;
                                 return (
-                                    <tr key={r.karyawan.id} style={{ background: isSelected ? "#FEF3E8" : i % 2 === 0 ? "white" : "#FAFAF8", cursor: "pointer", transition: "background 0.15s" }}
+                                    <tr key={r.karyawan.id} style={{ background: isSelected ? "#FEF3E8" : i % 2 === 0 ? "white" : "#FAFAF8", cursor: "pointer" }}
                                         onClick={() => setSelectedKId(r.karyawan.id)}>
                                         <td style={{ padding: "7px 12px", borderBottom: "1px solid #E6D5BE", fontWeight: 700 }}>
                                             {isSelected && <span style={{ color: "#A67B5B", marginRight: 4 }}>{'>'}</span>}{r.karyawan.nama}
+                                            {g?.sumber_hitung === "manual" && <span title="Angka dioverride manual" style={{ marginLeft: 5, fontSize: 9, color: "#B8860B" }}>✎</span>}
                                         </td>
                                         <td style={{ padding: "7px 12px", borderBottom: "1px solid #E6D5BE", color: "#6B5E55" }}>{r.karyawan.divisi}</td>
                                         <td style={{ padding: "7px 12px", borderBottom: "1px solid #E6D5BE", textAlign: "center" }}>
-                                            {g ? <span style={{ background: "#FEF3E8", borderRadius: 5, padding: "2px 8px", color: "#A67B5B", fontWeight: 700 }}>{g.hari_kerja} hr</span> : <span style={{ color: "#D1BFA3" }}>-</span>}
+                                            <span style={{ background: "#FEF3E8", borderRadius: 5, padding: "2px 8px", color: "#A67B5B", fontWeight: 700 }}>{g?.hari_kerja ?? kh?.hariKerja ?? 0} hr</span>
                                         </td>
                                         <td style={{ padding: "7px 12px", borderBottom: "1px solid #E6D5BE", textAlign: "center" }}>
-                                            {g && g.hari_lembur > 0 ? <span style={{ background: "#FEF9C3", borderRadius: 5, padding: "2px 8px", color: "#A16207", fontWeight: 700 }}>{g.hari_lembur} hr</span> : <span style={{ color: "#D1BFA3" }}>-</span>}
+                                            {(g?.hari_lembur ?? kh?.hariLembur ?? 0) > 0
+                                                ? <span style={{ background: "#FEF9C3", borderRadius: 5, padding: "2px 8px", color: "#A16207", fontWeight: 700 }}>{g?.hari_lembur ?? kh?.hariLembur} hr</span>
+                                                : <span style={{ color: "#D1BFA3" }}>-</span>}
+                                        </td>
+                                        <td style={{ padding: "7px 12px", borderBottom: "1px solid #E6D5BE", textAlign: "center", fontSize: 11 }}>
+                                            {(g?.telat_count ?? kh?.telatCount ?? 0) > 0
+                                                ? <span title={`${g?.telat_menit ?? kh?.telatMenit ?? 0} menit`} style={{ color: "#B8860B", fontWeight: 700 }}>⏰ {g?.telat_count ?? kh?.telatCount}×</span>
+                                                : <span style={{ color: "#D1BFA3" }}>-</span>}
                                         </td>
                                         <td style={{ padding: "7px 12px", borderBottom: "1px solid #E6D5BE", color: "#6B5E55" }}>
-                                            {fmtRp(r.karyawan.gaji_harian || Math.round(r.karyawan.gaji_pokok / 26))}
+                                            {fmtRp(tarifHarianOf(r.karyawan.gaji_harian, r.karyawan.gaji_pokok))}
                                         </td>
-                                        <td style={{ padding: "7px 12px", borderBottom: "1px solid #E6D5BE", textAlign: "center", fontWeight: 800, color: g ? "#15803D" : "#D1BFA3" }}>
-                                            {g ? fmtRp(r.bersih) : "Belum dihitung"}
+                                        <td style={{ padding: "7px 12px", borderBottom: "1px solid #E6D5BE", textAlign: "center", fontWeight: 800, color: g ? "#15803D" : "#B89678" }}>
+                                            {fmtRp(r.bersih)}{!g && <span style={{ fontWeight: 600, fontSize: 9, marginLeft: 4, color: "#C5A882" }}>(preview)</span>}
                                         </td>
                                         <td style={{ padding: "7px 12px", borderBottom: "1px solid #E6D5BE", textAlign: "center" }}>
                                             <button onClick={e => { e.stopPropagation(); setSelectedKId(r.karyawan.id); setHasResult(true); setPrintSlip(true); }}
@@ -906,7 +1103,7 @@ function TabDataGaji() {
                         </tbody>
                         <tfoot>
                             <tr style={{ background: "#EDE0D4" }}>
-                                <td colSpan={5} style={{ padding: "8px 12px", fontWeight: 700, fontSize: 12, color: "#5C4033" }}>TOTAL - {periodeLabel}</td>
+                                <td colSpan={6} style={{ padding: "8px 12px", fontWeight: 700, fontSize: 12, color: "#5C4033" }}>TOTAL — {periodeLabel}</td>
                                 <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 800, fontSize: 13, color: "#15803D" }}>{fmtRp(totalBersih)}</td>
                                 <td />
                             </tr>
@@ -915,15 +1112,75 @@ function TabDataGaji() {
                 </div>
             </div>
 
-            {/* Print Modals */}
+            {/* Print & Catat Modals */}
             {printRekap && <PrintRekapModal rows={gajiRows} periode={periodeLabel} onClose={() => setPrintRekap(false)} />}
             {printSlip && selectedK && (
-                <PrintSlipModal row={selectedRow} periode={periodeLabel} onClose={() => setPrintSlip(false)} />
+                <PrintSlipModal row={{
+                    karyawan: selectedK, base, lembur: lemburNominal, tunjangan: form.tunjangan,
+                    kasbon: form.kasbon_potong, potongan: form.potongan_lain,
+                    bpjs_tk: form.bpjs_tk, bpjs_kes: form.bpjs_kes,
+                    bersihPos: totalPendapatan, bersihNeg: totalPotongan, bersih,
+                }} periode={periodeLabel} catatanTelat={slipTelat} onClose={() => setPrintSlip(false)} />
+            )}
+            {showCatat && (
+                <CatatKeuanganModal
+                    total={savedTotal} jumlahOrang={savedRows.length} label={periodeLabel}
+                    defaultDate={tglGajian} bankAccounts={bankAccounts} sudahDicatat={!!sudahDicatat}
+                    onSubmit={catatKeKeuangan} onClose={() => setShowCatat(false)} />
             )}
         </div>
     );
 }
 
+/* -- Modal: catat total gaji tersimpan sebagai pengeluaran di Keuangan -- */
+function CatatKeuanganModal({ total, jumlahOrang, label, defaultDate, bankAccounts, sudahDicatat, onSubmit, onClose }: {
+    total: number; jumlahOrang: number; label: string; defaultDate: string;
+    bankAccounts: { id: string; name: string }[]; sudahDicatat: boolean;
+    onSubmit: (accountId: string, amount: number, date: string) => void; onClose: () => void;
+}) {
+    const [accountId, setAccountId] = useState(bankAccounts[0]?.id ?? "");
+    const [amount, setAmount] = useState(total);
+    const [date, setDate] = useState(defaultDate);
+    return (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ background: "white", borderRadius: 12, padding: 24, width: "min(95vw,440px)", boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}>
+                <div style={{ fontSize: 16, fontWeight: 800, color: "#3C2F2F", marginBottom: 6 }}>💰 Catat ke Keuangan</div>
+                <div style={{ fontSize: 12, color: "#8A6D55", marginBottom: 14 }}>
+                    Pengeluaran kategori <strong>Gaji</strong>: {label} · {jumlahOrang} karyawan tersimpan.
+                </div>
+                {sudahDicatat && (
+                    <div style={{ background: "#FEF9C3", border: "1px solid #FDE68A", borderRadius: 8, padding: "8px 12px", fontSize: 11.5, color: "#92400E", marginBottom: 12 }}>
+                        ⚠️ Periode ini <strong>sudah pernah dicatat</strong> ke Keuangan. Melanjutkan akan membuat entri BARU —
+                        pastikan tidak dobel (hapus entri lama di menu Keuangan bila perlu).
+                    </div>
+                )}
+                <div style={{ marginBottom: 10 }}>
+                    <label style={{ fontSize: 10, fontWeight: 700, color: "#B89678", letterSpacing: 1, display: "block", marginBottom: 3 }}>DARI AKUN KAS</label>
+                    <select value={accountId} onChange={e => setAccountId(e.target.value)} style={inp}>
+                        {bankAccounts.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                    </select>
+                </div>
+                <div style={{ marginBottom: 10 }}>
+                    <label style={{ fontSize: 10, fontWeight: 700, color: "#B89678", letterSpacing: 1, display: "block", marginBottom: 3 }}>NOMINAL (Rp)</label>
+                    <input type="number" min={0} value={amount || ""} onChange={e => setAmount(+e.target.value)} style={inp} />
+                    <div style={{ fontSize: 10, color: "#A67B5B", marginTop: 3 }}>Total gaji tersimpan: {fmtRp(total)}</div>
+                </div>
+                <div style={{ marginBottom: 10 }}>
+                    <label style={{ fontSize: 10, fontWeight: 700, color: "#B89678", letterSpacing: 1, display: "block", marginBottom: 3 }}>TANGGAL</label>
+                    <input type="date" value={date} onChange={e => setDate(e.target.value)} style={inp} />
+                </div>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+                    <button onClick={onClose} style={{ padding: "8px 18px", borderRadius: 7, border: "1px solid #D1BFA3", background: "white", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#5C4033" }}>Batal</button>
+                    <button onClick={() => { if (accountId && amount > 0) onSubmit(accountId, amount, date); }}
+                        disabled={!accountId || amount <= 0}
+                        style={{ padding: "8px 20px", borderRadius: 7, border: "none", background: "#15803D", color: "white", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
+                        Catat Pengeluaran
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 /* ================================================================
    TAB 3: KASBON / BON KARYAWAN
