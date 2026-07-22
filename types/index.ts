@@ -139,6 +139,13 @@ export interface Customer {
   type: CustomerType;
   pic: string;         // nama kontak / PIC
   notes: string;
+  // CRM Terpadu (kolom aditif 20260721_crm_unified.sql) — opsional agar
+  // pemanggil lama tetap valid; '' / null = belum diisi.
+  marketingId?: string; // PIC marketing: 'toto' | 'faisal' | 'livia' | 'dika' | ''
+  kota?: string;        // kunci join region_coords utk Peta Wilayah
+  provinsi?: string;
+  latitude?: number | null;
+  longitude?: number | null;
   createdAt?: string;
   updatedAt?: string;
 }
