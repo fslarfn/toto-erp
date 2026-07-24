@@ -84,7 +84,9 @@ export default function AlucurvInvoicePrintPage({ params }: { params: Promise<{ 
                 @media print {
                     body, .print-page-bg { background: white !important; padding: 0 !important; }
                     .no-print { display: none !important; }
-                    .nota-paper { box-shadow: none !important; margin: 0 !important; border: none !important; }
+                    /* margin auto dipertahankan agar nota tetap DI TENGAH kertas
+                       (margin: 0 membuatnya nempel kiri saat print) */
+                    .nota-paper { box-shadow: none !important; margin: 0 auto !important; border: none !important; }
                 }
             `}</style>
 
