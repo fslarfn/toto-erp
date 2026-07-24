@@ -1,6 +1,8 @@
 "use client";
 import { useState, useMemo } from "react";
 import { usePesanan, PesananRow } from "@/lib/pesanan-store";
+import { TTD_YANTO } from "@/lib/ttd-yanto";
+import { STEMPEL_TOTO } from "@/lib/stempel-toto";
 
 /* ================================================================
    MENU INVOICE
@@ -195,7 +197,7 @@ export default function InvoicePage() {
   .note { font-size:11px; color:#333; line-height:1.85; max-width:62%; }
   .note-title { font-weight:700; margin-bottom:4px; }
   .tagline { font-size:12px; color:#A0522D; font-style:italic; }
-  .sign { text-align:center; }
+  .sign { text-align:center; position:relative; }
   .sign-line { width:130px; border-top:1px solid #333; margin:0 auto 6px; }
   .sign p { font-size:11px; color:#333; font-weight:600; }
   @media print { body { padding:20px; } }
@@ -264,7 +266,8 @@ export default function InvoicePage() {
     </div>
     <div class="sign">
       <p style="margin-bottom:2px">Hormat Kami,</p>
-      <div style="height:46px"></div>
+      <img src="${TTD_YANTO}" alt="" style="height:50px;display:block;margin:0 auto -4px" />
+      <img src="${STEMPEL_TOTO}" alt="" style="position:absolute;left:50%;top:0;width:110px;transform:translateX(-58%) rotate(-12deg);opacity:.88" />
       <div class="sign-line"></div>
       <p>( Yanto )</p>
       <p style="font-weight:400;color:#666">Direktur</p>
@@ -639,9 +642,12 @@ export default function InvoicePage() {
                                             Terima kasih atas kepercayaan Anda.
                                         </div>
                                     </div>
-                                    <div style={{ textAlign: "center" }}>
+                                    <div style={{ textAlign: "center", position: "relative" }}>
                                         <div style={{ fontSize: 11, color: "#333", fontWeight: 600, marginBottom: 2 }}>Hormat Kami,</div>
-                                        <div style={{ height: 46 }} />
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img src={TTD_YANTO} alt="" style={{ height: 50, display: "block", margin: "0 auto -4px" }} />
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img src={STEMPEL_TOTO} alt="" style={{ position: "absolute", left: "50%", top: 0, width: 110, transform: "translateX(-58%) rotate(-12deg)", opacity: 0.88 }} />
                                         <div style={{ width: 130, borderTop: "1px solid #333", marginBottom: 6 }} />
                                         <div style={{ fontSize: 12, color: "#333", fontWeight: 700 }}>( Yanto )</div>
                                         <div style={{ fontSize: 11, color: "#666" }}>Direktur</div>
