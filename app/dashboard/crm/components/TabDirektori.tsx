@@ -6,7 +6,7 @@ import { useState, useMemo } from "react";
 import { AlertTriangle, MapPin } from "lucide-react";
 import type { Customer } from "@/types";
 import {
-    directoryKpi, findDuplicateGroups,
+    directoryKpi, findSimilarGroups,
     DORMANT_DAYS, TIER_A_MIN, TIER_B_MIN,
     type EnrichedCustomer, type Tier,
 } from "@/lib/crm-analytics";
@@ -57,13 +57,21 @@ export default function TabDirektori({ enriched, marketers, loading, onDetail, o
 
     const kpi = useMemo(() => directoryKpi(enriched), [enriched]);
 
-    // Kandidat duplikat (nama mirip / WA sama) — utk banner + highlight baris.
+    // Kandidat duplikat (identik / keterangan order / nama mirip) —
+    // utk banner + highlight baris + modal Merge.
     const dupGroups = useMemo(() => {
         const byId = new Map(enriched.map((e) => [e.c.id, e]));
-        return findDuplicateGroups(enriched.map((e) => e.c))
-            .map((g) => g.map((c) => byId.get(c.id)!).filter(Boolean));
+        return findSimilarGroups(enriched.map((e) => e.c))
+            .map((g) => ({ reason: g.reason, entries: g.customers.map((c) => byId.get(c.id)!).filter(Boolean) }))
+            .filter((g) => g.entries.length > 1);
     }, [enriched]);
-    const dupIds = useMemo(() => new Set(dupGroups.flat().map((e) => e.c.id)), [dupGroups]);
+    // Baris kuning hanya utk grup yang hampir pasti duplikat — grup "mirip"
+    // (spekulatif, bisa ratusan) tidak ikut supaya tabel tidak penuh kuning.
+    const dupIds = useMemo(
+        () => new Set(dupGroups.filter((g) => g.reason !== "mirip").flatMap((g) => g.entries.map((e) => e.c.id))),
+        [dupGroups]
+    );
+    const miripCount = useMemo(() => dupGroups.filter((g) => g.reason === "mirip").length, [dupGroups]);
 
     const filtered = useMemo(() => {
         let list = enriched;
@@ -109,7 +117,9 @@ export default function TabDirektori({ enriched, marketers, loading, onDetail, o
                 <div style={{ background: "#FBF4E6", border: "1px solid #EAD9B4", borderRadius: 10, padding: "11px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                     <AlertTriangle size={17} color="#B8860B" style={{ flexShrink: 0 }} />
                     <span style={{ fontSize: 12.5, color: "#7A5E1E", flex: 1, minWidth: 220 }}>
-                        <strong>{dupGroups.length} grup kemungkinan duplikat</strong> — nama mirip atau No. WA sama. Baris terkait ditandai kuning.
+                        <strong>{dupGroups.length} grup kemungkinan duplikat</strong>
+                        {miripCount > 0 && <> (termasuk {miripCount} grup nama-mirip yang perlu dicek manual)</>}
+                        {" "}— tinjau lalu gabungkan yang memang sama. Baris hampir-pasti-duplikat ditandai kuning.
                     </span>
                     <button onClick={() => setShowMerge(true)} className="btn btn-secondary" style={{ fontSize: 12, borderColor: "#D9B96A", color: "#7A5E1E" }}>🔀 Tinjau & gabungkan</button>
                 </div>
