@@ -248,6 +248,108 @@ export function findDuplicateGroups(customers: Customer[]): Customer[][] {
     return groups.filter((g) => g.length > 1);
 }
 
+/* ---- Deteksi nama MIRIP (perluasan — dipakai modal Merge Duplikat) ---- */
+
+/** Alasan sebuah grup dianggap kandidat duplikat:
+ *  - identik    : nama sama persis (setelah normalisasi) atau No. WA sama — aman digabung.
+ *  - keterangan : nama + keterangan order ("SEWELAS / PO SOLO") — hampir pasti sama.
+ *  - mirip      : nama pendek jadi awalan nama panjang ("AULIA" vs "AULIA ALUMINIUM")
+ *                 — BISA beda orang, wajib dipilih manual per entri. */
+export type DupReason = "identik" | "keterangan" | "mirip";
+
+export interface SimilarGroup {
+    reason: DupReason;
+    customers: Customer[];
+}
+
+// Token keterangan order yang sering terbawa ke nama customer saat input pesanan.
+const ANNOT_RE = /\b(PO|P\.O|REVISI|REV|DEADLINE|DEDLINE|TAMBAHAN|TAMBAH|URGENT|URGEN|CUSTOM|COSTOM|CUSTOME|PAKAI\s*STOK|READY\s*STOK|STOK|KIRIM|TGL|TANGGAL|DP|LUNAS|ORDERAN|ORDER|PESANAN|SISA|JADWAL|SENIN|SELASA|RABU|KAMIS|JUMAT|SABTU|EKSPEDISI|VIA|SAMPLE|SAMPEL|CANCEL|BATAL|GANTI|EDIT|NOTA|INVOICE|INV)\b/i;
+const DATEISH_RE = /\d{1,2}[/-]\d{1,2}([/-]\d{2,4})?|\d{1,2}\s+(JAN|FEB|MAR|APR|MEI|JUN|JUL|AGU|SEP|OKT|NOV|DES)/i;
+
+/** Nama dasar tanpa keterangan order ('SEWELAS / PO SOLO' → 'SEWELAS').
+ *  null bila nama bukan artefak keterangan (tidak berubah / segmen berisi
+ *  alias orang, mis. "RESTU / SINAR SURYA BANDUNG" dibiarkan utuh). */
+export function orderNoteBase(name: string): string | null {
+    const parts = name.split(/[/|,]|(?:\s[-*]\s)/);
+    let base = parts[0];
+    for (let i = 1; i < parts.length; i++) {
+        const seg = parts[i];
+        if (!seg.trim() || ANNOT_RE.test(seg) || DATEISH_RE.test(seg)) continue;
+        return null; // segmen non-keterangan → kemungkinan alias, jangan dipotong
+    }
+    const m = base.match(/^(.*?)\s+(PO|REVISI|DEADLINE|TAMBAHAN|URGENT|CUSTOM|COSTOM|PAKAI\s*STOK|KIRIM|TGL|DP|LUNAS)\b.*$/i);
+    if (m && m[1].trim().length >= 4) base = m[1];
+    base = base.trim();
+    if (!base || base.length < 4) return null;
+    if (dedupKey(base) === dedupKey(name)) return null;
+    return base;
+}
+
+/** Grup kandidat duplikat DIPERLUAS: identik + keterangan-order + nama-mirip.
+ *  Tiap customer masuk maksimal satu grup (prioritas identik > keterangan > mirip).
+ *  Murni deteksi — merge tetap manual lewat modal. */
+export function findSimilarGroups(customers: Customer[]): SimilarGroup[] {
+    const out: SimilarGroup[] = [];
+    const used = new Set<string>();
+    const take = (reason: DupReason, members: Customer[]) => {
+        const fresh = members.filter((c) => !used.has(c.id));
+        if (fresh.length < 2) return;
+        fresh.forEach((c) => used.add(c.id));
+        out.push({ reason, customers: fresh });
+    };
+
+    // Kunci dihitung SEKALI per customer — dedupKey (regex) di dalam loop
+    // berpasangan membekukan UI pada 3-4 ribu customer.
+    const keyOf = new Map<string, string>();
+    for (const c of customers) keyOf.set(c.id, dedupKey(c.name));
+
+    // 1) identik — logika lama (dedupKey sama / WA sama)
+    for (const g of findDuplicateGroups(customers)) take("identik", g);
+
+    // 2) keterangan order — kelompokkan varian ke nama dasarnya
+    const byKey = new Map(customers.map((c) => [keyOf.get(c.id)!, c]));
+    const noteGroups = new Map<string, Customer[]>();
+    for (const c of customers) {
+        if (used.has(c.id)) continue;
+        const base = orderNoteBase(c.name);
+        if (!base) continue;
+        const bk = dedupKey(base);
+        if (!noteGroups.has(bk)) noteGroups.set(bk, []);
+        noteGroups.get(bk)!.push(c);
+    }
+    for (const [bk, variants] of noteGroups) {
+        const parent = byKey.get(bk);
+        const members = parent && !used.has(parent.id) ? [parent, ...variants] : variants;
+        take("keterangan", members);
+    }
+
+    // 3) mirip — nama pendek adalah awalan (batas kata) nama panjang.
+    //    O(n log n): urutkan per kunci; semua kunci ber-awalan sk berada
+    //    tepat setelah sk dalam urutan leksikografis, jadi cukup scan maju
+    //    sampai awalan tidak cocok — tanpa perbandingan semua-lawan-semua.
+    const rest = customers.filter((c) => !used.has(c.id) && keyOf.get(c.id)!.length >= 5);
+    const sorted = [...rest].sort((a, b) => (keyOf.get(a.id)! < keyOf.get(b.id)! ? -1 : 1));
+    const taken = new Set<string>();
+    for (let i = 0; i < sorted.length; i++) {
+        const short = sorted[i];
+        if (taken.has(short.id)) continue;
+        const sk = keyOf.get(short.id)!;
+        const sName = short.name.toLowerCase().trim();
+        const members = [short];
+        for (let j = i + 1; j < sorted.length; j++) {
+            const cand = sorted[j];
+            const ck = keyOf.get(cand.id)!;
+            if (!ck.startsWith(sk)) break;           // blok awalan berakhir
+            if (taken.has(cand.id) || ck.length === sk.length) continue;
+            if (cand.name.toLowerCase().trim().startsWith(sName)) members.push(cand);
+        }
+        if (members.length < 2) continue;
+        members.forEach((c) => taken.add(c.id));
+        take("mirip", members);
+    }
+    return out;
+}
+
 /* ================= Per Marketing ================= */
 
 export interface MarketerRollup {
