@@ -298,11 +298,16 @@ export function findSimilarGroups(customers: Customer[]): SimilarGroup[] {
         out.push({ reason, customers: fresh });
     };
 
+    // Kunci dihitung SEKALI per customer — dedupKey (regex) di dalam loop
+    // berpasangan membekukan UI pada 3-4 ribu customer.
+    const keyOf = new Map<string, string>();
+    for (const c of customers) keyOf.set(c.id, dedupKey(c.name));
+
     // 1) identik — logika lama (dedupKey sama / WA sama)
     for (const g of findDuplicateGroups(customers)) take("identik", g);
 
     // 2) keterangan order — kelompokkan varian ke nama dasarnya
-    const byKey = new Map(customers.map((c) => [dedupKey(c.name), c]));
+    const byKey = new Map(customers.map((c) => [keyOf.get(c.id)!, c]));
     const noteGroups = new Map<string, Customer[]>();
     for (const c of customers) {
         if (used.has(c.id)) continue;
@@ -318,23 +323,29 @@ export function findSimilarGroups(customers: Customer[]): SimilarGroup[] {
         take("keterangan", members);
     }
 
-    // 3) mirip — nama pendek adalah awalan (batas kata) nama panjang
-    const rest = customers.filter((c) => !used.has(c.id));
-    const sorted = [...rest].sort((a, b) => dedupKey(a.name).length - dedupKey(b.name).length);
-    const inMirip = new Set<string>();
-    for (const short of sorted) {
-        if (inMirip.has(short.id)) continue;
-        const sk = dedupKey(short.name);
-        if (sk.length < 5) continue;
+    // 3) mirip — nama pendek adalah awalan (batas kata) nama panjang.
+    //    O(n log n): urutkan per kunci; semua kunci ber-awalan sk berada
+    //    tepat setelah sk dalam urutan leksikografis, jadi cukup scan maju
+    //    sampai awalan tidak cocok — tanpa perbandingan semua-lawan-semua.
+    const rest = customers.filter((c) => !used.has(c.id) && keyOf.get(c.id)!.length >= 5);
+    const sorted = [...rest].sort((a, b) => (keyOf.get(a.id)! < keyOf.get(b.id)! ? -1 : 1));
+    const taken = new Set<string>();
+    for (let i = 0; i < sorted.length; i++) {
+        const short = sorted[i];
+        if (taken.has(short.id)) continue;
+        const sk = keyOf.get(short.id)!;
         const sName = short.name.toLowerCase().trim();
-        const longs = rest.filter((c) =>
-            c.id !== short.id && !inMirip.has(c.id) &&
-            dedupKey(c.name).length > sk.length && dedupKey(c.name).startsWith(sk) &&
-            c.name.toLowerCase().trim().startsWith(sName)
-        );
-        if (!longs.length) continue;
-        [short, ...longs].forEach((c) => inMirip.add(c.id));
-        take("mirip", [short, ...longs]);
+        const members = [short];
+        for (let j = i + 1; j < sorted.length; j++) {
+            const cand = sorted[j];
+            const ck = keyOf.get(cand.id)!;
+            if (!ck.startsWith(sk)) break;           // blok awalan berakhir
+            if (taken.has(cand.id) || ck.length === sk.length) continue;
+            if (cand.name.toLowerCase().trim().startsWith(sName)) members.push(cand);
+        }
+        if (members.length < 2) continue;
+        members.forEach((c) => taken.add(c.id));
+        take("mirip", members);
     }
     return out;
 }
