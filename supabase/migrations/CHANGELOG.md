@@ -1,5 +1,30 @@
 # Supabase Migrations Changelog
 
+## 20260728_rls_tabel_tersisa.sql
+**Tujuan:** Tindak lanjut email Supabase Security Advisor 26 Jul 2026 (CRITICAL `rls_disabled_in_public`): aktifkan RLS pada SEMUA tabel public yang tersisa. Melengkapi seri `20260720_rls_*`.
+
+### Perubahan
+| # | Objek | Aksi |
+|---|-------|------|
+| 1 | `pesanan_rows`, `orders`, `materials`, `quotations`, `surat_jalan(_items)`, `sj_bahan(_items)`, `tagihan_bahan(_items)`, `internal_notes`, `production_logs`, `finishing_checks` | RLS ENABLE + policy `authenticated` all (anon diblokir) |
+| 2 | `karyawan`, `izin_absensi` | RLS ENABLE; SELECT publik (kiosk `/absen`), tulis hanya `authenticated` |
+| 3 | `absensi` | RLS ENABLE; SELECT/INSERT/UPDATE publik (kiosk absen masuk/pulang), DELETE hanya `authenticated` |
+| 4 | `app_users` | RLS ENABLE; SELECT hanya `authenticated`; kolom `password_hash` di-REVOKE dari anon+authenticated (tulis = server/service_role saja) |
+| 5 | `app_config` | RLS ENABLE; SELECT hanya `authenticated`; tulis server-only |
+| 6 | `billing_history` | RLS ENABLE; SELECT publik (halaman `/invoice/[id]`); tulis server-only |
+| 7 | `push_subscriptions` | RLS ENABLE tanpa policy = deny-all (akses hanya via API service_role) |
+
+Catatan: idempoten — tiap blok menghapus policy lama tabel tsb (termasuk "Allow all" warisan) lalu membuat set final; tabel yang tidak ada dilewati.
+
+### Rollback
+```sql
+-- Per tabel yang bermasalah: JANGAN disable RLS, cukup allow-all sementara:
+-- DROP POLICY IF EXISTS "authenticated all" ON <tabel>;
+-- CREATE POLICY "Allow all" ON <tabel> FOR ALL USING (true) WITH CHECK (true);
+```
+
+---
+
 ## 20260718_ruang_tim.sql
 **Tujuan:** Fitur "Ruang Tim" — chat + papan tugas (tipe info/tugas/pengumuman, assignee, deadline, prioritas, status selesai).
 
