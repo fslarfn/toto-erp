@@ -17,7 +17,7 @@ interface AlucurvTransaction {
     note: string | null;
     transfer_group?: string | null;
 }
-interface AlucurvAccount { id: string; name: string }
+interface AlucurvAccount { id: string; name: string; type?: string; opening_balance?: number }
 interface AlucurvSubCategory { id: string; name: string; type: string }
 
 const rupiah = (n: number) => `Rp ${Math.round(n).toLocaleString("id-ID")}`;
@@ -105,10 +105,70 @@ export default function AlucurvKeuanganPage() {
         }
     };
 
+    // ── Perbarui Saldo Marketplace (penyesuaian) ──────────────
+    // Saldo Shopee/TikTok (termasuk pending) tidak bisa dilacak per-transaksi.
+    // Fitur ini mencatat SATU baris penyesuaian (bertanda transfer_group agar
+    // TIDAK dihitung omzet/laba) sehingga saldo tercatat = saldo riil yg diketik
+    // admin. Ada jejaknya & tidak menyentuh Saldo Awal.
+    const todayStr = now.toISOString().slice(0, 10);
+    /** Saldo terkini akun = saldo awal + (pemasukan − pengeluaran). Sama dg view. */
+    const currentBalanceOf = (accountId: string): number => {
+        const acc = accounts.rows.find((a) => a.id === accountId);
+        const opening = Number(acc?.opening_balance || 0);
+        const delta = rows
+            .filter((r) => r.account_id === accountId)
+            .reduce((s, r) => s + (r.type === "Pemasukan" ? Number(r.amount || 0) : -Number(r.amount || 0)), 0);
+        return opening + delta;
+    };
+    const marketplaceAccounts = accounts.rows.filter((a) => a.type === "marketplace");
+    const [saldoForm, setSaldoForm] = useState({ accountId: "", real: "", date: todayStr });
+    const [saldoMsg, setSaldoMsg] = useState<{ ok: boolean; text: string } | null>(null);
+    const [saldoSaving, setSaldoSaving] = useState(false);
+
+    const handleUpdateSaldo = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSaldoMsg(null);
+        if (!saldoForm.accountId) {
+            setSaldoMsg({ ok: false, text: "Pilih akun marketplace dulu." });
+            return;
+        }
+        if (saldoForm.real.trim() === "" || isNaN(Number(saldoForm.real))) {
+            setSaldoMsg({ ok: false, text: "Isi saldo riil (angka) dari aplikasi marketplace." });
+            return;
+        }
+        const real = Number(saldoForm.real);
+        const current = currentBalanceOf(saldoForm.accountId);
+        const delta = Math.round(real - current);
+        const nm = accountNameOf(saldoForm.accountId);
+        if (delta === 0) {
+            setSaldoMsg({ ok: true, text: `Saldo ${nm} sudah sama dengan saldo riil — tidak ada yang perlu disesuaikan.` });
+            return;
+        }
+        setSaldoSaving(true);
+        const err = await insertRow({
+            date: saldoForm.date,
+            description: `Penyesuaian saldo ${nm} → ${rupiah(real)}`,
+            type: delta > 0 ? "Pemasukan" : "Pengeluaran",
+            sub_category_id: null,
+            amount: Math.abs(delta),
+            account_id: saldoForm.accountId,
+            note: `Penyesuaian saldo marketplace: tercatat ${rupiah(current)} → riil ${rupiah(real)} (selisih ${delta > 0 ? "+" : ""}${rupiah(delta)})`,
+            transfer_group: `adjustment-${Date.now()}`, // dikecualikan dari omzet/laba
+        });
+        setSaldoSaving(false);
+        if (err) {
+            const m = err instanceof Error ? err.message : String((err as { message?: string })?.message ?? err);
+            setSaldoMsg({ ok: false, text: `Gagal menyesuaikan: ${m}` });
+        } else {
+            setSaldoMsg({ ok: true, text: `✅ Saldo ${nm} disesuaikan ke ${rupiah(real)} (selisih ${delta > 0 ? "+" : ""}${rupiah(delta)}).` });
+            setSaldoForm((p) => ({ ...p, real: "" }));
+            refresh();
+        }
+    };
+
     // ── Filter per tanggal ────────────────────────────────────
     // Rentang kosong = semua data. Preset: Hari Ini / Bulan Ini / Semua.
     const [range, setRange] = useState({ from: "", to: "" });
-    const todayStr = now.toISOString().slice(0, 10);
     const monthStart = todayStr.slice(0, 7) + "-01";
     const filteredRows = rows.filter(
         (r) => (!range.from || r.date >= range.from) && (!range.to || r.date <= range.to)
@@ -243,6 +303,54 @@ export default function AlucurvKeuanganPage() {
                 )}
                 <p style={{ fontSize: 10.5, color: "var(--text-med)", marginTop: 8 }}>
                     Mutasi dicatat sebagai pasangan keluar + masuk dan <strong>tidak dihitung</strong> sebagai pemasukan/pengeluaran operasional.
+                </p>
+            </div>
+
+            {/* Perbarui Saldo Marketplace */}
+            <div style={{ background: "white", border: "1px solid var(--border)", borderRadius: 10, padding: 14, marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-dark)", marginBottom: 10 }}>🛒 Perbarui Saldo Marketplace</div>
+                <form onSubmit={handleUpdateSaldo} style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                        <label style={mutasiLabel}>Akun Marketplace</label>
+                        <select value={saldoForm.accountId} onChange={(e) => setSaldoForm((p) => ({ ...p, accountId: e.target.value }))} style={mutasiInput} required>
+                            <option value="" disabled>Pilih akun…</option>
+                            {marketplaceAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                        </select>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                        <label style={mutasiLabel}>Saldo Tercatat</label>
+                        <div style={{ ...mutasiInput, display: "flex", alignItems: "center", background: "var(--bg-secondary)", color: "var(--text-med)", fontWeight: 700, minHeight: 34 }}>
+                            {saldoForm.accountId ? rupiah(currentBalanceOf(saldoForm.accountId)) : "—"}
+                        </div>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                        <label style={mutasiLabel}>Saldo Riil (dari aplikasi)</label>
+                        <input type="number" value={saldoForm.real} onChange={(e) => setSaldoForm((p) => ({ ...p, real: e.target.value }))} placeholder="cth: 9309025" style={mutasiInput} required />
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                        <label style={mutasiLabel}>Tanggal</label>
+                        <input type="date" value={saldoForm.date} onChange={(e) => setSaldoForm((p) => ({ ...p, date: e.target.value }))} style={mutasiInput} required />
+                    </div>
+                    <button type="submit" disabled={saldoSaving} style={{ fontSize: 12, padding: "8px 16px", borderRadius: 6, border: "none", background: "var(--primary)", color: "white", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+                        {saldoSaving ? "Menyimpan..." : "🛒 Perbarui Saldo"}
+                    </button>
+                </form>
+                {saldoForm.accountId && saldoForm.real.trim() !== "" && !isNaN(Number(saldoForm.real)) && (
+                    (() => {
+                        const d = Math.round(Number(saldoForm.real) - currentBalanceOf(saldoForm.accountId));
+                        return (
+                            <div style={{ marginTop: 8, fontSize: 11, color: "var(--text-med)" }}>
+                                Selisih penyesuaian: <strong style={{ color: d === 0 ? "var(--text-med)" : d > 0 ? "#16A34A" : "#DC2626" }}>{d > 0 ? "+" : ""}{rupiah(d)}</strong>
+                                {d !== 0 && <> — dicatat sebagai {d > 0 ? "pemasukan" : "pengeluaran"} penyesuaian.</>}
+                            </div>
+                        );
+                    })()
+                )}
+                {saldoMsg && (
+                    <div style={{ marginTop: 8, fontSize: 11.5, fontWeight: 600, color: saldoMsg.ok ? "#16A34A" : "#DC2626" }}>{saldoMsg.text}</div>
+                )}
+                <p style={{ fontSize: 10.5, color: "var(--text-med)", marginTop: 8 }}>
+                    Ketik saldo riil dari aplikasi Shopee/TikTok; sistem mencatat penyesuaian bertanggal (ada jejaknya) agar saldo tercatat = saldo riil. <strong>Tidak dihitung</strong> omzet/laba &amp; tidak mengubah Saldo Awal.
                 </p>
             </div>
 
