@@ -11,6 +11,7 @@ const PUBLIC_PREFIXES = [
   "/api/auth/logout",  // logout juga (hanya hapus cookie)
   "/api/push/vapid-key",
   "/api/cron/",
+  "/api/kuesioner/isi/", // form kuesioner publik — autentikasi via token unik
 ];
 
 export async function middleware(request: NextRequest) {

@@ -56,6 +56,7 @@ const NAV_ITEMS = [
             { href: "/dashboard/karyawan", label: "Karyawan", module: "keuangan", icon: KaryawanIcon },
             { href: "/dashboard/absensi", label: "Absensi", module: "admin-only", icon: AbsensiIcon },
             { href: "/dashboard/absensi/edit", label: "Edit Absen", module: "faisal-only", icon: EditAbsenIcon },
+            { href: "/dashboard/kuesioner", label: "Kuesioner Tim", module: "faisal-only", icon: ClipboardIcon },
         ],
     },
     {
