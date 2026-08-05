@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useState, type CSSProperties } from "react";
 import { useAlucurvDashboard, type AluDashOrder } from "@/lib/alucurv/useAlucurvDashboard";
 import { isAluTransfer, computeAluTotals } from "@/lib/alucurv/transaksi";
 import DomeCard from "@/components/layout/DomeCard";
@@ -20,6 +21,11 @@ const CHANNEL_BADGE_COLOR: Record<string, { bg: string; fg: string }> = {
     TikTokShop: { bg: "#F3E8FF", fg: "#7E22CE" },
 };
 
+const periodSelect: CSSProperties = {
+    fontSize: 13, padding: "8px 10px", borderRadius: 8,
+    border: "1px solid var(--border)", background: "white", color: "var(--text-dark)", cursor: "pointer",
+};
+
 function formatDeadline(s: string | null) {
     if (!s) return "-";
     const d = new Date(s);
@@ -38,17 +44,21 @@ export default function AlucurvWorkspacePage() {
     const subCategories = data?.subCategories ?? [];
     const bending = data?.bending ?? [];
 
+    // ── Pemilih bulan (mirip Dashboard Toto) ──────────────────
     const now = new Date();
-    const monthLabel = `${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`;
-    const isThisMonth = (dateStr: string) => {
-        const d = new Date(dateStr);
-        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-    };
-    const txnsThisMonth = (data?.txThisMonth ?? []).filter((t) => t.date && isThisMonth(t.date));
+    const [month, setMonth] = useState(now.getMonth() + 1); // 1..12
+    const [year, setYear] = useState(now.getFullYear());
+    const selectedPeriod = `${year}-${String(month).padStart(2, "0")}`; // YYYY-MM
+    const monthLabel = `${MONTH_NAMES[month - 1]} ${year}`;
+    const years: number[] = [];
+    for (let y = 2025; y <= now.getFullYear() + 1; y++) years.push(y);
+
+    const txnsMonth = (data?.transactions ?? []).filter((t) => t.date && t.date.startsWith(selectedPeriod));
 
     // Mutasi antar akun dikecualikan dari total operasional.
-    const { masuk: pemasukanBulanIni, keluar: pengeluaranBulanIni, laba: labaBulanIni } = computeAluTotals(txnsThisMonth);
+    const { masuk: pemasukanBulanIni, keluar: pengeluaranBulanIni, laba: labaBulanIni } = computeAluTotals(txnsMonth);
 
+    // Saldo/uang beredar = kondisi TERKINI (bukan per bulan) — sengaja tidak difilter.
     const totalUangBeredar = accounts.reduce((s, acc) => s + acc.balance, 0);
 
     // Omset = nominal yang benar-benar diterima Alucurv: received_amount untuk Shopee/TikTok
@@ -59,10 +69,12 @@ export default function AlucurvWorkspacePage() {
         if (o.channel === "Offline") return Number(o.price || 0);
         return Number(o.received_amount || 0) || Number(o.price || 0);
     };
-    // Keseluruhan: semua order dihitung begitu order masuk, tidak peduli status kirim.
-    const omsetKeseluruhan = orders.reduce((s, o) => s + effectiveOmset(o), 0);
-    // Terkirim: hanya order yang sudah dicentang "Dikirim".
-    const omsetTerkirim = orders.filter((o) => o.dikirim).reduce((s, o) => s + effectiveOmset(o), 0);
+    // Omset difilter per bulan (berdasarkan tanggal order).
+    const ordersMonth = orders.filter((o) => o.date && o.date.startsWith(selectedPeriod));
+    // Keseluruhan: semua order bulan ini, tidak peduli status kirim.
+    const omsetKeseluruhan = ordersMonth.reduce((s, o) => s + effectiveOmset(o), 0);
+    // Terkirim: hanya order bulan ini yang sudah dicentang "Dikirim".
+    const omsetTerkirim = ordersMonth.filter((o) => o.dikirim).reduce((s, o) => s + effectiveOmset(o), 0);
 
     const orderBerjalan = orders
         .filter((o) => !o.sampai)
@@ -79,7 +91,7 @@ export default function AlucurvWorkspacePage() {
 
     const subCategoryMap = new Map(subCategories.map((c) => [c.id, c]));
     const rekapMap = new Map<string, { name: string; type: string; total: number }>();
-    for (const t of txnsThisMonth) {
+    for (const t of txnsMonth) {
         if (isAluTransfer(t)) continue; // mutasi bukan omzet/biaya
         const cat = t.sub_category_id ? subCategoryMap.get(t.sub_category_id) : null;
         const name = cat?.name ?? "Tanpa Kategori";
@@ -94,10 +106,22 @@ export default function AlucurvWorkspacePage() {
 
     return (
         <div style={{ padding: 24 }}>
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: "var(--text-dark)", marginBottom: 4 }}>Dashboard</h1>
-            <p style={{ fontSize: 13, color: "var(--text-med)", marginBottom: 20 }}>
-                Ringkasan {monthLabel} — semua angka dihitung otomatis dari pencatatan.
-            </p>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
+                <div>
+                    <h1 style={{ fontSize: 22, fontWeight: 700, color: "var(--text-dark)", marginBottom: 4 }}>Dashboard</h1>
+                    <p style={{ fontSize: 13, color: "var(--text-med)" }}>
+                        Ringkasan {monthLabel} — semua angka dihitung otomatis dari pencatatan.
+                    </p>
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} style={periodSelect}>
+                        {MONTH_NAMES.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
+                    </select>
+                    <select value={year} onChange={(e) => setYear(parseInt(e.target.value))} style={periodSelect}>
+                        {years.map((y) => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                </div>
+            </div>
 
             {/* Stat cards */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 16, marginBottom: 24 }}>
@@ -105,8 +129,8 @@ export default function AlucurvWorkspacePage() {
                 <DomeCard label="Pemasukan Bulan Ini" value={rupiah(pemasukanBulanIni)} valueColor="#16A34A" />
                 <DomeCard label="Pengeluaran Bulan Ini" value={rupiah(pengeluaranBulanIni)} valueColor="#EA580C" />
                 <DomeCard label="Laba Bulan Ini" value={rupiah(labaBulanIni)} valueColor={labaBulanIni >= 0 ? "#16A34A" : "#DC2626"} />
-                <DomeCard label="Omset Keseluruhan" value={rupiah(omsetKeseluruhan)} valueColor="#0F766E" sub="Semua order, belum tentu sudah dikirim" />
-                <DomeCard label="Omset Terkirim" value={rupiah(omsetTerkirim)} valueColor="#0D9488" sub="Hanya order yang sudah dikirim" />
+                <DomeCard label="Omset Keseluruhan" value={rupiah(omsetKeseluruhan)} valueColor="#0F766E" sub="Semua order bulan ini, belum tentu sudah dikirim" />
+                <DomeCard label="Omset Terkirim" value={rupiah(omsetTerkirim)} valueColor="#0D9488" sub="Order bulan ini yang sudah dikirim" />
             </div>
 
             {/* 3 columns */}

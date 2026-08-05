@@ -18,6 +18,7 @@ import { supabase } from "@/lib/supabase-client";
 
 export interface AluDashOrder {
     id: string;
+    date: string | null;
     customer: string;
     description: string | null;
     channel: string;
@@ -36,7 +37,8 @@ export interface AluDashBendingOrder { id: string; amount: number; status: strin
 export interface AlucurvDashboardData {
     orders: AluDashOrder[];
     invoices: AluDashInvoice[];
-    txThisMonth: AluDashTransaction[];
+    /** SEMUA transaksi (dgn tanggal) — dashboard memfilter per bulan di client. */
+    transactions: AluDashTransaction[];
     stock: AluDashStockItem[];
     accounts: AluDashAccount[];
     subCategories: AluDashSubCategory[];
@@ -62,20 +64,21 @@ async function fetchAllPaged<T>(
     return all;
 }
 
-const ORDER_COLS = "id, customer, description, channel, deadline, price, received_amount, produksi, perakitan, packing, dikirim, sampai";
+const ORDER_COLS = "id, date, customer, description, channel, deadline, price, received_amount, produksi, perakitan, packing, dikirim, sampai";
 const TX_COLS = "id, date, type, amount, account_id, sub_category_id";
 // transfer_group ada setelah migrasi 20260718_alucurv_mutasi.sql;
 // bila kolom belum ada, fallback ke kolom dasar (mutasi dianggap tidak ada).
 const TX_COLS_TG = `${TX_COLS}, transfer_group`;
 
-async function fetchTxThisMonth(monthStart: string): Promise<AluDashTransaction[]> {
+async function fetchAllTx(): Promise<AluDashTransaction[]> {
+    // Semua transaksi (Alucurv relatif kecil) → dashboard bisa filter bulan apa pun.
     try {
         return await fetchAllPaged<AluDashTransaction>((f, t) =>
-            supabase.from("alu_transactions").select(TX_COLS_TG).gte("date", monthStart).order("id").range(f, t)
+            supabase.from("alu_transactions").select(TX_COLS_TG).order("id").range(f, t)
         );
     } catch {
         return await fetchAllPaged<AluDashTransaction>((f, t) =>
-            supabase.from("alu_transactions").select(TX_COLS).gte("date", monthStart).order("id").range(f, t)
+            supabase.from("alu_transactions").select(TX_COLS).order("id").range(f, t)
         );
     }
 }
@@ -115,13 +118,10 @@ async function fetchAccounts(): Promise<AluDashAccount[]> {
 }
 
 async function fetchDashboard(): Promise<AlucurvDashboardData> {
-    const now = new Date();
-    const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-
-    const [orders, invoices, txThisMonth, stockRes, subCatRes, bendingRes, accounts] = await Promise.all([
+    const [orders, invoices, transactions, stockRes, subCatRes, bendingRes, accounts] = await Promise.all([
         fetchAllPaged<AluDashOrder>((f, t) => supabase.from("alu_orders").select(ORDER_COLS).order("id").range(f, t)),
         fetchAllPaged<AluDashInvoice>((f, t) => supabase.from("alu_invoices").select("id, status").order("id").range(f, t)),
-        fetchTxThisMonth(monthStart),
+        fetchAllTx(),
         supabase.from("alu_stock_items").select("id, name, min_stock, opening_stock"),
         supabase.from("alu_sub_categories").select("id, name, type"),
         supabase.from("alu_bending_orders").select("id, amount, status"),
@@ -135,7 +135,7 @@ async function fetchDashboard(): Promise<AlucurvDashboardData> {
     return {
         orders,
         invoices,
-        txThisMonth,
+        transactions,
         stock: (stockRes.data ?? []) as AluDashStockItem[],
         accounts,
         subCategories: (subCatRes.data ?? []) as AluDashSubCategory[],
