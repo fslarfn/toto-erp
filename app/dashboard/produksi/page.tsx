@@ -21,6 +21,7 @@ const MN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt"
 const ML = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
 function fmtShort(d: string) { if (!d) return ""; const p = d.split("-"); return p.length === 3 ? `${p[2]} ${MN[parseInt(p[1]) - 1]}` : d; }
 function fmtFull(d: string) { if (!d) return ""; const p = d.split("-"); return p.length === 3 ? `${parseInt(p[2])} ${ML[parseInt(p[1]) - 1]} ${p[0]}` : d; }
+function fmtTimeShort(iso: string) { try { return new Date(iso).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" }); } catch { return ""; } }
 
 async function addLog(pesanan_id: number, action: string, from_status: string, to_status: string, note: string, user_name: string) {
     try { await supabase.from("production_logs").insert({ pesanan_id, action, from_status, to_status, note, user_name }); } catch {}
@@ -109,132 +110,28 @@ function WaButtons({ title, items, ekspedisi, statusOf }: { title: string; items
 }
 
 /* ================================================================
-   TAB 2: CEK GUDANG — PIC Gudang cek kelengkapan & tandai siap kirim
+   TAB 2: GUDANG — barang SIAP KIRIM (dari Finishing klik GUDANG atau
+   ceklis "Siap" di Status Barang). PIC Gudang cek kelengkapan, isi
+   ekspedisi, lalu tandai Dikirim ✓ — barang pindah ke tab Kirim.
 ================================================================ */
-function TabCekGudang() {
+function TabGudang() {
     const { rows, updateRow } = usePesanan();
     const { user } = useAuth();
     const [search, setSearch] = useState("");
     const [editingNote, setEditingNote] = useState<number | null>(null);
     const [noteText, setNoteText] = useState("");
     const [flash, setFlash] = useState<number | null>(null);
-
-    const items = rows.filter(r => (r.customer || r.deskripsi) && r.di_produksi && !r.siap_kirim && !r.di_kirim);
-    const filtered = items.filter(r => {
-        if (!search) return true;
-        return [r.customer, r.deskripsi, r.po_label, r.production_note].join(" ").toLowerCase().includes(search.toLowerCase());
-    });
-
-    const groups: Record<string, PesananRow[]> = {};
-    filtered.forEach(r => { const k = r.po_label || "(Tanpa PO)"; if (!groups[k]) groups[k] = []; groups[k].push(r); });
-
-    const markReady = (row: PesananRow) => {
-        updateRow(row.id, { siap_kirim: true, di_warna: true }, true);
-        addLog(row.id, "status_change", "di_produksi", "siap_kirim", "", user?.name || "");
-        pushNotify({
-            notificationType: "status_produksi",
-            title: "Pesanan Siap Kirim",
-            body: `${row.customer || "—"} — ${row.deskripsi || "—"}`,
-            url: "/dashboard/produksi",
-        });
-        setFlash(row.id); setTimeout(() => setFlash(null), 1200);
-    };
-
-    const markAllReady = (opRows: PesananRow[]) => {
-        opRows.forEach(r => {
-            updateRow(r.id, { siap_kirim: true, di_warna: true }, true);
-            addLog(r.id, "status_change", "di_produksi", "siap_kirim", "", user?.name || "");
-        });
-    };
-
-    const saveNote = (row: PesananRow) => {
-        updateRow(row.id, { production_note: noteText }, true);
-        if (noteText) addLog(row.id, "note", "", "", noteText, user?.name || "");
-        setEditingNote(null);
-    };
-
-    return (
-        <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
-            <SectionHeader title="Cek Kelengkapan" count={items.length} countBg="#FFE4E6" countColor="#BE123C"
-                actions={<WaButtons title="Ready Gudang" items={filtered} statusOf={r => r.siap_kirim ? "✅" : r.di_produksi ? "⏳" : "❌"} />}>
-                <SearchBar value={search} onChange={setSearch} placeholder="Cari customer, catatan..." />
-            </SectionHeader>
-            <div style={{ flex: 1, overflow: "auto", padding: "12px 16px", background: "#F8F4EF" }}>
-                {Object.keys(groups).length === 0 ? (
-                    <EmptyState icon={<IconGudang size={48} color="#C5A882" />} title="Gudang kosong" subtitle="Belum ada barang dari produksi" />
-                ) : Object.entries(groups).sort(([a], [b]) => a.localeCompare(b)).map(([opKey, opRows]) => (
-                    <div key={opKey} style={{ marginBottom: 12, borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.03)" }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "linear-gradient(135deg, #1E3A5F, #2563EB)" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                <span style={{ fontSize: 13, fontWeight: 700, color: "white" }}>PO {opKey}</span>
-                                <span style={{ background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.9)", borderRadius: 99, padding: "1px 8px", fontSize: 11, fontWeight: 600 }}>{opRows.length}</span>
-                            </div>
-                            <button onClick={() => markAllReady(opRows)} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.9)", fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "background 0.2s" }}
-                                onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.2)")}
-                                onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}>
-                                Semua Lengkap ✓
-                            </button>
-                        </div>
-                        <div style={{ background: "white" }}>
-                            {opRows.map((row, idx) => (
-                                <div key={row.id} style={{ padding: "11px 14px", borderBottom: idx < opRows.length - 1 ? "1px solid #F5F0EC" : "none", background: flash === row.id ? "#F0FFF4" : "white", transition: "background 0.4s" }}>
-                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{ fontWeight: 600, fontSize: 13, color: "#3C2F2F" }}>{row.customer || "—"}</div>
-                                            <div style={{ fontSize: 11.5, color: "#8A7B6E", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>{row.deskripsi || "—"}</div>
-                                            <div style={{ fontSize: 10.5, color: "#B89678", marginTop: 2 }}>UK: {row.ukuran || "—"} · Qty: {row.qty || "—"} · {fmtShort(row.tanggal)}</div>
-                                        </div>
-                                    </div>
-                                    {editingNote === row.id ? (
-                                        <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                                            <input type="text" value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="Catatan gudang..." autoFocus
-                                                onKeyDown={e => { if (e.key === "Enter") saveNote(row); if (e.key === "Escape") setEditingNote(null); }}
-                                                style={{ flex: 1, border: "1.5px solid #D1BFA3", borderRadius: 8, padding: "7px 10px", fontSize: 12, outline: "none", background: "#FAFAF8" }} />
-                                            <button onClick={() => saveNote(row)} style={{ padding: "7px 12px", borderRadius: 8, border: "none", background: "#2563EB", color: "white", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>OK</button>
-                                        </div>
-                                    ) : row.production_note ? (
-                                        <div onClick={() => { setEditingNote(row.id); setNoteText(row.production_note); }} style={{ marginTop: 6, padding: "4px 8px", background: "#FAFAF5", borderRadius: 6, fontSize: 11, color: "#8A6D55", cursor: "pointer", border: "1px dashed #E8DDD0" }}>📝 {row.production_note}</div>
-                                    ) : null}
-                                    <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                                        <button onClick={() => markReady(row)} style={{
-                                            flex: 1, padding: "8px 0", borderRadius: 8, border: "none", cursor: "pointer",
-                                            fontWeight: 700, fontSize: 12, background: "#2563EB", color: "white",
-                                            transition: "opacity 0.15s",
-                                        }}
-                                            onMouseEnter={e => { e.currentTarget.style.opacity = "0.85"; }}
-                                            onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}
-                                        >Siap Kirim ✓</button>
-                                        <button onClick={() => { setEditingNote(row.id); setNoteText(row.production_note || ""); }} style={{ padding: "8px 12px", borderRadius: 8, border: "1.5px solid #E8DDD0", background: "white", cursor: "pointer", fontSize: 12, color: "#B89678" }}>📝</button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-}
-
-/* ================================================================
-   TAB 4: KIRIM — input ekspedisi + tandai dikirim (per PO)
-================================================================ */
-function TabPengiriman() {
-    const { rows, updateRow } = usePesanan();
-    const { user } = useAuth();
-    const [search, setSearch] = useState("");
-    const [flash, setFlash] = useState<number | null>(null);
     const [ekspedisiInputs, setEkspedisiInputs] = useState<Record<number, string>>({});
 
+    // Sinkron dua arah dgn Status Barang: siap_kirim ✓ & belum dikirim.
     const items = rows.filter(r => (r.customer || r.deskripsi) && r.siap_kirim === true && r.di_kirim === false);
     const filtered = items.filter(r => {
         if (!search) return true;
-        return [r.customer, r.deskripsi, r.po_label, r.no_inv, r.ekspedisi].join(" ").toLowerCase().includes(search.toLowerCase());
+        return [r.customer, r.deskripsi, r.po_label, r.no_inv, r.production_note, r.ekspedisi].join(" ").toLowerCase().includes(search.toLowerCase());
     });
 
     const groups: Record<string, PesananRow[]> = {};
     filtered.forEach(r => { const k = r.po_label || "(Tanpa PO)"; if (!groups[k]) groups[k] = []; groups[k].push(r); });
-    const sortedKeys = Object.keys(groups).sort((a, b) => a.localeCompare(b));
 
     const getEkspedisiValue = (row: PesananRow) => ekspedisiInputs[row.id] !== undefined ? ekspedisiInputs[row.id] : (row.ekspedisi || "");
     const setEkspedisiInput = (rowId: number, val: string) => setEkspedisiInputs(prev => ({ ...prev, [rowId]: val }));
@@ -258,47 +155,61 @@ function TabPengiriman() {
         });
     };
 
+    const saveNote = (row: PesananRow) => {
+        updateRow(row.id, { production_note: noteText }, true);
+        if (noteText) addLog(row.id, "note", "", "", noteText, user?.name || "");
+        setEditingNote(null);
+    };
+
     return (
         <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
-            <SectionHeader title="Siap Dikirim" count={items.length} countBg="#DCFCE7" countColor="#15803D"
-                actions={<WaButtons title="Barang Keluar" items={filtered} ekspedisi statusOf={r => r.di_kirim ? "✅" : "⏳"} />}>
-                <SearchBar value={search} onChange={setSearch} placeholder="Cari customer, invoice, PO..." />
+            <SectionHeader title="Barang di Gudang · Siap Kirim" count={items.length} countBg="#DBEAFE" countColor="#1D4ED8"
+                actions={<WaButtons title="Ready Gudang" items={filtered} statusOf={() => "✅"} />}>
+                <SearchBar value={search} onChange={setSearch} placeholder="Cari customer, invoice, catatan..." />
             </SectionHeader>
             <div style={{ flex: 1, overflow: "auto", padding: "12px 16px", background: "#F8F4EF" }}>
-                {sortedKeys.length === 0 ? (
-                    <EmptyState icon={<IconKirim size={48} color="#C5A882" />} title="Tidak ada barang untuk dikirim" subtitle="Barang yang sudah siap (Gudang) akan muncul di sini" />
-                ) : sortedKeys.map(poKey => {
-                    const poRows = groups[poKey];
-                    return (
-                        <div key={poKey} style={{ marginBottom: 12, borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.03)" }}>
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "linear-gradient(135deg, #166534, #22C55E)" }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                    <span style={{ fontSize: 13, fontWeight: 700, color: "white" }}>PO {poKey}</span>
-                                    <span style={{ background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.9)", borderRadius: 99, padding: "1px 8px", fontSize: 11, fontWeight: 600 }}>{poRows.length}</span>
-                                </div>
-                                <button onClick={() => markAllDikirim(poRows)} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.9)", fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "background 0.2s" }}
-                                    onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.2)")}
-                                    onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}>
-                                    Kirim Semua ✓
-                                </button>
+                {Object.keys(groups).length === 0 ? (
+                    <EmptyState icon={<IconGudang size={48} color="#C5A882" />} title="Gudang kosong" subtitle="Barang masuk sini saat Finishing klik GUDANG atau Status Barang dicentang Siap" />
+                ) : Object.entries(groups).sort(([a], [b]) => a.localeCompare(b)).map(([opKey, opRows]) => (
+                    <div key={opKey} style={{ marginBottom: 12, borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.03)" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "linear-gradient(135deg, #1E3A5F, #2563EB)" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <span style={{ fontSize: 13, fontWeight: 700, color: "white" }}>PO {opKey}</span>
+                                <span style={{ background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.9)", borderRadius: 99, padding: "1px 8px", fontSize: 11, fontWeight: 600 }}>{opRows.length}</span>
                             </div>
-                            <div style={{ background: "white" }}>
-                                {poRows.map((row, idx) => (
-                                    <div key={row.id} style={{ padding: "11px 14px", borderBottom: idx < poRows.length - 1 ? "1px solid #F5F0EC" : "none", background: flash === row.id ? "#F0FFF4" : "white", transition: "background 0.4s" }}>
-                                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                                            <div style={{ flex: 1, minWidth: 0 }}>
-                                                <div style={{ fontWeight: 600, fontSize: 13, color: "#3C2F2F" }}>{row.customer || "—"}</div>
-                                                <div style={{ fontSize: 11.5, color: "#8A7B6E", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>{row.deskripsi || "—"}</div>
-                                                <div style={{ fontSize: 10.5, color: "#B89678", marginTop: 2 }}>UK: {row.ukuran || "—"} · Qty: {row.qty || "—"} · Inv: {row.no_inv || "—"}</div>
-                                                {row.production_note && <div style={{ marginTop: 3, fontSize: 10.5, color: "#8A6D55" }}>📝 {row.production_note}</div>}
-                                            </div>
-                                            <button onClick={() => markDikirim(row)} style={{ padding: "7px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12, whiteSpace: "nowrap", background: "#15803D", color: "white", transition: "opacity 0.15s" }}
-                                                onMouseEnter={e => { e.currentTarget.style.opacity = "0.85"; }}
-                                                onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}>
-                                                Dikirim ✓
-                                            </button>
+                            <button onClick={() => markAllDikirim(opRows)} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.9)", fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "background 0.2s" }}
+                                onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.2)")}
+                                onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}>
+                                Kirim Semua ✓
+                            </button>
+                        </div>
+                        <div style={{ background: "white" }}>
+                            {opRows.map((row, idx) => (
+                                <div key={row.id} style={{ padding: "11px 14px", borderBottom: idx < opRows.length - 1 ? "1px solid #F5F0EC" : "none", background: flash === row.id ? "#F0FFF4" : "white", transition: "background 0.4s" }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ fontWeight: 600, fontSize: 13, color: "#3C2F2F" }}>{row.customer || "—"}</div>
+                                            <div style={{ fontSize: 11.5, color: "#8A7B6E", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>{row.deskripsi || "—"}</div>
+                                            <div style={{ fontSize: 10.5, color: "#B89678", marginTop: 2 }}>UK: {row.ukuran || "—"} · Qty: {row.qty || "—"} · Inv: {row.no_inv || "—"} · {fmtShort(row.tanggal)}</div>
                                         </div>
-                                        <div style={{ marginTop: 8 }}>
+                                        <button onClick={() => markDikirim(row)} style={{ padding: "7px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12, whiteSpace: "nowrap", background: "#15803D", color: "white", transition: "opacity 0.15s" }}
+                                            onMouseEnter={e => { e.currentTarget.style.opacity = "0.85"; }}
+                                            onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}>
+                                            Dikirim ✓
+                                        </button>
+                                    </div>
+                                    {editingNote === row.id ? (
+                                        <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                                            <input type="text" value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="Catatan gudang..." autoFocus
+                                                onKeyDown={e => { if (e.key === "Enter") saveNote(row); if (e.key === "Escape") setEditingNote(null); }}
+                                                style={{ flex: 1, border: "1.5px solid #D1BFA3", borderRadius: 8, padding: "7px 10px", fontSize: 12, outline: "none", background: "#FAFAF8" }} />
+                                            <button onClick={() => saveNote(row)} style={{ padding: "7px 12px", borderRadius: 8, border: "none", background: "#2563EB", color: "white", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>OK</button>
+                                        </div>
+                                    ) : row.production_note ? (
+                                        <div onClick={() => { setEditingNote(row.id); setNoteText(row.production_note); }} style={{ marginTop: 6, padding: "4px 8px", background: "#FAFAF5", borderRadius: 6, fontSize: 11, color: "#8A6D55", cursor: "pointer", border: "1px dashed #E8DDD0" }}>📝 {row.production_note}</div>
+                                    ) : null}
+                                    <div style={{ display: "flex", gap: 6, marginTop: 8, alignItems: "flex-end" }}>
+                                        <div style={{ flex: 1 }}>
                                             <label style={{ display: "block", fontSize: 9, fontWeight: 700, color: "#B89678", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 3 }}>Ekspedisi</label>
                                             <input
                                                 type="text"
@@ -310,12 +221,90 @@ function TabPengiriman() {
                                                 onFocus={e => { e.target.style.borderColor = "#A67B5B"; e.target.style.boxShadow = "0 0 0 3px rgba(166,123,91,0.08)"; }}
                                             />
                                         </div>
+                                        <button onClick={() => { setEditingNote(row.id); setNoteText(row.production_note || ""); }} style={{ padding: "8px 12px", borderRadius: 8, border: "1.5px solid #E8DDD0", background: "white", cursor: "pointer", fontSize: 12, color: "#B89678" }}>📝</button>
                                     </div>
-                                ))}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+/* ================================================================
+   TAB 4: KIRIM — barang yang SUDAH DIKIRIM bulan berjalan (di_kirim ✓
+   dari tab Gudang atau ceklis "Kirim" di Status Barang) + ekspedisinya.
+   Monitoring saja — riwayat bulan lain ada di tab Riwayat.
+================================================================ */
+function TabKirim() {
+    const { rows } = usePesanan();
+    const [search, setSearch] = useState("");
+    const now = new Date();
+    const curY = now.getFullYear();
+    const curM = now.getMonth() + 1;
+
+    const shipDate = (r: PesananRow) => (r.shipped_at ? r.shipped_at.slice(0, 10) : r.tanggal);
+
+    // Sinkron dgn Status Barang: semua yang dicentang "Kirim" bulan ini.
+    const items = useMemo(() => rows.filter(r => {
+        if (!(r.customer || r.deskripsi) || !r.di_kirim) return false;
+        const d = shipDate(r);
+        if (!d) return false;
+        return parseInt(d.slice(0, 4)) === curY && parseInt(d.slice(5, 7)) === curM;
+    }), [rows, curY, curM]);
+
+    const filtered = useMemo(() => {
+        const q = search.toLowerCase().trim();
+        if (!q) return items;
+        return items.filter(r => [r.customer, r.deskripsi, r.po_label, r.no_inv, r.ekspedisi].join(" ").toLowerCase().includes(q));
+    }, [items, search]);
+
+    // Kelompokkan per tanggal kirim, terbaru dulu.
+    const groups = useMemo(() => {
+        const m: Record<string, PesananRow[]> = {};
+        filtered.forEach(r => { const k = shipDate(r); if (!m[k]) m[k] = []; m[k].push(r); });
+        return Object.entries(m).sort(([a], [b]) => b.localeCompare(a));
+    }, [filtered]);
+
+    return (
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+            <SectionHeader title={`Terkirim ${ML[curM - 1]}`} count={items.length} countBg="#DCFCE7" countColor="#15803D"
+                actions={<WaButtons title="Barang Keluar" items={filtered} ekspedisi statusOf={() => "✅"} />}>
+                <SearchBar value={search} onChange={setSearch} placeholder="Cari customer, invoice, ekspedisi..." />
+            </SectionHeader>
+            <div style={{ flex: 1, overflow: "auto", padding: "12px 16px", background: "#F8F4EF" }}>
+                {groups.length === 0 ? (
+                    <EmptyState icon={<IconKirim size={48} color="#C5A882" />} title="Belum ada pengiriman bulan ini" subtitle="Barang yang ditandai Dikirim ✓ (dari Gudang atau Status Barang) muncul di sini" />
+                ) : groups.map(([dateKey, dateRows]) => (
+                    <div key={dateKey} style={{ marginBottom: 12, borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.03)" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "linear-gradient(135deg, #166534, #22C55E)" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <span style={{ fontSize: 13, fontWeight: 700, color: "white" }}>{fmtFull(dateKey)}</span>
+                                <span style={{ background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.9)", borderRadius: 99, padding: "1px 8px", fontSize: 11, fontWeight: 600 }}>{dateRows.length}</span>
                             </div>
                         </div>
-                    );
-                })}
+                        <div style={{ background: "white" }}>
+                            {dateRows.map((row, idx) => (
+                                <div key={row.id} style={{ padding: "11px 14px", borderBottom: idx < dateRows.length - 1 ? "1px solid #F5F0EC" : "none", display: "flex", alignItems: "center", gap: 12 }}>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ fontWeight: 600, fontSize: 13, color: "#3C2F2F" }}>{row.customer || "—"}</div>
+                                        <div style={{ fontSize: 11.5, color: "#8A7B6E", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>{row.deskripsi || "—"}</div>
+                                        <div style={{ fontSize: 10.5, color: "#B89678", marginTop: 2 }}>UK: {row.ukuran || "—"} · Qty: {row.qty || "—"} · Inv: {row.no_inv || "—"}{row.po_label ? ` · PO ${row.po_label}` : ""}</div>
+                                        {row.production_note && <div style={{ marginTop: 3, fontSize: 10.5, color: "#8A6D55" }}>📝 {row.production_note}</div>}
+                                    </div>
+                                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
+                                        <span style={{ background: "#DCFCE7", color: "#15803D", borderRadius: 99, padding: "3px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
+                                            🚚 {(row.ekspedisi || "").trim() || "Tanpa Ekspedisi"}
+                                        </span>
+                                        {row.shipped_at && <span style={{ fontSize: 10, color: "#B89678" }}>{fmtTimeShort(row.shipped_at)}</span>}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ))}
             </div>
         </div>
     );
@@ -505,8 +494,16 @@ function AlurPesananPage() {
     }
 
     const countFinishing  = rows.filter(r => (r.customer || r.deskripsi) && r.printed_at && !r.di_kirim && r.finishing_status === "belum").length;
-    const countGudang     = rows.filter(r => (r.customer || r.deskripsi) && r.di_produksi && !r.siap_kirim && !r.di_kirim).length;
-    const countPengiriman = rows.filter(r => (r.customer || r.deskripsi) && r.siap_kirim === true && r.di_kirim === false).length;
+    // Gudang = barang siap kirim (sinkron ceklis "Siap" di Status Barang).
+    const countGudang     = rows.filter(r => (r.customer || r.deskripsi) && r.siap_kirim === true && r.di_kirim === false).length;
+    // Kirim = sudah dikirim bulan berjalan (sinkron ceklis "Kirim" di Status Barang).
+    const nowT = new Date();
+    const curYT = nowT.getFullYear(), curMT = nowT.getMonth() + 1;
+    const countPengiriman = rows.filter(r => {
+        if (!(r.customer || r.deskripsi) || !r.di_kirim) return false;
+        const d = r.shipped_at ? r.shipped_at.slice(0, 10) : r.tanggal;
+        return !!d && parseInt(d.slice(0, 4)) === curYT && parseInt(d.slice(5, 7)) === curMT;
+    }).length;
 
     type TabKey = typeof activeTab;
     const tabs: { key: TabKey; label: string; Icon: React.FC<{ size?: number; color?: string }>; count: number; activeColor: string }[] = [
@@ -549,8 +546,8 @@ function AlurPesananPage() {
             {/* ── Tab Content ── */}
             <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
                 {activeTab === "finishing" && <TabFinishing />}
-                {activeTab === "gudang"    && <TabCekGudang />}
-                {activeTab === "pengiriman"&& <TabPengiriman />}
+                {activeTab === "gudang"    && <TabGudang />}
+                {activeTab === "pengiriman"&& <TabKirim />}
                 {activeTab === "riwayat"   && <TabRiwayatPO />}
             </div>
         </div>
