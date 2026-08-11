@@ -350,41 +350,51 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                             }
                         });
 
-                        const exists = prev.find((r) => r.id === mapped.id);
-                        let newList: PesananRow[];
-
+                        // JALUR UPDATE (mayoritas event: centang produksi, edit sel, dll):
+                        // id & urutan tidak berubah → cukup map, TANPA dedupe/sort.
+                        // Dulu jalur ini ikut dedupe findIndex-dalam-filter (O(n²) ≈ 100 juta
+                        // operasi pada 14 rb baris) + sort penuh SETIAP event realtime —
+                        // itu yang membekukan UI saat user lain beraktivitas.
+                        const exists = prev.some((r) => r.id === mapped.id);
                         if (exists) {
-                            newList = prev.map((r) => (r.id === mapped.id ? { ...r, ...mapped } : r));
-                        } else {
-                            // Cek apakah ini data yang barusan kita input (mencocokkan sync_id)
-                            let placeholderIdx = prev.findIndex(r => r.id >= 1000000000 && r.sync_id === mapped.sync_id);
-
-                            if (placeholderIdx === -1 && !mapped.sync_id) {
-                                placeholderIdx = prev.findIndex(r =>
-                                    r.id >= 1000000000 &&
-                                    (r.customer === mapped.customer && r.deskripsi === mapped.deskripsi)
-                                );
-                            }
-
-                            if (placeholderIdx !== -1) {
-                                newList = [...prev];
-                                newList[placeholderIdx] = { ...makeEmptyRow(0), ...mapped } as PesananRow;
-                            } else {
-                                const newFullRow = { ...makeEmptyRow(0), ...mapped } as PesananRow;
-                                newList = [...prev, newFullRow];
-                            }
+                            return prev.map((r) => (r.id === mapped.id ? { ...r, ...mapped } : r));
                         }
 
-                        return newList
-                            .filter((v, i, a) => a.findIndex(t => t.id === v.id) === i)
-                            .sort((a, b) => {
-                                // Pastikan baris placeholder (ID besar) tetap di bawah
-                                const isTempA = a.id >= 1000000000;
-                                const isTempB = b.id >= 1000000000;
-                                if (isTempA && !isTempB) return 1;
-                                if (!isTempA && isTempB) return -1;
-                                return a.id - b.id;
-                            });
+                        // JALUR INSERT (jarang) — boleh kerja lebih: dedupe O(n) via Set + sort sekali.
+                        let newList: PesananRow[];
+                        // Cek apakah ini data yang barusan kita input (mencocokkan sync_id)
+                        let placeholderIdx = prev.findIndex(r => r.id >= 1000000000 && r.sync_id === mapped.sync_id);
+
+                        if (placeholderIdx === -1 && !mapped.sync_id) {
+                            placeholderIdx = prev.findIndex(r =>
+                                r.id >= 1000000000 &&
+                                (r.customer === mapped.customer && r.deskripsi === mapped.deskripsi)
+                            );
+                        }
+
+                        if (placeholderIdx !== -1) {
+                            newList = [...prev];
+                            newList[placeholderIdx] = { ...makeEmptyRow(0), ...mapped } as PesananRow;
+                        } else {
+                            const newFullRow = { ...makeEmptyRow(0), ...mapped } as PesananRow;
+                            newList = [...prev, newFullRow];
+                        }
+
+                        const seen = new Set<number>();
+                        const deduped: PesananRow[] = [];
+                        for (const r of newList) {
+                            if (seen.has(r.id)) continue;
+                            seen.add(r.id);
+                            deduped.push(r);
+                        }
+                        return deduped.sort((a, b) => {
+                            // Pastikan baris placeholder (ID besar) tetap di bawah
+                            const isTempA = a.id >= 1000000000;
+                            const isTempB = b.id >= 1000000000;
+                            if (isTempA && !isTempB) return 1;
+                            if (!isTempA && isTempB) return -1;
+                            return a.id - b.id;
+                        });
                     });
                 }
             )

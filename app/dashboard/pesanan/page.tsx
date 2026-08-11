@@ -267,9 +267,14 @@ function PesananPage() {
     const totalBrowsePages = useMemo(() =>
         Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE)), [filteredRows.length]);
 
-    // Reset input start when filter changes
+    // Reset input start when filter changes.
+    // Run pertama DILEWATI: data awal sudah dimuat ensureLoaded (semua baris,
+    // terbaru dulu) — fetchFilter bulan berjalan saat mount hanya mengunduh
+    // ulang data yang sama & menambah churn state ketika halaman baru dibuka.
+    const firstFilterRun = useRef(true);
     useEffect(() => {
         setInputStartIdx(null);
+        if (firstFilterRun.current) { firstFilterRun.current = false; return; }
         fetchFilter(year, month);
     }, [month, year, fetchFilter]);
 
@@ -463,17 +468,27 @@ function PesananPage() {
         if (sel) setFillEndRow(normSel(sel).r2);
     }, [sel]);
 
+    /* ── Ref data terbaru utk handler ──────────────────────── */
+    // handleChange/handlePaste membaca rows/displayRows lewat REF, bukan sebagai
+    // dependency useCallback. Kalau jadi dependency, identitas fungsi berubah
+    // setiap rows berubah (tiap event realtime / komit ketikan) → prop TableRow
+    // berubah → React.memo jebol → ±200 baris tampil re-render semua.
+    const rowsRef = useRef(rows);
+    const displayRowsRef = useRef(displayRows);
+    useEffect(() => { rowsRef.current = rows; displayRowsRef.current = displayRows; });
+
     /* ── Paste ─────────────────────────────────────────────── */
     const handlePaste = useCallback((e: React.ClipboardEvent, startR: number, startC: number) => {
         e.preventDefault();
+        const dRows = displayRowsRef.current;
         const lines = e.clipboardData.getData("text").split(/\r?\n/).filter(Boolean);
         const affectedIds = new Set<number>();
         lines.forEach((line, ri) => {
             line.split("\t").forEach((val, ci) => {
                 const tr = startR + ri, tc = startC + ci;
-                if (tr < displayRows.length && tc < 5) {
-                    updateRow(displayRows[tr].id, { [COL_KEYS[tc]]: val } as Partial<PesananRow>);
-                    affectedIds.add(displayRows[tr].id);
+                if (tr < dRows.length && tc < 5) {
+                    updateRow(dRows[tr].id, { [COL_KEYS[tc]]: val } as Partial<PesananRow>);
+                    affectedIds.add(dRows[tr].id);
                 }
             });
         });
@@ -483,7 +498,7 @@ function PesananPage() {
             setSavedFlash(true);
             setTimeout(() => setSavedFlash(false), 2000);
         }
-    }, [displayRows, updateRow, flushRow]);
+    }, [updateRow, flushRow]);
 
     /* ── Change handler + Flush callback ───────────────────── */
     // Dipanggil dari TableRow.onBlur (setelah user selesai mengetik di satu cell).
@@ -493,14 +508,14 @@ function PesananPage() {
 
         // Auto-fill tanggal saat user selesai isi field pertama di baris kosong
         if (key !== "tanggal" && id >= 1000000000) {
-            const currentRow = rows.find(r => r.id === id);
+            const currentRow = rowsRef.current.find(r => r.id === id);
             if (currentRow && !currentRow.tanggal) {
                 patch.tanggal = new Date().toISOString().split("T")[0];
             }
         }
 
         updateRow(id, patch, false); // autoFlush=false — blur handler yang trigger flushRow
-    }, [updateRow, rows]);
+    }, [updateRow]);
 
     const handleFlushRow = useCallback((id: number) => {
         // Dipanggil saat blur (pindah cell) — save LANGSUNG tanpa tunggu debounce
