@@ -35,11 +35,16 @@ function buildStagePatch(row: PesananRow, key: StageKey, checked: boolean): Part
         // Mundur: tahap ini + semua tahap setelahnya dilepas.
         for (let i = idx; i < ORDER.length; i++) target[ORDER[i]] = false;
     }
-    const patch: Partial<PesananRow> = {};
+    const patch: Omit<Partial<PesananRow>, "shipped_at"> & { shipped_at?: string | null } = {};
     for (const [k, v] of Object.entries(target) as [StageKey, boolean][]) {
         if (!!row[k] !== v) patch[k] = v;
     }
-    return Object.keys(patch).length ? patch : null;
+    // Stempel waktu kirim mengikuti status di_kirim — dipakai tab Kirim di Alur
+    // Pesanan & rekap Riwayat. Tanpa ini tanggal ORDER dipakai sbg tanggal kirim
+    // (barang lama nyasar bulan). Kosongkan dgn null: kolom TIMESTAMP di DB.
+    if (patch.di_kirim === true && !row.shipped_at) patch.shipped_at = new Date().toISOString();
+    else if (patch.di_kirim === false && row.shipped_at) patch.shipped_at = null;
+    return Object.keys(patch).length ? (patch as Partial<PesananRow>) : null;
 }
 
 interface OrderGroup {

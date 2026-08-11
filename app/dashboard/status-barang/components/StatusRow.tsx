@@ -56,7 +56,9 @@ export const StatusRow = memo(function StatusRow({
 
     const renderCheck = (key: keyof PesananRow, width: number) => {
         const handleCheckUpdate = (checked: boolean) => {
-            const patch: Partial<PesananRow> = { [key]: checked };
+            // shipped_at kolom TIMESTAMP di DB → kosongkan dgn null, BUKAN ""
+            // (Postgres menolak string kosong untuk timestamp).
+            const patch: Omit<Partial<PesananRow>, "shipped_at"> & { shipped_at?: string | null } = { [key]: checked };
 
             if (checked) {
                 // Forward cascade: centang tahap atas otomatis aktifkan tahap bawah
@@ -64,6 +66,10 @@ export const StatusRow = memo(function StatusRow({
                     patch.siap_kirim = true;
                     patch.di_warna = true;
                     patch.di_produksi = true;
+                    // Stempel waktu kirim bila belum ada. Tanpa ini tab Kirim di
+                    // Alur Pesanan (dan rekap Riwayat) memakai tanggal ORDER sbg
+                    // tanggal kirim → barang lama nyasar ke bulan yang salah.
+                    if (!row.shipped_at) patch.shipped_at = new Date().toISOString();
                 } else if (key === "siap_kirim") {
                     patch.di_warna = true;
                     patch.di_produksi = true;
@@ -79,18 +85,26 @@ export const StatusRow = memo(function StatusRow({
                     patch.di_warna = false;
                     patch.siap_kirim = false;
                     patch.di_kirim = false;
+                    patch.shipped_at = null;
                 } else if (key === "di_warna" && (row.siap_kirim || row.di_kirim)) {
                     const lebih = [row.siap_kirim && "Siap Kirim", row.di_kirim && "Di Kirim"].filter(Boolean).join(", ");
                     if (!window.confirm(`Hapus "Di Warna" juga akan mereset: ${lebih}.\n\nLanjutkan?`)) return;
                     patch.siap_kirim = false;
                     patch.di_kirim = false;
+                    patch.shipped_at = null;
                 } else if (key === "siap_kirim" && row.di_kirim) {
                     if (!window.confirm(`Hapus "Siap Kirim" juga akan mereset "Di Kirim".\n\nLanjutkan?`)) return;
                     patch.di_kirim = false;
+                    patch.shipped_at = null;
+                } else if (key === "di_kirim") {
+                    // Batal kirim → buang stempel waktu supaya tidak ikut rekap.
+                    patch.shipped_at = null;
                 }
                 // Jika tidak ada status lebih tinggi: uncheck bebas tanpa konfirmasi
             }
-            onUpdate(row.id, patch);
+            // Cast: null hanya utk shipped_at (kolom timestamp nullable di DB);
+            // store membacanya kembali sebagai "" lewat mapRows.
+            onUpdate(row.id, patch as Partial<PesananRow>);
         };
 
         return (
