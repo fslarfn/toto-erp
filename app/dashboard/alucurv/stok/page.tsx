@@ -40,7 +40,7 @@ export default function AlucurvStokPage() {
             <div style={{ marginBottom: 16 }}>
                 <ExcelImportButton columns={excelColumns} onImport={(rows) => insertRows(rows)} />
             </div>
-            <AlucurvCrudTable fields={fields} rows={rows} loading={loading} onAdd={insertRow} onDelete={deleteRow} onUpdate={updateRow} />
+            <AlucurvCrudTable showRowNumber fields={fields} rows={rows} loading={loading} onAdd={insertRow} onDelete={deleteRow} onUpdate={updateRow} extraColumns={[{header:"Status",render:(row)=>{const stock=Number(row.opening_stock),minimum=Number(row.min_stock);const state=stock<=0?{label:"Habis",color:"#B91C1C",bg:"#FEE2E2"}:minimum>0&&stock<=minimum*.5?{label:"Kritis",color:"#C2410C",bg:"#FFEDD5"}:minimum>0&&stock<=minimum?{label:"Menipis",color:"#A16207",bg:"#FEF9C3"}:{label:"Aman",color:"#15803D",bg:"#DCFCE7"};return <span style={{display:"inline-block",padding:"3px 7px",borderRadius:999,background:state.bg,color:state.color,fontSize:10,fontWeight:800}}>{state.label}</span>}}]} />
         </div>
     );
 }

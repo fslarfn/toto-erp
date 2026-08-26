@@ -90,7 +90,7 @@ export default function AlucurvInvoicePrintPage({ params }: { params: Promise<{ 
                 }
             `}</style>
 
-            <div className="no-print" style={{ maxWidth: 600, margin: "0 auto 16px", display: "flex", justifyContent: "flex-end" }}>
+            <div className="no-print" style={{ maxWidth: 760, margin: "0 auto 16px", display: "flex", justifyContent: "flex-end" }}>
                 <button
                     onClick={() => window.print()}
                     style={{ background: "#14B8A6", color: "white", border: "none", borderRadius: 8, padding: "10px 20px", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
@@ -99,7 +99,7 @@ export default function AlucurvInvoicePrintPage({ params }: { params: Promise<{ 
                 </button>
             </div>
 
-            <div className="nota-paper" style={{ maxWidth: 600, margin: "0 auto", background: "white", border: "2px solid #111", padding: 24, color: "#111", fontSize: 12 }}>
+            <div className="nota-paper" style={{ maxWidth: 760, margin: "0 auto", background: "white", border: "2px solid #111", padding: 24, color: "#111", fontSize: 12 }}>
                 {/* Header / Logo */}
                 <div style={{ textAlign: "center", marginBottom: 12 }}>
                     {logoOk ? (
@@ -158,8 +158,8 @@ export default function AlucurvInvoicePrintPage({ params }: { params: Promise<{ 
                                 <td style={tdCell}>{i + 1}</td>
                                 <td style={{ ...tdCell, textAlign: "left" }}>{it.description}</td>
                                 <td style={tdCell}>{it.qty}</td>
-                                <td style={{ ...tdCell, textAlign: "right" }}>{rupiah(Number(it.unit_price))}</td>
-                                <td style={{ ...tdCell, textAlign: "right" }}>{rupiah(Number(it.qty) * Number(it.unit_price))}</td>
+                                <td style={{ ...tdCell, textAlign: "right", whiteSpace:"nowrap" }}>{rupiah(Number(it.unit_price))}</td>
+                                <td style={{ ...tdCell, textAlign: "right", whiteSpace:"nowrap" }}>{rupiah(Number(it.qty) * Number(it.unit_price))}</td>
                             </tr>
                         ))}
                     </tbody>

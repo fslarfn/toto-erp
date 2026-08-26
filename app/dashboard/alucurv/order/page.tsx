@@ -1,4 +1,5 @@
 "use client";
+import { useMemo, useState } from "react";
 import { useAlucurvTable } from "@/lib/alucurv/useAlucurvTable";
 import AlucurvCrudTable, { type CrudField } from "@/components/layout/AlucurvCrudTable";
 import ExcelImportButton, { type ExcelColumn } from "@/components/layout/ExcelImportButton";
@@ -58,6 +59,8 @@ const excelColumns: ExcelColumn[] = [
 
 export default function AlucurvOrderPage() {
     const { rows, loading, insertRow, insertRows, updateRow, deleteRow } = useAlucurvTable<AlucurvOrder>("alu_orders", "created_at", true);
+    const [dateFrom,setDateFrom]=useState(""),[dateTo,setDateTo]=useState(""),[channel,setChannel]=useState("");
+    const filteredRows=useMemo(()=>rows.filter(row=>(!dateFrom||row.date>=dateFrom)&&(!dateTo||row.date<=dateTo)&&(!channel||row.channel===channel)),[rows,dateFrom,dateTo,channel]);
 
     return (
         <div style={{ padding: 24 }}>
@@ -69,7 +72,13 @@ export default function AlucurvOrderPage() {
             <div style={{ marginBottom: 16 }}>
                 <ExcelImportButton columns={excelColumns} onImport={(rows) => insertRows(rows)} />
             </div>
-            <AlucurvCrudTable fields={fields} rows={rows} loading={loading} onAdd={insertRow} onDelete={deleteRow} onUpdate={updateRow} />
+            <div style={filterBar}><label style={filterLabel}>Dari tanggal<input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} style={filterInput}/></label><label style={filterLabel}>Sampai tanggal<input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} style={filterInput}/></label><label style={filterLabel}>Channel<select value={channel} onChange={e=>setChannel(e.target.value)} style={filterInput}><option value="">Semua channel</option><option>Shopee</option><option>TikTokShop</option><option>Offline</option></select></label>{dateFrom||dateTo||channel?<button onClick={()=>{setDateFrom("");setDateTo("");setChannel("")}} style={clearBtn}>Reset filter</button>:null}</div>
+            <AlucurvCrudTable showRowNumber fields={fields} rows={filteredRows} loading={loading} onAdd={insertRow} onDelete={deleteRow} onUpdate={updateRow} />
         </div>
     );
 }
+
+const filterBar:React.CSSProperties={display:"flex",gap:8,alignItems:"end",flexWrap:"wrap",padding:10,marginBottom:12,background:"var(--bg-secondary)",border:"1px solid var(--border)",borderRadius:9};
+const filterLabel:React.CSSProperties={display:"grid",gap:3,fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--text-med)"};
+const filterInput:React.CSSProperties={fontSize:12,padding:"7px 9px",borderRadius:6,border:"1px solid var(--border)",background:"white",color:"var(--text-dark)"};
+const clearBtn:React.CSSProperties={border:0,background:"transparent",color:"var(--primary-dark)",fontSize:11,fontWeight:700,padding:8,cursor:"pointer"};

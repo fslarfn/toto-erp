@@ -60,6 +60,9 @@ export default function AlucurvInvoicePage() {
     const [itemForms, setItemForms] = useState<ItemForm[]>([emptyItem()]);
     const [saving, setSaving] = useState(false);
     const [search, setSearch] = useState("");
+    const [customerFilter,setCustomerFilter]=useState("");
+    const [statusFilter,setStatusFilter]=useState("");
+    const [numberFilter,setNumberFilter]=useState("");
 
     const itemsByInvoice = useMemo(() => {
         const map = new Map<string, InvoiceItemRow[]>();
@@ -75,9 +78,19 @@ export default function AlucurvInvoicePage() {
         (itemsByInvoice.get(invId) ?? []).reduce((s, it) => s + Number(it.qty) * Number(it.unit_price), 0);
 
     const query = search.trim().toLowerCase();
-    const visibleInvoices = query
-        ? invoices.rows.filter((inv) => [inv.number, inv.customer, inv.status].some((v) => v.toLowerCase().includes(query)))
-        : invoices.rows;
+    // Nomor urut dari segmen terakhir no. invoice ('AL/INV/07/2026/038' → 38)
+    // — pemecah seri bila beberapa invoice bertanggal sama.
+    const invSeq = (n: string) => Number((n ?? "").split("/").pop()) || 0;
+    const visibleInvoices = useMemo(() => {
+        const base = invoices.rows.filter((inv) =>
+            (!query||[inv.number,inv.customer,inv.status].some(v=>v.toLowerCase().includes(query)))&&
+            (!customerFilter||inv.customer===customerFilter)&&(!statusFilter||inv.status===statusFilter)&&
+            (!numberFilter||inv.number.toLowerCase().includes(numberFilter.toLowerCase())));
+        // Nomor invoice terkecil → terbesar sesuai alur pencatatan.
+        return [...base].sort((a, b) =>
+            invSeq(a.number)-invSeq(b.number)||(a.number||"").localeCompare(b.number||"", "id", {numeric:true}));
+    }, [invoices.rows, query,customerFilter,statusFilter,numberFilter]);
+    const customers=useMemo(()=>[...new Set(invoices.rows.map(inv=>inv.customer).filter(Boolean))].sort((a,b)=>a.localeCompare(b)),[invoices.rows]);
 
     const resetForm = () => {
         setNumber(""); setDate(""); setOrderDate(""); setCustomer(""); setStatus("BELUM");
@@ -166,11 +179,13 @@ export default function AlucurvInvoicePage() {
                     style={inputStyle}
                 />
             </div>
+            <div style={{display:"flex",gap:8,alignItems:"end",flexWrap:"wrap",padding:10,marginBottom:12,background:"var(--bg-secondary)",border:"1px solid var(--border)",borderRadius:9}}><label style={filterLabel}>Nama customer<select value={customerFilter} onChange={e=>setCustomerFilter(e.target.value)} style={filterInput}><option value="">Semua customer</option>{customers.map(name=><option key={name}>{name}</option>)}</select></label><label style={filterLabel}>Status pembayaran<select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} style={filterInput}><option value="">Semua status</option><option>BELUM</option><option>DP</option><option>LUNAS</option></select></label><label style={filterLabel}>Nomor pencatatan<input value={numberFilter} onChange={e=>setNumberFilter(e.target.value)} placeholder="Contoh: 038" style={filterInput}/></label>{customerFilter||statusFilter||numberFilter?<button onClick={()=>{setCustomerFilter("");setStatusFilter("");setNumberFilter("")}} style={{...linkBtn,padding:8}}>Reset filter</button>:null}</div>
 
             <div style={{ overflowX: "auto", border: "1px solid var(--border)", borderRadius: 10 }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                     <thead>
                         <tr>
+                            <th style={{...thStyle,width:44,textAlign:"center"}}>No.</th>
                             <th style={thStyle}>No. Invoice</th>
                             <th style={thStyle}>Tanggal</th>
                             <th style={thStyle}>Customer</th>
@@ -181,12 +196,13 @@ export default function AlucurvInvoicePage() {
                     </thead>
                     <tbody>
                         {invoices.loading ? (
-                            <tr><td colSpan={6} style={tdEmptyStyle}>Memuat...</td></tr>
+                            <tr><td colSpan={7} style={tdEmptyStyle}>Memuat...</td></tr>
                         ) : visibleInvoices.length === 0 ? (
-                            <tr><td colSpan={6} style={tdEmptyStyle}>{query ? "Tidak ada hasil untuk pencarian ini." : "Belum ada invoice."}</td></tr>
+                            <tr><td colSpan={7} style={tdEmptyStyle}>{query||customerFilter||statusFilter||numberFilter ? "Tidak ada hasil untuk filter ini." : "Belum ada invoice."}</td></tr>
                         ) : (
-                            visibleInvoices.map((inv) => (
+                            visibleInvoices.map((inv,index) => (
                                 <tr key={inv.id}>
+                                    <td style={{...tdStyle,textAlign:"center",color:"var(--text-med)"}}>{index+1}</td>
                                     <td style={tdStyle}>{inv.number}</td>
                                     <td style={tdStyle}>{inv.date}</td>
                                     <td style={tdStyle}>{inv.customer}</td>
@@ -281,4 +297,6 @@ const ghostBtn: CSSProperties = { background: "none", border: "1px solid var(--b
 const labelStyle: CSSProperties = { fontSize: 10, fontWeight: 700, color: "var(--text-med)", textTransform: "uppercase", display: "block", marginBottom: 4 };
 const inputStyle: CSSProperties = { width: "100%", fontSize: 12, padding: "7px 9px", borderRadius: 6, border: "1px solid var(--border)", background: "white", color: "var(--text-dark)", boxSizing: "border-box" };
 const overlayStyle: CSSProperties = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 };
-const modalStyle: CSSProperties = { background: "white", borderRadius: 16, padding: 24, width: "100%", maxWidth: 680, maxHeight: "90vh", overflowY: "auto" };
+const modalStyle: CSSProperties = { background: "white", borderRadius: 16, padding: 24, width: "100%", maxWidth: 840, maxHeight: "90vh", overflowY: "auto" };
+const filterLabel:CSSProperties={display:"grid",gap:3,fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--text-med)"};
+const filterInput:CSSProperties={fontSize:12,padding:"7px 9px",borderRadius:6,border:"1px solid var(--border)",background:"white",color:"var(--text-dark)",minWidth:150};

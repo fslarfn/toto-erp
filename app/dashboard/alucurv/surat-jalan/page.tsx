@@ -1,40 +1,27 @@
 "use client";
-import { useAlucurvTable } from "@/lib/alucurv/useAlucurvTable";
-import AlucurvCrudTable, { type CrudField } from "@/components/layout/AlucurvCrudTable";
-import ExcelImportButton, { type ExcelColumn } from "@/components/layout/ExcelImportButton";
+import{useMemo,useState,type CSSProperties}from"react";
+import Link from"next/link";
+import{useAlucurvTable}from"@/lib/alucurv/useAlucurvTable";
+import ExcelImportButton,{type ExcelColumn}from"@/components/layout/ExcelImportButton";
 
-interface AlucurvDeliveryNote {
-    id: string;
-    number: string;
-    date: string;
-    customer: string;
+interface DeliveryNote{id:string;number:string;date:string;customer:string}
+interface DeliveryItem{id:string;delivery_note_id:string;description:string;qty:number}
+type ItemForm={id:string;description:string;qty:number};
+const emptyItem=():ItemForm=>({id:crypto.randomUUID(),description:"",qty:1});
+const excelColumns:ExcelColumn[]=[{key:"number",header:"No. Surat Jalan",type:"text"},{key:"date",header:"Tanggal",type:"date"},{key:"customer",header:"Customer",type:"text"}];
+
+export default function AlucurvSuratJalanPage(){
+ const notes=useAlucurvTable<DeliveryNote>("alu_delivery_notes","date"),items=useAlucurvTable<DeliveryItem>("alu_delivery_note_items");
+ const[open,setOpen]=useState(false),[editId,setEditId]=useState<string|null>(null),[number,setNumber]=useState(""),[date,setDate]=useState(""),[customer,setCustomer]=useState(""),[forms,setForms]=useState<ItemForm[]>([emptyItem()]),[saving,setSaving]=useState(false),[search,setSearch]=useState("");
+ const itemMap=useMemo(()=>{const map=new Map<string,DeliveryItem[]>();for(const item of items.rows)map.set(item.delivery_note_id,[...(map.get(item.delivery_note_id)??[]),item]);return map},[items.rows]);
+ const visible=useMemo(()=>notes.rows.filter(note=>!search.trim()||[note.number,note.customer,note.date].some(value=>value.toLowerCase().includes(search.trim().toLowerCase()))),[notes.rows,search]);
+ const reset=()=>{setEditId(null);setNumber("");setDate("");setCustomer("");setForms([emptyItem()])};
+ const newNote=()=>{reset();setOpen(true)};
+ const edit=(note:DeliveryNote)=>{setEditId(note.id);setNumber(note.number);setDate(note.date);setCustomer(note.customer);const existing=itemMap.get(note.id)??[];setForms(existing.length?existing.map(item=>({id:item.id,description:item.description,qty:Number(item.qty)})):[emptyItem()]);setOpen(true)};
+ const save=async()=>{if(!number.trim()||!date||!customer.trim()){alert("Isi nomor surat jalan, tanggal, dan customer.");return}setSaving(true);try{const noteId=editId??crypto.randomUUID(),payload={number:number.trim(),date,customer:customer.trim()};if(editId){await notes.updateRow(editId,payload);for(const old of itemMap.get(editId)??[])await items.deleteRow(old.id)}else await notes.insertRow({id:noteId,...payload});const filled=forms.filter(item=>item.description.trim());if(filled.length)await items.insertRows(filled.map(item=>({delivery_note_id:noteId,description:item.description.trim(),qty:Number(item.qty)||0})));setOpen(false)}finally{setSaving(false)}};
+ return <div style={{padding:24}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap",marginBottom:16}}><div><h1 style={{fontSize:20,fontWeight:700,color:"var(--text-dark)",marginBottom:4}}>Surat Jalan</h1><p style={{fontSize:13,color:"var(--text-med)",margin:0}}>Kelola surat jalan beserta deskripsi barang dan jumlah. Gunakan Cetak/PDF untuk dokumen pengiriman.</p></div><button onClick={newNote} style={primaryBtn}>+ Buat Surat Jalan</button></div><div style={{marginBottom:16}}><ExcelImportButton columns={excelColumns} onImport={rows=>notes.insertRows(rows)} label="Import Excel (header saja)"/></div><input value={search} onChange={event=>setSearch(event.target.value)} placeholder="Cari nomor, tanggal, customer..." style={{...inputStyle,maxWidth:320,marginBottom:10}}/><div style={{overflowX:"auto",border:"1px solid var(--border)",borderRadius:10}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr><th style={{...thStyle,width:44,textAlign:"center"}}>No.</th><th style={thStyle}>No. Surat Jalan</th><th style={thStyle}>Tanggal</th><th style={thStyle}>Customer</th><th style={thStyle}>Deskripsi & Qty</th><th style={thStyle}/></tr></thead><tbody>{notes.loading?<tr><td colSpan={6} style={emptyStyle}>Memuat...</td></tr>:visible.length===0?<tr><td colSpan={6} style={emptyStyle}>Belum ada surat jalan.</td></tr>:visible.map((note,index)=><tr key={note.id}><td style={{...tdStyle,textAlign:"center",color:"var(--text-med)"}}>{index+1}</td><td style={tdStyle}>{note.number}</td><td style={tdStyle}>{note.date}</td><td style={tdStyle}>{note.customer}</td><td style={tdStyle}>{(itemMap.get(note.id)??[]).map(item=><div key={item.id}>{item.description} · <b>{Number(item.qty).toLocaleString("id-ID")}</b></div>)}</td><td style={{...tdStyle,whiteSpace:"nowrap"}}><Link href={`/alucurv-surat-jalan/${note.id}`} target="_blank" style={{...linkBtn,marginRight:12}}>Cetak/PDF</Link><button onClick={()=>edit(note)} style={{...linkBtn,marginRight:12}}>Ubah</button><button onClick={()=>notes.deleteRow(note.id)} style={{...linkBtn,color:"#DC2626"}}>Hapus</button></td></tr>)}</tbody></table></div>{open?<div style={overlay} onClick={()=>setOpen(false)}><div style={modal} onClick={event=>event.stopPropagation()}><h2 style={{fontSize:16,margin:"0 0 15px"}}>{editId?"Ubah Surat Jalan":"Surat Jalan Baru"}</h2><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:10,marginBottom:14}}><label style={label}>No. Surat Jalan<input value={number} onChange={e=>setNumber(e.target.value)} style={inputStyle}/></label><label style={label}>Tanggal<input type="date" value={date} onChange={e=>setDate(e.target.value)} style={inputStyle}/></label><label style={label}>Customer<input value={customer} onChange={e=>setCustomer(e.target.value)} style={inputStyle}/></label></div><div style={{display:"grid",gridTemplateColumns:"minmax(180px,1fr) 100px 30px",gap:8,fontSize:10,fontWeight:700,color:"var(--text-med)",marginBottom:5}}><span>Deskripsi barang</span><span>Qty</span><span/></div>{forms.map((item,index)=><div key={item.id} style={{display:"grid",gridTemplateColumns:"minmax(180px,1fr) 100px 30px",gap:8,marginBottom:8}}><input value={item.description} onChange={e=>setForms(old=>old.map((row,i)=>i===index?{...row,description:e.target.value}:row))} style={inputStyle}/><input type="number" min={0} value={item.qty||""} onChange={e=>setForms(old=>old.map((row,i)=>i===index?{...row,qty:Number(e.target.value)}:row))} style={inputStyle}/><button onClick={()=>setForms(old=>old.filter((_,i)=>i!==index))} aria-label="Hapus item" style={{border:0,background:"transparent",color:"#DC2626",cursor:"pointer"}}>✕</button></div>)}<button onClick={()=>setForms(old=>[...old,emptyItem()])} style={{...linkBtn,marginTop:3}}>+ Tambah item</button><div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:18}}><button onClick={()=>setOpen(false)} style={ghostBtn}>Batal</button><button disabled={saving} onClick={save} style={primaryBtn}>{saving?"Menyimpan...":"Simpan"}</button></div></div></div>:null}</div>;
 }
-
-const fields: CrudField[] = [
-    { key: "number", label: "No. Surat Jalan", type: "text", required: true },
-    { key: "date", label: "Tanggal", type: "date", required: true },
-    { key: "customer", label: "Customer", type: "text", required: true },
-];
-
-const excelColumns: ExcelColumn[] = [
-    { key: "number", header: "No. Surat Jalan", type: "text" },
-    { key: "date", header: "Tanggal", type: "date" },
-    { key: "customer", header: "Customer", type: "text" },
-];
-
-export default function AlucurvSuratJalanPage() {
-    const { rows, loading, insertRow, insertRows, updateRow, deleteRow } = useAlucurvTable<AlucurvDeliveryNote>("alu_delivery_notes", "date");
-
-    return (
-        <div style={{ padding: 24 }}>
-            <h1 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-dark)", marginBottom: 4 }}>Surat Jalan</h1>
-            <p style={{ fontSize: 13, color: "var(--text-med)", marginBottom: 16 }}>
-                Daftar surat jalan Alucurv. Rincian item per surat jalan akan ditambahkan di iterasi berikutnya.
-            </p>
-            <div style={{ marginBottom: 16 }}>
-                <ExcelImportButton columns={excelColumns} onImport={(rows) => insertRows(rows)} />
-            </div>
-            <AlucurvCrudTable fields={fields} rows={rows} loading={loading} onAdd={insertRow} onDelete={deleteRow} onUpdate={updateRow} />
-        </div>
-    );
-}
+const thStyle:CSSProperties={textAlign:"left",padding:"8px 10px",fontSize:10,fontWeight:700,color:"var(--text-med)",textTransform:"uppercase",borderBottom:"1px solid var(--border)",background:"var(--bg-secondary)"};
+const tdStyle:CSSProperties={padding:"8px 10px",borderBottom:"1px solid var(--border-light)",color:"var(--text-dark)",verticalAlign:"top"};
+const emptyStyle:CSSProperties={...tdStyle,textAlign:"center",color:"var(--text-med)",padding:20};const inputStyle:CSSProperties={width:"100%",boxSizing:"border-box",fontSize:12,padding:"7px 9px",borderRadius:6,border:"1px solid var(--border)",background:"white",color:"var(--text-dark)"};
+const label:CSSProperties={display:"grid",gap:4,fontSize:10,fontWeight:700,textTransform:"uppercase",color:"var(--text-med)"};const primaryBtn:CSSProperties={background:"var(--primary)",color:"white",border:0,borderRadius:8,padding:"9px 14px",fontWeight:700,fontSize:12,cursor:"pointer"};const ghostBtn:CSSProperties={background:"white",color:"var(--text-med)",border:"1px solid var(--border)",borderRadius:8,padding:"9px 14px",fontWeight:700,fontSize:12,cursor:"pointer"};const linkBtn:CSSProperties={background:"transparent",border:0,color:"var(--primary-dark)",fontWeight:700,fontSize:11,cursor:"pointer",textDecoration:"none"};const overlay:CSSProperties={position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20};const modal:CSSProperties={background:"white",borderRadius:16,padding:24,width:"100%",maxWidth:720,maxHeight:"90vh",overflowY:"auto"};

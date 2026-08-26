@@ -37,7 +37,9 @@ const NAV_ITEMS = [
             { href: "/dashboard/invoice", label: "Invoice", module: "keuangan", icon: InvoiceIcon },
             { href: "/dashboard/tagihan", label: "Tagihan", module: "keuangan", icon: TagihanIcon },
             { href: "/dashboard/tagihan-bahan", label: "Tagihan Bahan Baku", module: "keuangan", icon: BoxIcon },
+            { href: "/dashboard/hpp", label: "HPP Barang", module: "pajak", icon: CalculatorIcon },
             { href: "/dashboard/laporan", label: "Laporan", module: "keuangan", icon: BarChartIcon },
+            { href: "/dashboard/pajak", label: "Akuntansi & Pajak", module: "pajak", icon: CalculatorIcon },
         ],
     },
     {

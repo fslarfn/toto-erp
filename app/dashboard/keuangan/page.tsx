@@ -1,10 +1,12 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
 import { useStore } from "@/lib/store";
 import { CashFlow } from "@/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import ReconciliationPanel from "@/components/ReconciliationPanel";
 import { computeTotals, isTransfer } from "@/lib/balance";
+import { isCashFlowJournalLocked } from "@/lib/pajak/store";
 
 const BANK_ACCOUNTS = ["Bank BCA Toto", "Bank BCA Yanto", "Cash"];
 // Paginasi riwayat transaksi — meniru pola Input Pesanan (100 baris/halaman).
@@ -135,7 +137,13 @@ export default function KeuanganPage() {
         setSaving(false);
     };
 
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
+        try {
+            if (await isCashFlowJournalLocked(id)) {
+                showToast("Transaksi sudah masuk jurnal terkunci dan tidak dapat dihapus. Buat jurnal koreksi bila diperlukan.");
+                return;
+            }
+        } catch { showToast("Gagal memeriksa status jurnal. Penghapusan dibatalkan untuk keamanan."); return; }
         if (confirm("Apakah Anda yakin ingin menghapus transaksi ini?")) {
             deleteCashFlow(id);
         }
@@ -179,7 +187,13 @@ export default function KeuanganPage() {
     const categoryOptions = form.type === "income" ? CATEGORIES_IN : CATEGORIES_OUT;
 
     // ── Edit Modal handlers ────────────────────────────────────
-    const handleEditOpen = (tx: CashFlow) => {
+    const handleEditOpen = async (tx: CashFlow) => {
+        try {
+            if (await isCashFlowJournalLocked(tx.id)) {
+                showToast("Transaksi sudah masuk jurnal terkunci dan tidak dapat diedit. Buat jurnal koreksi bila diperlukan.");
+                return;
+            }
+        } catch { showToast("Gagal memeriksa status jurnal. Edit dibatalkan untuk keamanan."); return; }
         setEditingTx(tx);
         setEditForm({
             tanggal: tx.date,
@@ -232,14 +246,17 @@ export default function KeuanganPage() {
                     <h1 className="page-title-h1">Keuangan</h1>
                     <p className="page-subtitle">Manajemen kas dan riwayat transaksi</p>
                 </div>
-                <button
-                    onClick={handleSync}
-                    disabled={syncing}
-                    className="btn btn-secondary"
-                    style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}
-                >
-                    {syncing ? "⌛ Menghitung..." : "🔄 Sinkronkan Saldo"}
-                </button>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                    <Link href="/dashboard/pajak" className="btn btn-secondary" style={{fontSize:13,textDecoration:"none"}}>Akuntansi & Pajak</Link>
+                    <button
+                        onClick={handleSync}
+                        disabled={syncing}
+                        className="btn btn-secondary"
+                        style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}
+                    >
+                        {syncing ? "⌛ Menghitung..." : "🔄 Sinkronkan Saldo"}
+                    </button>
+                </div>
             </div>
 
             {/* Saldo Summary */}

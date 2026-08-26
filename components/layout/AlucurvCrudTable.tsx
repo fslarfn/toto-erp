@@ -105,6 +105,8 @@ export default function AlucurvCrudTable<T extends { id: string }>({
     onAdd,
     onDelete,
     onUpdate,
+    showRowNumber = false,
+    extraColumns = [],
 }: {
     fields: CrudField[];
     rows: T[];
@@ -112,6 +114,8 @@ export default function AlucurvCrudTable<T extends { id: string }>({
     onAdd: (values: Record<string, unknown>) => Promise<unknown>;
     onDelete: (id: string) => Promise<unknown>;
     onUpdate?: (id: string, patch: Record<string, unknown>) => Promise<unknown>;
+    showRowNumber?: boolean;
+    extraColumns?: { header: string; render: (row: T) => React.ReactNode }[];
 }) {
     const emptyForm = () =>
         Object.fromEntries(fields.map((f) => [f.key, f.type === "checkbox" ? false : ""])) as Record<string, unknown>;
@@ -225,22 +229,25 @@ export default function AlucurvCrudTable<T extends { id: string }>({
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                     <thead>
                         <tr>
+                            {showRowNumber && <th style={{ ...thStyle, width: 44, textAlign: "center" }}>No.</th>}
                             {fields.map((f) => (
                                 <th key={f.key} style={thStyle}>{f.label}</th>
                             ))}
+                            {extraColumns.map((column) => <th key={column.header} style={thStyle}>{column.header}</th>)}
                             <th style={thStyle} />
                         </tr>
                     </thead>
                     <tbody>
                         {loading ? (
-                            <tr><td colSpan={fields.length + 1} style={tdEmptyStyle}>Memuat...</td></tr>
+                            <tr><td colSpan={fields.length + extraColumns.length + (showRowNumber ? 2 : 1)} style={tdEmptyStyle}>Memuat...</td></tr>
                         ) : visibleRows.length === 0 ? (
-                            <tr><td colSpan={fields.length + 1} style={tdEmptyStyle}>{query ? "Tidak ada hasil untuk pencarian ini." : "Belum ada data."}</td></tr>
+                            <tr><td colSpan={fields.length + extraColumns.length + (showRowNumber ? 2 : 1)} style={tdEmptyStyle}>{query ? "Tidak ada hasil untuk pencarian ini." : "Belum ada data."}</td></tr>
                         ) : (
-                            visibleRows.map((row) => {
+                            visibleRows.map((row, index) => {
                                 const r = row as unknown as Record<string, unknown>;
                                 return (
                                 <tr key={row.id}>
+                                    {showRowNumber && <td style={{ ...tdStyle, textAlign: "center", color: "var(--text-med)" }}>{index + 1}</td>}
                                     {fields.map((f) => {
                                         const rowVal = r[f.key];
                                         return (
@@ -259,6 +266,7 @@ export default function AlucurvCrudTable<T extends { id: string }>({
                                             </td>
                                         );
                                     })}
+                                    {extraColumns.map((column) => <td key={column.header} style={tdStyle}>{column.render(row)}</td>)}
                                     <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>
                                         {onUpdate && (
                                             <button onClick={() => openEdit(row)} style={editBtnStyle}>Ubah</button>
