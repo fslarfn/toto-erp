@@ -14,6 +14,7 @@
 //    berulang agar tidak terpotong cap 1000 baris Supabase.
 // ============================================================
 import useSWR from "swr";
+import { useEffect } from "react";
 import { supabase } from "@/lib/supabase-client";
 
 export interface AluDashOrder {
@@ -147,6 +148,23 @@ export function useAlucurvDashboard() {
     const { data, error, isLoading, mutate } = useSWR("alucurv-dashboard", fetchDashboard, {
         revalidateOnFocus: true,
         dedupingInterval: 5000,
+        refreshInterval: 30000,
     });
+
+    useEffect(() => {
+        const channel = supabase
+            .channel("alucurv-dashboard-transactions")
+            .on(
+                "postgres_changes",
+                { event: "*", schema: "public", table: "alu_transactions" },
+                () => { void mutate(); },
+            )
+            .subscribe();
+
+        return () => {
+            void supabase.removeChannel(channel);
+        };
+    }, [mutate]);
+
     return { data, loading: isLoading, error: error ? String(error) : null, refresh: mutate };
 }

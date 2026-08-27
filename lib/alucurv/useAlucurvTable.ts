@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
+import { mutate as mutateSWR } from "swr";
 import { supabase } from "@/lib/supabase-client";
 
 export function useAlucurvTable<T extends { id: string }>(table: string, orderBy?: string, ascending = false) {
@@ -21,32 +22,52 @@ export function useAlucurvTable<T extends { id: string }>(table: string, orderBy
     }, [table, orderBy, ascending]);
 
     useEffect(() => {
+        // Initial synchronization with the external Supabase table.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         refresh();
     }, [refresh]);
+
+    const refreshDependentData = async () => {
+        if (table === "alu_transactions") {
+            await mutateSWR("alucurv-dashboard");
+        }
+    };
 
     const insertRow = async (row: Record<string, unknown>) => {
         const payload = { id: crypto.randomUUID(), ...row };
         const { error: err } = await supabase.from(table).insert(payload);
-        if (!err) await refresh();
+        if (!err) {
+            await refresh();
+            await refreshDependentData();
+        }
         return err;
     };
 
     const insertRows = async (newRows: Record<string, unknown>[]) => {
         const payload = newRows.map((r) => ({ id: r.id || crypto.randomUUID(), ...r }));
         const { error: err } = await supabase.from(table).insert(payload);
-        if (!err) await refresh();
+        if (!err) {
+            await refresh();
+            await refreshDependentData();
+        }
         return err;
     };
 
     const updateRow = async (id: string, patch: Record<string, unknown>) => {
         const { error: err } = await supabase.from(table).update(patch).eq("id", id);
-        if (!err) await refresh();
+        if (!err) {
+            await refresh();
+            await refreshDependentData();
+        }
         return err;
     };
 
     const deleteRow = async (id: string) => {
         const { error: err } = await supabase.from(table).delete().eq("id", id);
-        if (!err) await refresh();
+        if (!err) {
+            await refresh();
+            await refreshDependentData();
+        }
         return err;
     };
 
