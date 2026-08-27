@@ -60,7 +60,7 @@ export default function AlucurvDeliveryNotePrintPage({ params }: { params: Promi
             </div>
 
             <article className="delivery-paper" style={{ maxWidth: 760, minHeight: 720, margin: "0 auto", background: "white", border: "2px solid #111", padding: 24, boxShadow: "0 6px 24px rgba(0,0,0,.12)", fontSize: 12 }}>
-                <header style={{ textAlign: "center", marginBottom: 12 }}>
+                <div style={{ textAlign: "center", marginBottom: 12, background: "#fff", color: "#111" }}>
                     {logoOk ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={ALUCURV.logoSrc} alt={ALUCURV.name} onError={() => setLogoOk(false)} style={{ width: 280, height: "auto", margin: "0 auto 4px", display: "block" }} />
@@ -69,7 +69,7 @@ export default function AlucurvDeliveryNotePrintPage({ params }: { params: Promi
                     )}
                     <div style={{ fontSize: 10, color: "#0F766E", fontStyle: "italic" }}>{ALUCURV.tagline}</div>
                     <div style={{ marginTop: 8, background: "#14B8A6", color: "white", fontSize: 10, fontWeight: 700, padding: "4px 0" }}>{ALUCURV.banner}</div>
-                </header>
+                </div>
 
                 <h1 style={{ textAlign: "center", fontSize: 20, fontWeight: 800, margin: "12px 0" }}>SURAT JALAN</h1>
 
