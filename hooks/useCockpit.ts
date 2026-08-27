@@ -10,8 +10,12 @@ import {
   getProfitStats
 } from '../lib/queries/cockpit';
 
-const REFRESH_INTERVAL = 60000;
 const DEDUPING_INTERVAL = 5000;
+const SWR_OPTIONS = {
+  dedupingInterval: DEDUPING_INTERVAL,
+  revalidateOnFocus: true,
+  revalidateOnReconnect: true,
+};
 
 // Invalidate all cockpit keys when relevant tables change
 export function useCockpitRealtime() {
@@ -46,43 +50,25 @@ export function useCockpitRealtime() {
 }
 
 export const useCockpitBalance = () => {
-  return useSWR('cockpit-balance', getCockpitBalance, {
-    refreshInterval: REFRESH_INTERVAL,
-    dedupingInterval: DEDUPING_INTERVAL,
-  });
+  return useSWR('cockpit-balance', getCockpitBalance, SWR_OPTIONS);
 };
 
 export const useCockpitAging = () => {
-  return useSWR('cockpit-aging', getCockpitAging, {
-    refreshInterval: REFRESH_INTERVAL,
-    dedupingInterval: DEDUPING_INTERVAL,
-  });
+  return useSWR('cockpit-aging', getCockpitAging, SWR_OPTIONS);
 };
 
 export const useCashForecast = () => {
-  return useSWR('cockpit-cash-forecast', getCashForecast, {
-    refreshInterval: REFRESH_INTERVAL,
-    dedupingInterval: DEDUPING_INTERVAL,
-  });
+  return useSWR('cockpit-cash-forecast', getCashForecast, SWR_OPTIONS);
 };
 
 export const useTopDebtors = () => {
-  return useSWR('cockpit-top-debtors', getTopDebtors, {
-    refreshInterval: REFRESH_INTERVAL,
-    dedupingInterval: DEDUPING_INTERVAL,
-  });
+  return useSWR('cockpit-top-debtors', getTopDebtors, SWR_OPTIONS);
 };
 
 export const useStuckOrders = () => {
-  return useSWR('cockpit-stuck-orders', getStuckOrders, {
-    refreshInterval: REFRESH_INTERVAL,
-    dedupingInterval: DEDUPING_INTERVAL,
-  });
+  return useSWR('cockpit-stuck-orders', getStuckOrders, SWR_OPTIONS);
 };
 
 export const useProfitStats = () => {
-  return useSWR('cockpit-profit-stats', getProfitStats, {
-    refreshInterval: REFRESH_INTERVAL,
-    dedupingInterval: DEDUPING_INTERVAL,
-  });
+  return useSWR('cockpit-profit-stats', getProfitStats, SWR_OPTIONS);
 };

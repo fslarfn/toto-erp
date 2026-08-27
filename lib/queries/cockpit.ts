@@ -1,6 +1,6 @@
 import { supabase } from '../supabase-client';
 import { computeTotals } from '../balance';
-import { groupUnpaidInvoices, fetchUnpaidPesananRows, pesananRowTotal } from '../piutang';
+import { groupUnpaidInvoices, fetchUnpaidPesananRows, pesananRowTotal, type PiutangRowLike } from '../piutang';
 import {
   CockpitBalance,
   CockpitAging,
@@ -10,13 +10,17 @@ import {
   ProfitStats
 } from "@/types/cockpit";
 
-// Parse Indonesian number format: "1.500.000" → 1500000, "1,5" → 1.5
-function parseIdNum(val: string): number {
-  if (!val || val === '—' || val.trim() === '') return 0;
-  const s = val.trim();
-  if (s.includes(',')) return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
-  if (/^\d{1,3}(\.\d{3})+$/.test(s)) return parseFloat(s.replace(/\./g, '')) || 0;
-  return parseFloat(s.replace(/[^0-9.]/g, '')) || 0;
+// Aging dan Top Debtor dirender bersamaan dan memakai dataset yang sama.
+// Berbagi promise aktif mencegah dua unduhan paginated identik tanpa
+// menyimpan cache stale setelah request selesai.
+let unpaidRowsRequest: Promise<PiutangRowLike[]> | null = null;
+function fetchCockpitUnpaidRows(): Promise<PiutangRowLike[]> {
+  if (!unpaidRowsRequest) {
+    unpaidRowsRequest = fetchUnpaidPesananRows().finally(() => {
+      unpaidRowsRequest = null;
+    });
+  }
+  return unpaidRowsRequest;
 }
 
 export const getCockpitBalance = async (): Promise<CockpitBalance> => {
@@ -24,7 +28,7 @@ export const getCockpitBalance = async (): Promise<CockpitBalance> => {
   const deltaData = data as { total_now: number; total_7d_ago: number; delta: number };
   if (deltaErr) throw deltaErr;
 
-  const { data: accData, error: accErr } = await supabase.from('bank_accounts').select('*');
+  const { data: accData, error: accErr } = await supabase.from('bank_accounts').select('id, name, bank, balance');
   if (accErr) throw accErr;
 
   // Saldo TERHITUNG dari view v_account_balances (sumber kebenaran yang sama
@@ -56,7 +60,7 @@ export const getCockpitBalance = async (): Promise<CockpitBalance> => {
 // Query pesanan_rows directly to avoid relying on v_cockpit_aging view permissions
 export const getCockpitAging = async (): Promise<CockpitAging[]> => {
   // Fetch bersama lib/piutang: paged (bebas cap 1000 baris Supabase).
-  const data = await fetchUnpaidPesananRows();
+  const data = await fetchCockpitUnpaidRows();
 
   const today = new Date();
   const buckets: Record<CockpitAging['bucket'], number> = {
@@ -95,7 +99,7 @@ export const getCashForecast = async (): Promise<CashForecastPoint[]> => {
 // Query pesanan_rows directly to avoid relying on v_cockpit_top_debtors view permissions
 export const getTopDebtors = async (): Promise<TopDebtor[]> => {
   // Fetch bersama lib/piutang: paged (bebas cap 1000 baris Supabase).
-  const data = await fetchUnpaidPesananRows();
+  const data = await fetchCockpitUnpaidRows();
 
   const today = new Date();
 
@@ -143,7 +147,7 @@ export const getProfitStats = async (): Promise<ProfitStats> => {
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
-  const startOfMonth = new Date(year, month - 1, 1).toISOString();
+  const startOfMonth = `${year}-${String(month).padStart(2, '0')}-01`;
 
   const { data: cfData, error: cfErr } = await supabase
     .from('cash_flow')

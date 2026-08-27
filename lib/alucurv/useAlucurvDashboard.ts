@@ -147,8 +147,8 @@ async function fetchDashboard(): Promise<AlucurvDashboardData> {
 export function useAlucurvDashboard() {
     const { data, error, isLoading, mutate } = useSWR("alucurv-dashboard", fetchDashboard, {
         revalidateOnFocus: true,
+        revalidateOnReconnect: true,
         dedupingInterval: 5000,
-        refreshInterval: 30000,
     });
 
     useEffect(() => {

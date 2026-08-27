@@ -48,33 +48,6 @@ interface AppStore {
 
 const StoreContext = createContext<AppStore | null>(null);
 
-/* Helper: convert DB row → Order type */
-function dbToOrder(r: Record<string, unknown>): Order {
-    return {
-        id: r.id as string,
-        poNumber: (r.po_number as string) || "",
-        invoiceNumber: (r.invoice_number as string) || "",
-        sjNumber: (r.sj_number as string) || "",
-        customerName: (r.customer_name as string) || "",
-        orderDate: (r.order_date as string) || "",
-        dueDate: (r.due_date as string) || "",
-        description: (r.description as string) || "",
-        qty: (r.qty as number) || 0,
-        size: (r.size as string) || "",
-        vendor: (r.vendor as string) || "",
-        unitPrice: Number(r.unit_price) || 0,
-        totalPrice: Number(r.total_price) || 0,
-        notes: (r.notes as string) || "",
-        productionStatus: (r.production_status as Order["productionStatus"]) || "belum_produksi",
-        deliveryStatus: (r.delivery_status as Order["deliveryStatus"]) || "belum_kirim",
-        paymentStatus: (r.payment_status as Order["paymentStatus"]) || "belum_bayar",
-        paidAmount: Number(r.paid_amount) || 0,
-        rowColor: (r.row_color as string) || "",
-        createdBy: (r.created_by as string) || "",
-        createdAt: (r.created_at as string) || "",
-    };
-}
-
 function orderToDb(o: Partial<Order>): Record<string, unknown> {
     const m: Record<string, unknown> = {};
     if (o.id !== undefined) m.id = o.id;
@@ -163,20 +136,6 @@ function cashFlowToDb(c: Partial<CashFlow>): Record<string, unknown> {
     return d;
 }
 
-function dbToPayment(r: Record<string, unknown>): Payment {
-    return {
-        id: r.id as string,
-        invoiceId: (r.invoice_id as string) || "",
-        orderId: (r.order_id as string) || "",
-        amountPaid: Number(r.amount_paid) || 0,
-        paymentDate: (r.payment_date as string) || "",
-        paymentMethod: (r.payment_method as string) || "",
-        bankAccount: (r.bank_account as string) || "",
-        notes: (r.notes as string) || "",
-        recordedBy: (r.recorded_by as string) || "",
-    };
-}
-
 function paymentToDb(p: Partial<Payment>): Record<string, unknown> {
     const d: Record<string, unknown> = {};
     if (p.id !== undefined) d.id = p.id;
@@ -221,11 +180,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const [orders, setOrders] = useState<Order[]>([]);
     const [materials, setMaterials] = useState<Material[]>([]);
     const [cashFlow, setCashFlow] = useState<CashFlow[]>([]);
-    const [payments, setPayments] = useState<Payment[]>([]);
+    const [payments] = useState<Payment[]>([]);
     const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
     const [loading, setLoading] = useState(true);
 
-    // Lazy-load: fetch 5 tabel (paginasi → hindari cap 1000 baris) baru dimulai
+    // Lazy-load: fetch 3 tabel aktif (paginasi → hindari cap 1000 baris) baru dimulai
     // saat ada halaman yang memakai useStore — BUKAN saat provider mount.
     // Provider ini ada di ROOT layout, jadi tanpa ini halaman login pun ikut
     // mengunduh ribuan baris cash_flow dkk.
@@ -246,18 +205,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const cancelled = () => cancelledRef.current;
         (async () => {
             try {
-                const [orders, mats, cf, pays, ba] = await Promise.all([
-                    fetchAllPaged((f, t) => supabase.from("orders").select("*").order("created_at", { ascending: false }).range(f, t)),
-                    fetchAllPaged((f, t) => supabase.from("materials").select("*").order("code").range(f, t)),
-                    fetchAllPaged((f, t) => supabase.from("cash_flow").select("*").order("date", { ascending: false }).range(f, t)),
-                    fetchAllPaged((f, t) => supabase.from("payments").select("*").order("payment_date", { ascending: false }).range(f, t)),
-                    fetchAllPaged((f, t) => supabase.from("bank_accounts").select("*").range(f, t)),
+                const [mats, cf, ba] = await Promise.all([
+                    fetchAllPaged((f, t) => supabase.from("materials").select("id, code, name, category, unit, current_stock, minimum_stock, location, last_updated").order("code").range(f, t)),
+                    fetchAllPaged((f, t) => supabase.from("cash_flow").select("id, type, category, amount, description, date, bank_account, account_id, created_by, is_test, is_adjustment, transfer_group").order("date", { ascending: false }).range(f, t)),
+                    fetchAllPaged((f, t) => supabase.from("bank_accounts").select("id, name, bank, account_number, balance, initial_balance").range(f, t)),
                 ]);
                 if (!cancelled()) {
-                    setOrders(orders.map(dbToOrder));
                     setMaterials(mats.map(dbToMaterial));
                     setCashFlow(cf.map(dbToCashFlow));
-                    setPayments(pays.map(dbToPayment));
                     setBankAccounts(ba.map(dbToBankAccount));
                 }
             } catch (e) {
@@ -273,118 +228,71 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (!started) return;
         const channel = supabase
             .channel("realtime_general_store")
-            // 1. Orders
-            .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, (payload) => {
-                const { eventType, new: n, old: o } = payload;
-                if (eventType === "INSERT") setOrders(prev => [dbToOrder(n as Record<string, any>), ...prev]);
-                else if (eventType === "UPDATE") {
-                    const row = n as Record<string, any>;
-                    const mapped: Partial<Order> = {};
-                    if ("id" in row) mapped.id = row.id;
-                    if ("po_number" in row) mapped.poNumber = row.po_number;
-                    if ("invoice_number" in row) mapped.invoiceNumber = row.invoice_number;
-                    if ("sj_number" in row) mapped.sjNumber = row.sj_number;
-                    if ("customer_name" in row) mapped.customerName = row.customer_name;
-                    if ("order_date" in row) mapped.orderDate = row.order_date;
-                    if ("due_date" in row) mapped.dueDate = row.due_date;
-                    if ("description" in row) mapped.description = row.description;
-                    if ("qty" in row) mapped.qty = row.qty;
-                    if ("size" in row) mapped.size = row.size;
-                    if ("vendor" in row) mapped.vendor = row.vendor;
-                    if ("unit_price" in row) mapped.unitPrice = Number(row.unit_price);
-                    if ("total_price" in row) mapped.totalPrice = Number(row.total_price);
-                    if ("notes" in row) mapped.notes = row.notes;
-                    if ("production_status" in row) mapped.productionStatus = row.production_status;
-                    if ("delivery_status" in row) mapped.deliveryStatus = row.delivery_status;
-                    if ("payment_status" in row) mapped.paymentStatus = row.payment_status;
-                    if ("paid_amount" in row) mapped.paidAmount = Number(row.paid_amount);
-                    if ("row_color" in row) mapped.rowColor = row.row_color;
-                    setOrders(prev => prev.map(x => x.id === (n as any).id ? { ...x, ...mapped } : x));
-                }
-                else if (eventType === "DELETE") setOrders(prev => prev.filter(x => x.id !== (o as any).id));
-            })
-            // 2. Materials
+            // Orders/payments legacy sengaja tidak disubscribe: seluruh UI aktif
+            // memakai pesanan_rows dan cash_flow sebagai sumber kebenaran.
+            // 1. Materials
             .on("postgres_changes", { event: "*", schema: "public", table: "materials" }, (payload) => {
                 const { eventType, new: n, old: o } = payload;
-                if (eventType === "INSERT") setMaterials(prev => [...prev, dbToMaterial(n as Record<string, any>)]);
+                if (eventType === "INSERT") setMaterials(prev => [...prev, dbToMaterial(n as Record<string, unknown>)]);
                 else if (eventType === "UPDATE") {
-                    const row = n as Record<string, any>;
+                    const row = n as Record<string, unknown>;
                     const mapped: Partial<Material> = {};
-                    if ("id" in row) mapped.id = row.id;
-                    if ("code" in row) mapped.code = row.code;
-                    if ("name" in row) mapped.name = row.name;
-                    if ("category" in row) mapped.category = row.category;
-                    if ("unit" in row) mapped.unit = row.unit;
+                    if ("id" in row) mapped.id = String(row.id ?? "");
+                    if ("code" in row) mapped.code = String(row.code ?? "");
+                    if ("name" in row) mapped.name = String(row.name ?? "");
+                    if ("category" in row) mapped.category = String(row.category ?? "");
+                    if ("unit" in row) mapped.unit = String(row.unit ?? "");
                     if ("current_stock" in row) mapped.currentStock = Number(row.current_stock);
                     if ("minimum_stock" in row) mapped.minimumStock = Number(row.minimum_stock);
-                    if ("location" in row) mapped.location = row.location;
-                    setMaterials(prev => prev.map(x => x.id === (n as any).id ? { ...x, ...mapped } : x));
+                    if ("location" in row) mapped.location = String(row.location ?? "");
+                    setMaterials(prev => prev.map(x => x.id === String(row.id ?? "") ? { ...x, ...mapped } : x));
                 }
-                else if (eventType === "DELETE") setMaterials(prev => prev.filter(x => x.id !== (o as any).id));
+                else if (eventType === "DELETE") setMaterials(prev => prev.filter(x => x.id !== (o as Record<string, unknown>).id));
             })
-            // 3. Cash Flow
+            // 2. Cash Flow
             .on("postgres_changes", { event: "*", schema: "public", table: "cash_flow" }, (payload) => {
                 const { eventType, new: n, old: o } = payload;
                 if (eventType === "INSERT") {
                     // Idempoten: lewati bila id sudah ada (mis. sudah ditambah optimistic
                     // di addCashFlow/addTransfer) agar tidak dobel saat realtime echo balik.
-                    setCashFlow(prev => prev.some(x => x.id === (n as any).id) ? prev : [dbToCashFlow(n as Record<string, any>), ...prev]);
+                    const row = n as Record<string, unknown>;
+                    setCashFlow(prev => prev.some(x => x.id === row.id) ? prev : [dbToCashFlow(row), ...prev]);
                 }
                 else if (eventType === "UPDATE") {
-                    const row = n as Record<string, any>;
+                    const row = n as Record<string, unknown>;
                     const mapped: Partial<CashFlow> = {};
-                    if ("id" in row) mapped.id = row.id;
-                    if ("type" in row) mapped.type = row.type;
-                    if ("category" in row) mapped.category = row.category;
+                    if ("id" in row) mapped.id = String(row.id ?? "");
+                    if ("type" in row) mapped.type = row.type as CashFlow["type"];
+                    if ("category" in row) mapped.category = String(row.category ?? "");
                     if ("amount" in row) mapped.amount = Number(row.amount);
-                    if ("description" in row) mapped.description = row.description;
-                    if ("date" in row) mapped.date = row.date;
-                    if ("bank_account" in row) mapped.bankAccount = row.bank_account;
-                    if ("account_id" in row) mapped.accountId = row.account_id ?? null;
+                    if ("description" in row) mapped.description = String(row.description ?? "");
+                    if ("date" in row) mapped.date = String(row.date ?? "");
+                    if ("bank_account" in row) mapped.bankAccount = String(row.bank_account ?? "");
+                    if ("account_id" in row) mapped.accountId = row.account_id == null ? null : String(row.account_id);
                     if ("is_test" in row) mapped.isTest = Boolean(row.is_test);
                     if ("is_adjustment" in row) mapped.isAdjustment = Boolean(row.is_adjustment);
-                    if ("transfer_group" in row) mapped.transferGroup = row.transfer_group ?? null;
-                    setCashFlow(prev => prev.map(x => x.id === (n as any).id ? { ...x, ...mapped } : x));
+                    if ("transfer_group" in row) mapped.transferGroup = row.transfer_group == null ? null : String(row.transfer_group);
+                    setCashFlow(prev => prev.map(x => x.id === String(row.id ?? "") ? { ...x, ...mapped } : x));
                 }
-                else if (eventType === "DELETE") setCashFlow(prev => prev.filter(x => x.id !== (o as any).id));
+                else if (eventType === "DELETE") setCashFlow(prev => prev.filter(x => x.id !== (o as Record<string, unknown>).id));
                 // recalculate handled by useEffect when cashFlow state settles
             })
-            // 4. Payments
-            .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, (payload) => {
-                const { eventType, new: n, old: o } = payload;
-                if (eventType === "INSERT") setPayments(prev => [dbToPayment(n as Record<string, any>), ...prev]);
-                else if (eventType === "UPDATE") {
-                    const row = n as Record<string, any>;
-                    const mapped: Partial<Payment> = {};
-                    if ("id" in row) mapped.id = row.id;
-                    if ("invoice_id" in row) mapped.invoiceId = row.invoice_id;
-                    if ("order_id" in row) mapped.orderId = row.order_id;
-                    if ("amount_paid" in row) mapped.amountPaid = Number(row.amount_paid);
-                    if ("payment_date" in row) mapped.paymentDate = row.payment_date;
-                    if ("payment_method" in row) mapped.paymentMethod = row.payment_method;
-                    if ("bank_account" in row) mapped.bankAccount = row.bank_account;
-                    if ("notes" in row) mapped.notes = row.notes;
-                    setPayments(prev => prev.map(x => x.id === (n as any).id ? { ...x, ...mapped } : x));
-                }
-                else if (eventType === "DELETE") setPayments(prev => prev.filter(x => x.id !== (o as any).id));
-                // recalculate handled by useEffect when payments state settles
-            })
-            // 5. Bank Accounts
+            // 3. Bank Accounts
             .on("postgres_changes", { event: "*", schema: "public", table: "bank_accounts" }, (payload) => {
                 const { eventType, new: n, old: o } = payload;
-                if (eventType === "INSERT") setBankAccounts(prev => [...prev, dbToBankAccount(n as Record<string, any>)]);
+                if (eventType === "INSERT") setBankAccounts(prev => [...prev, dbToBankAccount(n as Record<string, unknown>)]);
                 else if (eventType === "UPDATE") {
-                    const row = n as Record<string, any>;
+                    const row = n as Record<string, unknown>;
                     const mapped: Partial<BankAccount> = {};
-                    if ("id" in row) mapped.id = row.id;
-                    if ("name" in row) mapped.name = row.name;
-                    if ("bank" in row) mapped.bank = row.bank;
-                    if ("account_number" in row) mapped.accountNumber = row.account_number;
+                    if ("id" in row) mapped.id = String(row.id ?? "");
+                    if ("name" in row) mapped.name = String(row.name ?? "");
+                    if ("bank" in row) mapped.bank = String(row.bank ?? "");
+                    if ("account_number" in row) mapped.accountNumber = String(row.account_number ?? "");
                     if ("balance" in row) mapped.balance = Number(row.balance);
                     if ("initial_balance" in row) mapped.initialBalance = Number(row.initial_balance);
-                    setBankAccounts(prev => prev.map(x => x.id === (n as any).id ? { ...x, ...mapped } : x));
+                    setBankAccounts(prev => prev.map(x => x.id === String(row.id ?? "") ? { ...x, ...mapped } : x));
                 }
-                else if (eventType === "DELETE") setBankAccounts(prev => prev.filter(x => x.id !== (o as any).id));
+                else if (eventType === "DELETE") setBankAccounts(prev => prev.filter(x => x.id !== (o as Record<string, unknown>).id));
             })
             .subscribe((status) => {
                 console.log("General Store Realtime Status:", status);
@@ -400,7 +308,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const nums = generateNumbers(orders.length);
         const newOrder: Order = {
             ...orderData,
-            id: String(Date.now()),
+            id: crypto.randomUUID(),
             ...nums,
             productionStatus: "belum_produksi",
             deliveryStatus: "belum_kirim",
@@ -412,7 +320,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // We rely on Real-time to update the UI
         supabase.from("orders").insert(orderToDb(newOrder)).then();
         return newOrder;
-    }, []);
+    }, [orders.length]);
 
     const updateOrder = useCallback((id: string, updates: Partial<Order>) => {
         setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, ...updates } : o)));
@@ -425,7 +333,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const addMaterial = useCallback((m: Omit<Material, "id">) => {
-        const newMat = { ...m, id: String(Date.now()) };
+        const newMat = { ...m, id: crypto.randomUUID() };
         supabase.from("materials").insert(materialToDb(newMat)).then();
     }, []);
 
@@ -453,7 +361,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const addCashFlow = useCallback((entry: CashFlowInput) => {
-        const id = String(Date.now());
+        const id = crypto.randomUUID();
         // Resolusi account_id dari nama kas (FK), bukan lagi pencocokan string saat hitung saldo.
         const accountId = entry.accountId ?? resolveAccountId(entry.bankAccount, bankAccounts);
         const newCf: CashFlow = {
@@ -480,9 +388,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const addTransfer = useCallback((p: { fromAccountId: string; toAccountId: string; amount: number; date: string; description?: string; createdBy?: string }) => {
         const nameOf = (accId: string) => bankAccounts.find(b => b.id === accId)?.name ?? "";
         const [out, inn] = buildTransferPair(p);
-        const base = Date.now();
-        const outRow: CashFlow = { ...out, id: String(base), bankAccount: nameOf(out.accountId!) };
-        const innRow: CashFlow = { ...inn, id: String(base + 1), bankAccount: nameOf(inn.accountId!) };
+        const outRow: CashFlow = { ...out, id: crypto.randomUUID(), bankAccount: nameOf(out.accountId!) };
+        const innRow: CashFlow = { ...inn, id: crypto.randomUUID(), bankAccount: nameOf(inn.accountId!) };
         setCashFlow(prev => [innRow, outRow, ...prev]);
         supabase.from("cash_flow").insert([cashFlowToDb(outRow), cashFlowToDb(innRow)]).then();
     }, [bankAccounts]);
@@ -518,7 +425,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }, [cashFlow]);
 
     const addPayment = useCallback((payment: Omit<Payment, "id">) => {
-        const newPayment = { ...payment, id: String(Date.now()) };
+        const newPayment = { ...payment, id: crypto.randomUUID() };
         
         // Update Order status in DB (Real-time will update the local state)
         supabase.from("orders").select("paid_amount, total_price").eq("id", payment.orderId).single().then(({ data }) => {
@@ -551,7 +458,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const current = computeBalance(accountId, bankAccounts, cashFlow, { includeTest: false });
         const selisih = Math.round((realBalance - current) * 100) / 100;
         if (Math.abs(selisih) < 0.01) return; // sudah sama, tak perlu penyesuaian
-        const id = String(Date.now());
+        const id = crypto.randomUUID();
         const entry: CashFlow = {
             id,
             type: selisih > 0 ? "income" : "expense",
