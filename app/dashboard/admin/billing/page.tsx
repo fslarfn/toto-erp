@@ -37,7 +37,7 @@ function BillingPage() {
     const [showAbsensiConfirmSuccess, setShowAbsensiConfirmSuccess] = useState(false);
 
     const isOwner = user?.username === "faisal";
-    const isAdminFinance = ["vira", "toto", "fauzi", "yuni"].includes(user?.username || "");
+    const isAdminFinance = ["vira", "riska", "toto", "fauzi", "yuni"].includes(user?.username || "");
     const hasAccess = isOwner || isAdminFinance;
 
     const refreshLicense = useCallback(async () => {

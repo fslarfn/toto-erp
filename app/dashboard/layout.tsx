@@ -142,7 +142,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     // Badge + toast pesan Ruang Tim (pengganti sinyal floating chat lama).
     const { unread: chatUnread, toast: chatToast, dismissToast: dismissChatToast } = useRuangTimAlert(user?.id, pathname);
 
-    const isAdmin = ["faisal", "vira", "toto", "fauzi", "yuni"].includes(user?.username || "");
+    const isAdmin = ["faisal", "vira", "riska", "toto", "fauzi", "yuni"].includes(user?.username || "");
     const isFinishing = user?.role === "finishing";
     // Fail-open: hanya blokir kalau memberships sudah pasti ke-fetch (>0 baris) dan
     // memang tidak ada baris 'toto' — kalau tabel belum ada/query gagal, memberships
@@ -258,12 +258,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
                         <div className="sidebar-content">
                             {activeWorkspace === "toto" && NAV_ITEMS.map((group) => {
-                                const allowedUsers = ["faisal", "vira", "toto", "fauzi", "yuni"];
                                 const visibleItems = group.items.filter((item) => {
                                     if (item.href === "/dashboard/cockpit") return user?.role === 'owner' || user?.username === 'faisal';
                                     if (item.href === "/dashboard/absensi") return true;
                                     if (item.module === "faisal-only") return user?.username === "faisal";
-                                    if (item.module === "admin-only") return allowedUsers.includes(user?.username || "");
+                                    if (item.module === "admin-only") return isAdmin;
                                     if (item.module === "any") return true;
                                     return hasAccess(item.module);
                                 });
