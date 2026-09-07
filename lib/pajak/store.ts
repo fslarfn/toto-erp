@@ -46,6 +46,22 @@ export type FiscalAdjustmentRow={id?:string;workspace:string;tax_year:number;dir
 export type CorporateTaxReturnRow={id?:string;workspace:string;tax_year:number;turnover:number;commercial_profit:number;positive_corrections:number;negative_corrections:number;taxable_income:number;facility_taxable_income:number;standard_taxable_income:number;tax_due:number;credit_pph22:number;credit_pph23:number;credit_pph25:number;credit_other:number;tax_balance:number;status:"draft"|"locked";calculation_snapshot:Record<string,unknown>;created_by:string;locked_by?:string|null;locked_at?:string|null};
 export type TaxComplianceRow={id?:string;workspace:string;tax_period:string;tax_code:"pph21"|"pph23"|"ppn"|"pph_badan";amount:number;payment_due_date:string|null;filing_due_date:string|null;payment_status:"pending"|"paid"|"not_applicable";filing_status:"pending"|"filed"|"not_applicable";payment_reference:string;filing_reference:string;notes:string;paid_at?:string|null;filed_at?:string|null;updated_by:string};
 export type TaxClosingChecklistRow={id?:string;workspace:string;tax_period:string;task_key:string;completed:boolean;completed_by:string;completed_at:string|null;notes:string;updated_at?:string};
+export type AccountingPolicyRow={
+  id?:string;workspace:string;reporting_standard:"SAK_EP"|"SAK_EMKM"|"SAK_INDONESIA";
+  accounting_basis:"accrual";functional_currency:string;fiscal_year_start_month:number;
+  inventory_method:""|"fifo"|"weighted_average";
+  depreciation_method:""|"straight_line"|"declining_balance";
+  consultant_approved:boolean;notes:string;updated_by:string;updated_at?:string;
+};
+export type AccountingWorkItemRow={
+  id?:string;workspace:string;work_period:string;task_key:string;
+  frequency:"daily"|"weekly"|"monthly";category:string;title:string;
+  status:"todo"|"in_progress"|"waiting_review"|"done";
+  priority:"normal"|"high";assigned_to:string;due_date:string|null;
+  document_reference:string;notes:string;completed_by:string;
+  completed_at:string|null;reviewed_by:string;reviewed_at:string|null;
+  updated_by:string;updated_at?:string;
+};
 
 export function isMissingTaxSchema(error: unknown) {
   const e = error as { code?: string; message?: string } | null;
@@ -176,6 +192,25 @@ export async function saveTaxCompliance(row:TaxComplianceRow){const{data,error}=
 
 export async function loadTaxClosingChecklist(period:string){const{data,error}=await supabase.from("tax_monthly_closing_checklists").select("*").eq("workspace","toto").eq("tax_period",period);if(error)throw error;return(data??[])as TaxClosingChecklistRow[]}
 export async function saveTaxClosingChecklist(row:TaxClosingChecklistRow){const{data,error}=await supabase.from("tax_monthly_closing_checklists").upsert(row,{onConflict:"workspace,tax_period,task_key"}).select().single();if(error)throw error;return data as TaxClosingChecklistRow}
+
+export async function loadAccountingAdminWorkspace(period:string){
+ const[policyResult,workResult]=await Promise.all([
+  supabase.from("accounting_policies").select("*").eq("workspace","toto").maybeSingle(),
+  supabase.from("accounting_work_items").select("*").eq("workspace","toto").eq("work_period",period).order("created_at"),
+ ]);
+ const error=policyResult.error||workResult.error;if(error)throw error;
+ return{policy:policyResult.data as AccountingPolicyRow|null,workItems:(workResult.data??[])as AccountingWorkItemRow[]};
+}
+
+export async function saveAccountingPolicy(row:AccountingPolicyRow){
+ const{data,error}=await supabase.from("accounting_policies").upsert({...row,updated_at:new Date().toISOString()},{onConflict:"workspace"}).select().single();
+ if(error)throw error;return data as AccountingPolicyRow;
+}
+
+export async function saveAccountingWorkItem(row:AccountingWorkItemRow){
+ const{data,error}=await supabase.from("accounting_work_items").upsert({...row,updated_at:new Date().toISOString()},{onConflict:"workspace,work_period,task_key"}).select().single();
+ if(error)throw error;return data as AccountingWorkItemRow;
+}
 
 export async function loadTaxYearReports(year:number){
  const [fiscal,payroll,transactions,compliance,salesHpp]=await Promise.all([

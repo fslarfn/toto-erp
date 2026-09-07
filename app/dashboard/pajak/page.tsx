@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { AlertTriangle, Building2, Calculator, CheckCircle2, Database, Lock, Save, Search, ShieldCheck, Users } from "lucide-react";
+import { AlertTriangle, BookOpenCheck, Calculator, ClipboardCheck, Database, FileText, Landmark, Lock, Save, Search } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useKaryawan } from "@/lib/karyawan-store";
 import { decemberTrueUp, monthlyTerTax, PtkpStatus, terCategory, terRate } from "@/lib/pajak/pph21";
@@ -13,8 +13,10 @@ import TaxDashboard from "@/components/pajak/TaxDashboard";
 import TaxReconciliationCompliance from "@/components/pajak/TaxReconciliationCompliance";
 import TaxReports from "@/components/pajak/TaxReports";
 import TaxWorkflowGuide from "@/components/pajak/TaxWorkflowGuide";
+import AccountingAdminWorkspace from "@/components/pajak/AccountingAdminWorkspace";
 
-type Tab = "ringkasan" | "panduan" | "badan" | "transaksi" | "akuntansi" | "pph21" | "fiskal" | "rekonsiliasi" | "laporan";
+type Tab = "kerja" | "panduan" | "badan" | "transaksi" | "akuntansi" | "pph21" | "fiskal" | "rekonsiliasi" | "laporan";
+type MainSection = "kerja" | "pembukuan" | "tutup" | "pajak" | "laporan";
 type EntityDraft = { legalName: string; npwp: string; nitku: string; address: string; businessType: string; pkp: boolean; regime: string };
 type Profiles = Record<number, { nik: string; npwp: string; ptkp: PtkpStatus; method: "gross" | "gross_up" | "net" }>;
 type DbStatus = "loading" | "connected" | "migration-required" | "error";
@@ -27,6 +29,23 @@ const initialEntity: EntityDraft = { legalName: "CV Toto Aluminium Manufacture",
 const colors = { ink: "#3C2F2F", med: "#7C685B", line: "#E6D5BE", paper: "#FFFBF7", accent: "#A67B5B", soft: "#F6EEE6", green: "#15803D" };
 const inputStyle: React.CSSProperties = { width: "100%", border: `1px solid ${colors.line}`, borderRadius: 7, padding: "8px 10px", fontSize: 12, color: colors.ink, background: "white", outline: "none" };
 const cardStyle: React.CSSProperties = { background: "white", border: `1px solid ${colors.line}`, borderRadius: 10, padding: 16 };
+
+const sectionForTab: Record<Tab, MainSection> = {
+  kerja: "kerja", akuntansi: "pembukuan", transaksi: "pembukuan", panduan: "tutup",
+  rekonsiliasi: "tutup", badan: "pajak", pph21: "pajak", fiskal: "pajak", laporan: "laporan",
+};
+const mainSections: Array<{ key: MainSection; label: string; icon: typeof BookOpenCheck; initial: Tab }> = [
+  { key: "kerja", label: "Pekerjaan Saya", icon: BookOpenCheck, initial: "kerja" },
+  { key: "pembukuan", label: "Pembukuan", icon: Landmark, initial: "akuntansi" },
+  { key: "tutup", label: "Tutup Buku", icon: ClipboardCheck, initial: "panduan" },
+  { key: "pajak", label: "Pajak", icon: Calculator, initial: "badan" },
+  { key: "laporan", label: "Laporan", icon: FileText, initial: "laporan" },
+];
+const subSections: Partial<Record<MainSection, Array<[Tab, string]>>> = {
+  pembukuan: [["akuntansi", "Jurnal dari Keuangan"], ["transaksi", "Review Pajak Transaksi"]],
+  tutup: [["panduan", "Checklist Tutup Buku"], ["rekonsiliasi", "Rekonsiliasi & Kepatuhan"]],
+  pajak: [["badan", "Profil Badan"], ["pph21", "Payroll & PPh 21"], ["fiskal", "Fiskal & PPh Badan"]],
+};
 
 function rupiah(value: number) { return `Rp ${Math.round(value).toLocaleString("id-ID")}`; }
 function monthKey(date: string) { const m = date?.match(/^(\d{4})-(\d{2})/); return m ? `${m[1]}-${m[2]}` : ""; }
@@ -44,7 +63,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 export default function PajakPage() {
   const { user, hasAccess } = useAuth();
   const { karyawan, gaji, loading } = useKaryawan();
-  const [tab, setTab] = useState<Tab>("ringkasan");
+  const [tab, setTab] = useState<Tab>("kerja");
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [query, setQuery] = useState("");
@@ -128,6 +147,7 @@ export default function PajakPage() {
   const periodLocked = savedPeriodRows.length > 0 && savedPeriodRows.every(p => p.status === "locked");
   const priorMonthsComplete = month !== 12 || Array.from({length:11},(_,i)=>i+1).every(m => periods.some(p => p.tax_year === year && p.tax_month === m && p.status === "locked"));
   const allowed = user?.role === "owner" || hasAccess("pajak");
+  const activeSection = sectionForTab[tab];
 
   const persistPeriod = (lock: boolean) => startSaving(async () => {
     if (dbStatus !== "connected") { setMessage("Jalankan migrasi database pajak terlebih dahulu."); return; }
@@ -151,35 +171,37 @@ export default function PajakPage() {
 
   if (!allowed) return <div style={{ padding: 24 }}><div style={cardStyle}>Anda tidak memiliki akses ke modul pajak.</div></div>;
 
-  return <div style={{ padding: "20px 24px 36px", color: colors.ink, maxWidth: 1450, margin: "0 auto" }}>
-    <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 16 }}>
-      <div><h1 style={{ fontSize: 20, fontWeight: 800, margin: 0 }}>Akuntansi & Pajak</h1><p style={{ margin: "4px 0 0", color: colors.med, fontSize: 12 }}>Pencatatan, rekonsiliasi, kontrol kepatuhan, dan kertas kerja pajak dari data ERP.</p></div>
-      <button disabled={isSaving} onClick={saveDrafts} style={{ display: "flex", alignItems: "center", gap: 7, border: 0, borderRadius: 7, padding: "9px 14px", background: colors.accent, color: "white", fontSize: 12, fontWeight: 700, cursor: isSaving ? "wait" : "pointer", opacity: isSaving ? .7 : 1 }}><Save size={15}/>{saved || (isSaving ? "Menyimpan..." : "Simpan profil")}</button>
+  return <div className="page-content" style={{ color: colors.ink, width: "100%", maxWidth: "none", margin: 0, boxSizing: "border-box" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 14 }}>
+      <div><h1 style={{ fontSize: 20, fontWeight: 800, margin: 0 }}>Akuntansi & Pajak</h1><p style={{ margin: "4px 0 0", color: colors.med, fontSize: 12 }}>Ruang kerja admin untuk pembukuan, tutup buku, pajak, dan laporan perusahaan.</p></div>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 8, flexWrap: "wrap" }}>
+        <Field label="Tahun"><input aria-label="Tahun kerja" type="number" style={{ ...inputStyle, width: 92 }} value={year} onChange={e => setYear(Number(e.target.value))}/></Field>
+        <Field label="Periode"><select aria-label="Periode kerja" style={{ ...inputStyle, width: 132 }} value={month} onChange={e => setMonth(Number(e.target.value))}>{Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>{new Date(2020, i, 1).toLocaleDateString("id-ID", { month: "long" })}</option>)}</select></Field>
+        {activeSection === "pajak" ? <button disabled={isSaving} onClick={saveDrafts} style={{ display: "flex", alignItems: "center", gap: 7, border: 0, borderRadius: 7, padding: "9px 14px", background: colors.accent, color: "white", fontSize: 12, fontWeight: 700, cursor: isSaving ? "wait" : "pointer", opacity: isSaving ? .7 : 1 }}><Save size={15}/>{saved || (isSaving ? "Menyimpan..." : "Simpan profil")}</button> : null}
+      </div>
     </div>
 
-    <div style={{ display: "flex", gap: 4, padding: 4, background: colors.soft, borderRadius: 9, width: "fit-content", maxWidth:"100%", overflowX:"auto", marginBottom: 16 }}>
-      {([['ringkasan','Ringkasan'],['panduan','Panduan & Checklist'],['badan','Profil Badan'],['transaksi','Transaksi Pajak'],['akuntansi','Akuntansi'],['pph21','Payroll & PPh 21'],['fiskal','Fiskal & PPh Badan'],['rekonsiliasi','Ekualisasi & Kepatuhan'],['laporan','Laporan']] as [Tab,string][]).map(([key,label]) => <button key={key} onClick={() => setTab(key)} style={{ border: 0, borderRadius: 6, padding: "8px 13px", background: tab === key ? "white" : "transparent", color: tab === key ? colors.ink : colors.med, boxShadow: tab === key ? "0 1px 3px rgba(92,64,51,.12)" : "none", fontSize: 12, fontWeight: 700, whiteSpace:"nowrap", flexShrink:0, cursor: "pointer" }}>{label}</button>)}
-    </div>
+    <nav aria-label="Menu utama akuntansi" style={{ display: "flex", gap: 5, padding: 5, background: colors.soft, borderRadius: 10, maxWidth: "100%", overflowX: "auto", marginBottom: 8 }}>
+      {mainSections.map(({ key, label, icon: Icon, initial }) => <button key={key} type="button" onClick={() => setTab(initial)} style={{ border: 0, borderRadius: 7, padding: "9px 12px", background: activeSection === key ? "white" : "transparent", color: activeSection === key ? colors.ink : colors.med, boxShadow: activeSection === key ? "0 1px 3px rgba(92,64,51,.12)" : "none", fontSize: 11, fontWeight: 800, whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}><Icon size={14}/>{label}</button>)}
+    </nav>
 
-    <div style={{ display: "flex", alignItems: "flex-start", gap: 8, border: dbStatus === "connected" ? "1px solid #BBE2C5" : "1px solid #F3D08B", background: dbStatus === "connected" ? "#F0FBF3" : "#FFF9E8", borderRadius: 8, padding: "10px 12px", marginBottom: 16, fontSize: 11, color: dbStatus === "connected" ? colors.green : "#875F13" }}>{dbStatus === "connected" ? <Database size={16}/> : <AlertTriangle size={16}/>}<span>{dbStatus === "connected" ? "Database pajak terhubung. Profil dan masa pajak dapat disimpan, lalu dikunci setelah diperiksa." : dbStatus === "loading" ? "Memeriksa koneksi database pajak..." : dbStatus === "migration-required" ? "Mode local aktif. Migrasi database pajak belum diterapkan, sehingga data tetap disimpan sebagai draft di browser." : "Database pajak belum dapat diakses. Draft browser tetap dapat digunakan."} Perhitungan tidak otomatis memotong gaji atau mengirim data ke Coretax.</span></div>
+    {subSections[activeSection] ? (
+      <nav aria-label="Submenu akuntansi" style={{ display: "flex", gap: 4, maxWidth: "100%", overflowX: "auto", marginBottom: 14, paddingLeft: 5 }}>
+        {subSections[activeSection]?.map(([key, label]) => <button key={key} type="button" onClick={() => setTab(key)} style={{ border: 0, borderBottom: tab === key ? `2px solid ${colors.accent}` : "2px solid transparent", padding: "7px 9px", background: "transparent", color: tab === key ? colors.ink : colors.med, fontSize: 10, fontWeight: 700, whiteSpace: "nowrap", cursor: "pointer" }}>{label}</button>)}
+      </nav>
+    ) : (
+      <div style={{ height: 6 }}/>
+    )}
+
+    {(dbStatus !== "connected" || tab === "kerja") ? <div style={{ display: "flex", alignItems: "flex-start", gap: 8, border: dbStatus === "connected" ? "1px solid #BBE2C5" : "1px solid #F3D08B", background: dbStatus === "connected" ? "#F0FBF3" : "#FFF9E8", borderRadius: 8, padding: "9px 11px", marginBottom: 12, fontSize: 10, color: dbStatus === "connected" ? colors.green : "#875F13" }}>{dbStatus === "connected" ? <Database size={15}/> : <AlertTriangle size={15}/>}<span>{dbStatus === "connected" ? "Database terhubung. Data pekerjaan dan profil dapat digunakan bersama oleh admin finance dan owner." : dbStatus === "loading" ? "Memeriksa koneksi database..." : dbStatus === "migration-required" ? "Mode lokal aktif. Data baru disimpan sebagai draft di browser sampai migrasi workspace dijalankan." : "Database belum dapat diakses. Draft browser tetap dapat digunakan."} Sistem tidak mengirim atau melaporkan data otomatis ke Coretax.</span></div> : null}
     {message ? <div role="status" style={{border:`1px solid ${colors.line}`,background:"white",borderRadius:8,padding:"9px 12px",marginBottom:12,fontSize:11,display:"flex",justifyContent:"space-between",gap:12}}><span>{message}</span><button onClick={()=>setMessage("")} style={{border:0,background:"transparent",cursor:"pointer",color:colors.med}}>Tutup</button></div> : null}
 
-    {tab === "ringkasan" && <>
+    {tab === "kerja" && <>
       <TaxDashboard year={year} month={month} isPkp={entity.pkp} employeeConfigured={configured} employeeTotal={karyawan.length}/>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))", gap: 12, marginBottom: 14 }}>
-        {[
-          [Building2,"Profil badan",entity.npwp ? "Sudah diisi" : "NPWP belum diisi"],
-          [Users,"Profil pajak karyawan",`${configured} dari ${karyawan.length} lengkap`],
-          [Calculator,"PPh 21 periode",rupiah(taxTotal)],
-          [ShieldCheck,"Status data",periodLocked ? "Masa pajak terkunci" : savedPeriodRows.length ? "Draft database" : dbStatus === "connected" ? "Belum disimpan" : "Draft local"],
-        ].map(([Icon,label,value]) => { const I = Icon as typeof Building2; return <div key={String(label)} style={cardStyle}><div style={{ display: "flex", alignItems: "center", gap: 8, color: colors.med, fontSize: 11, fontWeight: 700 }}><I size={16}/>{String(label)}</div><div style={{ marginTop: 10, fontSize: 17, fontWeight: 800 }}>{String(value)}</div></div> })}
-      </div>
-      <div style={cardStyle}><h2 style={{ fontSize: 14, margin: "0 0 12px" }}>Kesiapan implementasi</h2>{[
-        [!!entity.npwp,"Identitas dan NPWP badan"],[configured === karyawan.length && karyawan.length > 0,"NIK dan PTKP seluruh karyawan"],[gaji.length > 0,"Data penggajian tersedia"],[dbStatus === "connected","Migrasi database pajak diterapkan"],[periodLocked,"Masa pajak terverifikasi dan dikunci"],
-      ].map(([ok,label]) => <div key={String(label)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 0", borderBottom: `1px solid ${colors.soft}`, fontSize: 12 }}><CheckCircle2 size={16} color={ok ? colors.green : "#B8A89B"}/><span style={{ color: ok ? colors.ink : colors.med }}>{String(label)}</span></div>)}</div>
+      <AccountingAdminWorkspace year={year} month={month} onOpen={view => setTab(view)}/>
     </>}
 
-    {tab === "panduan" && <><div style={{display:"flex",gap:10,alignItems:"end",marginBottom:12,flexWrap:"wrap"}}><Field label="Tahun"><input type="number" style={{...inputStyle,width:100}} value={year} onChange={e=>setYear(Number(e.target.value))}/></Field><Field label="Bulan"><select style={{...inputStyle,width:145}} value={month} onChange={e=>setMonth(Number(e.target.value))}>{Array.from({length:12},(_,i)=><option key={i+1} value={i+1}>{new Date(2020,i,1).toLocaleDateString("id-ID",{month:"long"})}</option>)}</select></Field></div><TaxWorkflowGuide year={year} month={month}/></>}
+    {tab === "panduan" ? <TaxWorkflowGuide year={year} month={month}/> : null}
 
     {tab === "badan" && <div style={cardStyle}>
       <div style={{ marginBottom: 14 }}><h2 style={{ fontSize: 14, margin: 0 }}>Profil wajib pajak badan</h2><p style={{ fontSize: 11, color: colors.med, margin: "4px 0 0" }}>Isi sesuai dokumen resmi CV Toto. Nilai contoh spreadsheet tidak digunakan.</p></div>
@@ -194,35 +216,18 @@ export default function PajakPage() {
       </div>
     </div>}
 
-    {tab === "transaksi" && <>
-      <div style={{display:"flex",gap:10,alignItems:"end",marginBottom:12}}><Field label="Tahun"><input type="number" style={{...inputStyle,width:100}} value={year} onChange={e=>setYear(Number(e.target.value))}/></Field><Field label="Masa pajak"><select style={{...inputStyle,width:145}} value={month} onChange={e=>setMonth(Number(e.target.value))}>{Array.from({length:12},(_,i)=><option key={i+1} value={i+1}>{new Date(2020,i,1).toLocaleDateString("id-ID",{month:"long"})}</option>)}</select></Field></div>
-      <TaxTransactionLedger year={year} month={month}/>
-    </>}
+    {tab === "transaksi" ? <TaxTransactionLedger year={year} month={month}/> : null}
 
-    {tab === "akuntansi" && <>
-      <div style={{display:"flex",gap:10,alignItems:"end",marginBottom:12}}><Field label="Tahun"><input type="number" style={{...inputStyle,width:100}} value={year} onChange={e=>setYear(Number(e.target.value))}/></Field><Field label="Periode jurnal"><select style={{...inputStyle,width:145}} value={month} onChange={e=>setMonth(Number(e.target.value))}>{Array.from({length:12},(_,i)=><option key={i+1} value={i+1}>{new Date(2020,i,1).toLocaleDateString("id-ID",{month:"long"})}</option>)}</select></Field></div>
-      <AccountingJournal year={year} month={month}/>
-    </>}
+    {tab === "akuntansi" ? <AccountingJournal year={year} month={month}/> : null}
 
-    {tab === "fiskal" && <>
-      <div style={{display:"flex",gap:10,alignItems:"end",marginBottom:12}}><Field label="Tahun pajak"><input type="number" style={{...inputStyle,width:110}} value={year} onChange={e=>setYear(Number(e.target.value))}/></Field></div>
-      <FiscalCorporateTax year={year} regime={entity.regime}/>
-    </>}
+    {tab === "fiskal" ? <FiscalCorporateTax year={year} regime={entity.regime}/> : null}
 
-    {tab === "rekonsiliasi" && <>
-      <div style={{display:"flex",gap:10,alignItems:"end",marginBottom:12,flexWrap:"wrap"}}><Field label="Tahun"><input type="number" style={{...inputStyle,width:100}} value={year} onChange={e=>setYear(Number(e.target.value))}/></Field><Field label="Masa pajak"><select style={{...inputStyle,width:145}} value={month} onChange={e=>setMonth(Number(e.target.value))}>{Array.from({length:12},(_,i)=><option key={i+1} value={i+1}>{new Date(2020,i,1).toLocaleDateString("id-ID",{month:"long"})}</option>)}</select></Field></div>
-      <TaxReconciliationCompliance year={year} month={month} isPkp={entity.pkp}/>
-    </>}
+    {tab === "rekonsiliasi" ? <TaxReconciliationCompliance year={year} month={month} isPkp={entity.pkp}/> : null}
 
-    {tab === "laporan" && <>
-      <div style={{display:"flex",gap:10,alignItems:"end",marginBottom:12}}><Field label="Tahun laporan"><input type="number" style={{...inputStyle,width:110}} value={year} onChange={e=>setYear(Number(e.target.value))}/></Field></div>
-      <TaxReports year={year} entityName={entity.legalName} npwp={entity.npwp}/>
-    </>}
+    {tab === "laporan" ? <TaxReports year={year} entityName={entity.legalName} npwp={entity.npwp}/> : null}
 
     {tab === "pph21" && <>
       <div style={{ ...cardStyle, padding: 12, marginBottom: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "end" }}>
-        <Field label="Tahun"><input type="number" style={{...inputStyle,width:100}} value={year} onChange={e=>setYear(Number(e.target.value))}/></Field>
-        <Field label="Masa pajak"><select style={{...inputStyle,width:145}} value={month} onChange={e=>setMonth(Number(e.target.value))}>{Array.from({length:12},(_,i)=><option key={i+1} value={i+1}>{new Date(2020,i,1).toLocaleDateString("id-ID",{month:"long"})}</option>)}</select></Field>
         <Field label="Cari karyawan"><div style={{ position:"relative" }}><Search size={14} style={{position:"absolute",left:9,top:9,color:colors.med}}/><input style={{...inputStyle,paddingLeft:30,width:220}} value={query} onChange={e=>setQuery(e.target.value)} placeholder="Nama karyawan"/></div></Field>
         <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}><span style={{fontSize:11,color:colors.med}}>Bruto {rupiah(grossTotal)} · PPh 21 {rupiah(taxTotal)}</span><button disabled={isSaving || periodLocked} onClick={()=>persistPeriod(false)} style={{border:`1px solid ${colors.line}`,background:"white",borderRadius:7,padding:"7px 10px",fontSize:11,fontWeight:700,cursor:periodLocked?"not-allowed":"pointer",color:colors.ink}}>Simpan draft masa</button><button disabled={isSaving || periodLocked} onClick={()=>persistPeriod(true)} style={{border:0,background:periodLocked?"#D7C9BC":colors.accent,color:"white",borderRadius:7,padding:"8px 11px",fontSize:11,fontWeight:700,cursor:periodLocked?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:5}}><Lock size={13}/>{periodLocked?"Sudah dikunci":"Kunci masa"}</button></div>
       </div>
