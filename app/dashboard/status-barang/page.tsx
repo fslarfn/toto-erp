@@ -1,6 +1,8 @@
 "use client";
-import { useState, useMemo, useDeferredValue } from "react";
+import { useState, useMemo, useDeferredValue, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
+import { useAuth } from "@/lib/auth";
 import { PesananRow, isRowFilled } from "@/lib/pesanan-store";
 import { useStatusBarangRows } from "./hooks/useStatusBarangRows";
 import { VirtualTable } from "./components/VirtualTable";
@@ -10,6 +12,8 @@ import { LocalImportExcel } from "./components/LocalImportExcel";
 const MONTH_NAMES = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
 
 export default function StatusBarangPage() {
+    const router = useRouter();
+    const { user } = useAuth();
     const now = new Date();
     const [month, setMonth] = useState(now.getMonth() + 1);
     const [year, setYear] = useState(now.getFullYear());
@@ -25,21 +29,27 @@ export default function StatusBarangPage() {
 
     const flashSaved = () => { setSavedFlash(true); setTimeout(() => setSavedFlash(false), 2000); };
 
+    const openPaymentReconciliation = useCallback((row: PesananRow) => {
+        if (user?.role !== "owner" && user?.role !== "finance") {
+            alert("Status pembayaran dikelola oleh admin finance melalui Rekonsiliasi Pembayaran.");
+            return;
+        }
+        const invoice = row.no_inv?.trim() || `ROW:${row.id}`;
+        router.push(`/dashboard/keuangan/rekonsiliasi?invoice=${encodeURIComponent(invoice)}`);
+    }, [router, user?.role]);
+
     const handleUpdate = async (id: number, patch: Partial<PesananRow>) => {
         try {
             await updateLocalRow(id, patch);
             flashSaved();
-        } catch (err) {
+        } catch {
             alert("Gagal menyimpan perubahan.");
         }
     };
 
     const handleImport = async (newRows: Partial<PesananRow>[]) => {
         // Simple import implementation to avoid modifying global importRows logic
-        for (const r of newRows) {
-            // This is just a placeholder for demo, ideally we do a bulk insert via an API or use store
-            // But since we can't touch store logic, we stick to our local mutate for UI
-        }
+        if (!newRows.length) return;
         mutate();
         flashSaved();
     };
@@ -148,13 +158,14 @@ export default function StatusBarangPage() {
                 {filtered.length === 0 && !isLoading ? (
                     <div style={{ textAlign: "center", marginTop: 40, color: "#C5A882" }}>Tidak ada data.</div>
                 ) : viewMode === "order" ? (
-                    <OrderView rows={filtered} onUpdate={handleUpdate} />
+                    <OrderView key={`${statusFilter}-${month}-${year}-${deferredSearch}`} rows={filtered} onUpdate={handleUpdate} onReconcilePayment={openPaymentReconciliation} />
                 ) : (
                     <VirtualTable
                         key={`${statusFilter}-${month}-${year}-${deferredSearch}-${filtered.length}`}
                         rows={filtered}
                         viewMode={viewMode}
                         onUpdate={handleUpdate}
+                        onReconcilePayment={openPaymentReconciliation}
                     />
                 )}
             </div>

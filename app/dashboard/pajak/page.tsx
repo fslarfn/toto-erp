@@ -14,8 +14,9 @@ import TaxReconciliationCompliance from "@/components/pajak/TaxReconciliationCom
 import TaxReports from "@/components/pajak/TaxReports";
 import TaxWorkflowGuide from "@/components/pajak/TaxWorkflowGuide";
 import AccountingAdminWorkspace from "@/components/pajak/AccountingAdminWorkspace";
+import AccountingPeriodClose from "@/components/pajak/AccountingPeriodClose";
 
-type Tab = "kerja" | "panduan" | "badan" | "transaksi" | "akuntansi" | "pph21" | "fiskal" | "rekonsiliasi" | "laporan";
+type Tab = "kerja" | "panduan" | "badan" | "transaksi" | "akuntansi" | "penyesuaian" | "pph21" | "fiskal" | "rekonsiliasi" | "laporan";
 type MainSection = "kerja" | "pembukuan" | "tutup" | "pajak" | "laporan";
 type EntityDraft = { legalName: string; npwp: string; nitku: string; address: string; businessType: string; pkp: boolean; regime: string };
 type Profiles = Record<number, { nik: string; npwp: string; ptkp: PtkpStatus; method: "gross" | "gross_up" | "net" }>;
@@ -31,7 +32,7 @@ const inputStyle: React.CSSProperties = { width: "100%", border: `1px solid ${co
 const cardStyle: React.CSSProperties = { background: "white", border: `1px solid ${colors.line}`, borderRadius: 10, padding: 16 };
 
 const sectionForTab: Record<Tab, MainSection> = {
-  kerja: "kerja", akuntansi: "pembukuan", transaksi: "pembukuan", panduan: "tutup",
+  kerja: "kerja", akuntansi: "pembukuan", transaksi: "pembukuan", panduan: "tutup", penyesuaian:"tutup",
   rekonsiliasi: "tutup", badan: "pajak", pph21: "pajak", fiskal: "pajak", laporan: "laporan",
 };
 const mainSections: Array<{ key: MainSection; label: string; icon: typeof BookOpenCheck; initial: Tab }> = [
@@ -43,7 +44,7 @@ const mainSections: Array<{ key: MainSection; label: string; icon: typeof BookOp
 ];
 const subSections: Partial<Record<MainSection, Array<[Tab, string]>>> = {
   pembukuan: [["akuntansi", "Jurnal dari Keuangan"], ["transaksi", "Review Pajak Transaksi"]],
-  tutup: [["panduan", "Checklist Tutup Buku"], ["rekonsiliasi", "Rekonsiliasi & Kepatuhan"]],
+  tutup: [["panduan", "Checklist Tutup Buku"], ["penyesuaian", "Penyesuaian & Kunci"], ["rekonsiliasi", "Rekonsiliasi & Kepatuhan"]],
   pajak: [["badan", "Profil Badan"], ["pph21", "Payroll & PPh 21"], ["fiskal", "Fiskal & PPh Badan"]],
 };
 
@@ -220,11 +221,13 @@ export default function PajakPage() {
 
     {tab === "akuntansi" ? <AccountingJournal year={year} month={month}/> : null}
 
+    {tab === "penyesuaian" ? <AccountingPeriodClose year={year} month={month}/> : null}
+
     {tab === "fiskal" ? <FiscalCorporateTax year={year} regime={entity.regime}/> : null}
 
     {tab === "rekonsiliasi" ? <TaxReconciliationCompliance year={year} month={month} isPkp={entity.pkp}/> : null}
 
-    {tab === "laporan" ? <TaxReports year={year} entityName={entity.legalName} npwp={entity.npwp}/> : null}
+    {tab === "laporan" ? <TaxReports year={year} month={month} entityName={entity.legalName} npwp={entity.npwp}/> : null}
 
     {tab === "pph21" && <>
       <div style={{ ...cardStyle, padding: 12, marginBottom: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "end" }}>

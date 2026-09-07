@@ -10,6 +10,7 @@ type Props = {
     activeCell: { id: number; key: string } | null;
     setActiveCell: (cell: { id: number; key: string } | null) => void;
     onUpdate: (id: number, patch: Partial<PesananRow>) => void;
+    onReconcilePayment: (row: PesananRow) => void;
     colorRowId: number | null;
     setColorRowId: (id: number | null) => void;
 };
@@ -23,12 +24,13 @@ const ROW_COLORS = [
     { label: "Ungu", value: "#E1BEE7" },
     { label: "Oranye", value: "#FFE0B2" },
 ];
+type CellOptions = { align?: "left" | "center" | "right"; mono?: boolean; type?: "text" | "number" | "date" };
 
 /**
  * Memoized Individual Row with scoped editing logic (SCOPE LOCK)
  */
 export const StatusRow = memo(function StatusRow({
-    row, idx, viewMode, activeCell, setActiveCell, onUpdate, colorRowId, setColorRowId
+    row, idx, viewMode, activeCell, setActiveCell, onUpdate, onReconcilePayment, colorRowId, setColorRowId
 }: Props) {
     const rowBg = row.color_marker || "white";
 
@@ -42,9 +44,9 @@ export const StatusRow = memo(function StatusRow({
 
     const isEditing = (key: string) => activeCell?.id === row.id && activeCell?.key === key;
 
-    const renderCell = (key: keyof PesananRow, width: number, options: any = {}) => (
+    const renderCell = (key: keyof PesananRow, width: number, options: CellOptions = {}) => (
         <StatusCell
-            value={row[key] as any}
+            value={row[key] as string | number | null | undefined}
             width={width}
             isEditing={isEditing(key)}
             onEdit={() => setActiveCell({ id: row.id, key })}
@@ -56,6 +58,10 @@ export const StatusRow = memo(function StatusRow({
 
     const renderCheck = (key: keyof PesananRow, width: number) => {
         const handleCheckUpdate = (checked: boolean) => {
+            if (key === "is_paid") {
+                onReconcilePayment(row);
+                return;
+            }
             // shipped_at kolom TIMESTAMP di DB → kosongkan dgn null, BUKAN ""
             // (Postgres menolak string kosong untuk timestamp).
             const patch: Omit<Partial<PesananRow>, "shipped_at"> & { shipped_at?: string | null } = { [key]: checked };
@@ -117,6 +123,7 @@ export const StatusRow = memo(function StatusRow({
                     type="checkbox"
                     checked={!!row[key]}
                     onChange={(e) => handleCheckUpdate(e.target.checked)}
+                    title={key === "is_paid" ? "Kelola melalui Rekonsiliasi Pembayaran" : undefined}
                     style={{ accentColor: "#A67B5B", width: 14, height: 14, cursor: "pointer" }}
                 />
             </td>
@@ -187,6 +194,7 @@ export const StatusRow = memo(function StatusRow({
     return (
         prev.row === next.row &&
         prev.viewMode === next.viewMode &&
+        prev.onReconcilePayment === next.onReconcilePayment &&
         prev.colorRowId === next.colorRowId &&
         prev.activeCell?.id === next.activeCell?.id &&
         prev.activeCell?.key === next.activeCell?.key

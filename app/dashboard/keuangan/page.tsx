@@ -11,8 +11,8 @@ import { isCashFlowJournalLocked } from "@/lib/pajak/store";
 const BANK_ACCOUNTS = ["Bank BCA Toto", "Bank BCA Yanto", "Cash"];
 // Paginasi riwayat transaksi — meniru pola Input Pesanan (100 baris/halaman).
 const PAGE_SIZE = 100;
-const CATEGORIES_IN = ["Pembayaran Invoice", "DP Invoice", "Penjualan", "Lainnya"];
-const CATEGORIES_OUT = ["Bahan Baku", "Gaji", "Operasional", "Transportasi", "Perawatan Mesin", "Lainnya"];
+const CATEGORIES_IN = ["Penerimaan Belum Teridentifikasi", "Pembayaran Invoice", "DP Invoice", "Penjualan", "Setoran Modal", "Penerimaan Pinjaman", "Lainnya"];
+const CATEGORIES_OUT = ["Pembayaran Supplier", "Bahan Baku", "Gaji", "Pewarnaan", "Ongkos Produksi", "Ongkos Jalan Produksi", "Operasional", "Transportasi", "Perawatan Mesin", "Administrasi dan Kantor", "Penjualan dan Pemasaran", "Sewa", "Pembelian Aset", "Pembayaran Pajak", "Cicilan Pinjaman", "Prive Owner", "Lainnya"];
 
 // Saran auto-kategori berdasarkan kata kunci keterangan → konsistensi laporan.
 const CATEGORY_KEYWORDS: { kws: string[]; category: string; type: "income" | "expense" }[] = [
@@ -24,6 +24,11 @@ const CATEGORY_KEYWORDS: { kws: string[]; category: string; type: "income" | "ex
     { kws: ["pelunasan", "lunas", "pembayaran invoice", "bayar invoice"], category: "Pembayaran Invoice", type: "income" },
     { kws: ["dp ", "down payment", "uang muka", "panjar"], category: "DP Invoice", type: "income" },
     { kws: ["penjualan", "omzet"], category: "Penjualan", type: "income" },
+    { kws: ["prive", "penarikan owner", "ambil owner"], category: "Prive Owner", type: "expense" },
+    { kws: ["bayar supplier", "pelunasan supplier", "tagihan supplier"], category: "Pembayaran Supplier", type: "expense" },
+    { kws: ["beli mesin", "beli kendaraan", "aset tetap", "peralatan baru"], category: "Pembelian Aset", type: "expense" },
+    { kws: ["setoran modal", "tambahan modal"], category: "Setoran Modal", type: "income" },
+    { kws: ["pinjaman bank", "pencairan pinjaman"], category: "Penerimaan Pinjaman", type: "income" },
 ];
 
 function suggestCategory(desc: string, type: "income" | "expense"): string | null {
@@ -66,7 +71,7 @@ export default function KeuanganPage() {
     const [form, setForm] = useState<FormState>({
         tanggal: now.toISOString().slice(0, 10),
         type: "income",
-        category: "Pembayaran Invoice",
+        category: "Penerimaan Belum Teridentifikasi",
         amount: "",
         kas: "Bank BCA Toto",
         keterangan: "",
@@ -247,6 +252,7 @@ export default function KeuanganPage() {
                     <p className="page-subtitle">Manajemen kas dan riwayat transaksi</p>
                 </div>
                 <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                    <Link href="/dashboard/keuangan/rekonsiliasi" className="btn btn-primary" style={{fontSize:13,textDecoration:"none"}}>Rekonsiliasi Pembayaran</Link>
                     <Link href="/dashboard/pajak" className="btn btn-secondary" style={{fontSize:13,textDecoration:"none"}}>Akuntansi & Pajak</Link>
                     <button
                         onClick={handleSync}
@@ -322,7 +328,7 @@ export default function KeuanganPage() {
                             </div>
                             <div>
                                 <label className="form-label">Tipe</label>
-                                <select value={form.type} onChange={(e) => setForm((p) => ({ ...p, type: e.target.value as "income" | "expense", category: e.target.value === "income" ? "Pembayaran Invoice" : "Bahan Baku" }))} className="form-select">
+                                <select value={form.type} onChange={(e) => setForm((p) => ({ ...p, type: e.target.value as "income" | "expense", category: e.target.value === "income" ? "Penerimaan Belum Teridentifikasi" : "Bahan Baku" }))} className="form-select">
                                     <option value="income">Pemasukan</option>
                                     <option value="expense">Pengeluaran</option>
                                 </select>

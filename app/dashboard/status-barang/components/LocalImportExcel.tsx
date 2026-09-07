@@ -21,7 +21,6 @@ const COL_MAP: Record<string, keyof PesananRow> = {
     "siap kirim": "siap_kirim", siap: "siap_kirim",
     "di kirim": "di_kirim", kirim: "di_kirim",
     ekspedisi: "ekspedisi", courier: "ekspedisi", pengiriman: "ekspedisi",
-    "pembayaran": "is_paid", bayar: "is_paid", lunas: "is_paid", paid: "is_paid",
 };
 
 export function LocalImportExcel({ onImport }: Props) {
@@ -32,8 +31,8 @@ export function LocalImportExcel({ onImport }: Props) {
     const [parsedData, setParsedData] = useState<Partial<PesananRow>[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const parseBool = (v: any) => ["true", "1", "ya", "yes", "✓", "v", "x"].includes(String(v || "").toLowerCase());
-    const parseDate = (v: any) => {
+    const parseBool = (v: unknown) => ["true", "1", "ya", "yes", "✓", "v", "x"].includes(String(v || "").toLowerCase());
+    const parseDate = (v: unknown) => {
         if (typeof v === "number") return new Date(Math.round((v - 25569) * 86400 * 1000)).toISOString().slice(0, 10);
         const m = String(v || "").match(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})/);
         if (m) return `${m[3].length === 2 ? "20" + m[3] : m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
@@ -46,12 +45,14 @@ export function LocalImportExcel({ onImport }: Props) {
         const reader = new FileReader();
         reader.onload = (ev) => {
             const wb = XLSX.read(ev.target?.result, { type: "array" });
-            let bestSheet = wb.SheetNames[0], bestScore = -1, bestRaw: any[] = [], bestMap: any = {};
+            let bestSheet = wb.SheetNames[0], bestScore = -1;
+            let bestRaw: Record<string, unknown>[] = [];
+            let bestMap: Record<string, keyof PesananRow> = {};
             
             wb.SheetNames.forEach(name => {
-                const raw: any[] = XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: "" });
+                const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[name], { defval: "" });
                 if (raw.length === 0) return;
-                const hMap: any = {};
+                const hMap: Record<string, keyof PesananRow> = {};
                 Object.keys(raw[0]).forEach(h => {
                     const mapped = COL_MAP[h.toLowerCase().trim()];
                     if (mapped) hMap[h] = mapped;
@@ -65,13 +66,13 @@ export function LocalImportExcel({ onImport }: Props) {
             if (bestScore === 0) return alert("Header tidak cocok.");
 
             const parsed = bestRaw.filter(r => Object.values(r).some(v => !!v)).map(r => {
-                const row: any = {};
+                const row: Record<string, unknown> = {};
                 Object.entries(bestMap).forEach(([h, k]) => {
-                    if (["di_produksi", "di_warna", "siap_kirim", "di_kirim", "is_paid"].includes(k as string)) row[k as string] = parseBool(r[h as string]);
+                    if (["di_produksi", "di_warna", "siap_kirim", "di_kirim"].includes(k as string)) row[k as string] = parseBool(r[h as string]);
                     else if (k === "tanggal") row[k as string] = parseDate(r[h as string]);
                     else row[k as string] = String(r[h as string] ?? "");
                 });
-                return row;
+                return row as Partial<PesananRow>;
             });
 
             setCount(parsed.length);

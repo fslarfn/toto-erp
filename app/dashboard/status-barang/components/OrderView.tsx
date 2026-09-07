@@ -59,6 +59,7 @@ interface OrderGroup {
 type Props = {
     rows: PesananRow[];
     onUpdate: (id: number, patch: Partial<PesananRow>) => void;
+    onReconcilePayment: (row: PesananRow) => void;
 };
 
 /** Checkbox yang mendukung kondisi "sebagian" (indeterminate). */
@@ -82,7 +83,7 @@ function TriCheckbox({ all, some, onToggle, title }: { all: boolean; some: boole
 // Batas render bertahap — ratusan kartu sekaligus membekukan browser.
 const CHUNK = 50;
 
-export function OrderView({ rows, onUpdate }: Props) {
+export function OrderView({ rows, onUpdate, onReconcilePayment }: Props) {
     const [openKeys, setOpenKeys] = useState<Set<string>>(new Set());
     const [limit, setLimit] = useState(CHUNK);
 
@@ -104,8 +105,6 @@ export function OrderView({ rows, onUpdate }: Props) {
         return [...map.values()];
     }, [rows]);
 
-    // Filter/bulan berubah → mulai lagi dari 50 pertama.
-    useEffect(() => { setLimit(CHUNK); }, [groups.length]);
     const visibleGroups = groups.slice(0, limit);
 
     const toggleOpen = (key: string) => {
@@ -135,13 +134,8 @@ export function OrderView({ rows, onUpdate }: Props) {
         }
     };
 
-    const setPaidForGroup = (g: OrderGroup, checked: boolean) => {
-        if (!checked && g.items.length > 1) {
-            if (!window.confirm(`Tandai BELUM BAYAR untuk ${g.items.length} item order ini?`)) return;
-        }
-        for (const item of g.items) {
-            if (!!item.is_paid !== checked) onUpdate(item.id, { is_paid: checked });
-        }
+    const setPaidForGroup = (g: OrderGroup) => {
+        onReconcilePayment(g.items[0]);
     };
 
     const badgeOf = (g: OrderGroup) => {
@@ -199,7 +193,7 @@ export function OrderView({ rows, onUpdate }: Props) {
                                         );
                                     })}
                                     <label style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, fontSize: 9.5, fontWeight: 700, color: allPaid ? "#15803D" : somePaid ? "#B45309" : "#8A7B6E", cursor: "pointer" }}>
-                                        <TriCheckbox all={allPaid} some={somePaid} title="Bayar — semua item" onToggle={(next) => setPaidForGroup(g, next)} />
+                                        <TriCheckbox all={allPaid} some={somePaid} title="Kelola pembayaran melalui Rekonsiliasi" onToggle={() => setPaidForGroup(g)} />
                                         💰 Bayar
                                     </label>
                                 </div>
@@ -240,7 +234,8 @@ export function OrderView({ rows, onUpdate }: Props) {
                                                         <input
                                                             type="checkbox"
                                                             checked={!!it.is_paid}
-                                                            onChange={(e) => onUpdate(it.id, { is_paid: e.target.checked })}
+                                                            onChange={() => onReconcilePayment(it)}
+                                                            title="Kelola melalui Rekonsiliasi Pembayaran"
                                                             style={{ accentColor: "#A67B5B", width: 13, height: 13, cursor: "pointer" }}
                                                         />
                                                     </td>

@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useMemo } from "react";
+import Link from "next/link";
 import { useStore } from "@/lib/store";
 import { usePesanan, PesananRow, isRowFilled } from "@/lib/pesanan-store";
 import { formatCurrency, parseIdNum } from "@/lib/utils";
@@ -16,7 +17,7 @@ import * as XLSX from "xlsx";
 const MONTH_NAMES = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
 const PIE_COLORS = ["#7c5c3e", "#a16207", "#d97706", "#f59e0b", "#fbbf24", "#fcd34d", "#fde68a", "#fef3c7", "#fffbeb", "#9ca3af"];
 
-function exportToExcel(data: any[], filename: string) {
+function exportToExcel(data: Record<string, unknown>[], filename: string) {
     if (data.length === 0) return alert("Tidak ada data untuk di ekspor.");
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
@@ -41,7 +42,7 @@ function getAgingCategory(hari: number) {
 }
 
 /* =========================================================
-   TAB 1: Laba Rugi
+   TAB 1: Arus Kas Operasional (bukan laba rugi akrual)
 ========================================================= */
 function TabLabaRugi() {
     const { cashFlow } = useStore();
@@ -107,7 +108,7 @@ function TabLabaRugi() {
             Tipe: c.type === "income" ? "Pemasukan" : "Pengeluaran",
             Jumlah: c.amount
         }));
-        exportToExcel(raw, `Laba_Rugi_${selectedPeriod}`);
+        exportToExcel(raw, `Arus_Kas_Operasional_${selectedPeriod}`);
     };
 
     return (
@@ -128,7 +129,7 @@ function TabLabaRugi() {
 
             <div className="rgrid rgrid-3" style={{ gap: 16, marginBottom: 24 }}>
                 <div style={{ padding: 16, borderRadius: 12, background: "#ECFDF5", border: "1px solid #A7F3D0" }}>
-                    <div style={{ fontSize: 13, color: "#065F46", fontWeight: 700 }}>Total Pendapatan</div>
+                    <div style={{ fontSize: 13, color: "#065F46", fontWeight: 700 }}>Penerimaan Kas</div>
                     <div style={{ fontSize: 24, fontWeight: 800, color: "#065F46" }}>{formatCurrency(income)}</div>
                 </div>
                 <div style={{ padding: 16, borderRadius: 12, background: "#FEF2F2", border: "1px solid #FECACA" }}>
@@ -136,7 +137,7 @@ function TabLabaRugi() {
                     <div style={{ fontSize: 24, fontWeight: 800, color: "#991B1B" }}>{formatCurrency(expense)}</div>
                 </div>
                 <div style={{ padding: 16, borderRadius: 12, background: profit >= 0 ? "#FFF8F0" : "#FEF2F2", border: `1px solid ${profit >= 0 ? "#E6D5BE" : "#FECACA"}` }}>
-                    <div style={{ fontSize: 13, color: profit >= 0 ? "#7C5C3E" : "#991B1B", fontWeight: 700 }}>Laba Bersih</div>
+                    <div style={{ fontSize: 13, color: profit >= 0 ? "#7C5C3E" : "#991B1B", fontWeight: 700 }}>Surplus / Defisit Kas</div>
                     <div style={{ fontSize: 24, fontWeight: 800, color: profit >= 0 ? "#7C5C3E" : "#991B1B" }}>{formatCurrency(profit)}</div>
                 </div>
             </div>
@@ -585,7 +586,7 @@ function TabProdukTerlaris() {
     return (
          <div style={{ padding: "0 16px 24px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
-                <select value={period} onChange={(e) => setPeriod(e.target.value as any)} style={{ border: "1px solid #D1BFA3", borderRadius: 6, padding: "6px 12px", outline: "none", width: 160 }}>
+                <select value={period} onChange={(e) => setPeriod(e.target.value as "semua" | "bulan_ini")} style={{ border: "1px solid #D1BFA3", borderRadius: 6, padding: "6px 12px", outline: "none", width: 160 }}>
                     <option value="bulan_ini">Bulan Ini</option>
                     <option value="semua">Semua Waktu</option>
                 </select>
@@ -665,14 +666,15 @@ export default function LaporanPage() {
                     <span>📊</span> Laporan Sistem ERP
                 </div>
                 <div style={{ display: "flex", overflowX: "auto" }}>
-                    <button onClick={() => setActiveTab("labarugi")} style={tabStyle("labarugi")}>Laba Rugi</button>
+                    <button onClick={() => setActiveTab("labarugi")} style={tabStyle("labarugi")}>Arus Kas Operasional</button>
                     <button onClick={() => setActiveTab("aging")} style={tabStyle("aging")}>Aging Piutang</button>
                     <button onClick={() => setActiveTab("operator")} style={tabStyle("operator")}>Produktivitas Operator</button>
                     <button onClick={() => setActiveTab("produk")} style={tabStyle("produk")}>Analisa Produk</button>
                 </div>
             </div>
 
-            <div style={{ flex: 1, overflowY: "auto", padding: "24px 8px 8px 8px" }}>
+            <div style={{ flex: 1, overflowY: "auto", padding: "16px 8px 8px 8px" }}>
+                {activeTab === "labarugi" && <div style={{ margin: "0 16px 14px", padding: "10px 12px", background: "#FFF9E8", border: "1px solid #F3D08B", borderRadius: 8, color: "#875F13", fontSize: 11 }}>Halaman ini menunjukkan pergerakan kas dari menu Keuangan, bukan laba rugi akrual. Gunakan <Link href="/dashboard/pajak" style={{ color: "#7C5C3E", fontWeight: 800 }}>Akuntansi & Pajak → Laporan</Link> untuk laporan laba rugi, posisi keuangan, arus kas, dan neraca saldo.</div>}
                 {activeTab === "labarugi" && <TabLabaRugi />}
                 {activeTab === "aging" && <TabAgingPiutang />}
                 {activeTab === "operator" && <TabProduktivitas />}

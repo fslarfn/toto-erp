@@ -38,10 +38,14 @@ export type AccountingMappingRow = { id:string; workspace:string; flow_type:"inc
 export type JournalLineInput = { account_id:string; description:string; debit:number; credit:number; line_no:number };
 export type JournalEntryRow = {
   id:string; workspace:string; entry_date:string; reference:string; description:string;
-  source_type:"manual"|"cash_flow"|"payroll"|"tax"|"hpp"; source_id?:string|null;
+  source_type:"manual"|"cash_flow"|"payroll"|"tax"|"hpp"|"invoice"|"supplier_bill"|"adjustment"|"opening"; source_id?:string|null;
   status:"draft"|"locked"; created_by:string; locked_by?:string|null; locked_at?:string|null;
   journal_lines?: Array<JournalLineInput & {id:string; accounting_accounts?:{code:string;name:string}|null}>;
 };
+export type AccountingPeriodRow={id?:string;workspace:string;period:string;status:"open"|"review"|"closed";notes:string;reviewed_by:string;reviewed_at:string|null;closed_by:string;closed_at:string|null;updated_at?:string};
+export type ReportReceivableRow={id:number|string;no_inv?:string|null;customer?:string|null;tanggal?:string|null;harga?:string|number|null;ukuran?:string|number|null;qty?:string|number|null;is_paid?:boolean|null};
+export type ReportPayableRow={id:string;no_invoice:string;tanggal:string;supplier:string;grand_total:number;paid_amount:number;is_paid:boolean};
+export type ReportBankAccountRow={id:string;name:string;bank:string;balance:number;initial_balance:number};
 export type FiscalAdjustmentRow={id?:string;workspace:string;tax_year:number;direction:"positive"|"negative";category:string;description:string;amount:number;legal_basis:string;is_temporary:boolean;created_by:string};
 export type CorporateTaxReturnRow={id?:string;workspace:string;tax_year:number;turnover:number;commercial_profit:number;positive_corrections:number;negative_corrections:number;taxable_income:number;facility_taxable_income:number;standard_taxable_income:number;tax_due:number;credit_pph22:number;credit_pph23:number;credit_pph25:number;credit_other:number;tax_balance:number;status:"draft"|"locked";calculation_snapshot:Record<string,unknown>;created_by:string;locked_by?:string|null;locked_at?:string|null};
 export type TaxComplianceRow={id?:string;workspace:string;tax_period:string;tax_code:"pph21"|"pph23"|"ppn"|"pph_badan";amount:number;payment_due_date:string|null;filing_due_date:string|null;payment_status:"pending"|"paid"|"not_applicable";filing_status:"pending"|"filed"|"not_applicable";payment_reference:string;filing_reference:string;notes:string;paid_at?:string|null;filed_at?:string|null;updated_by:string};
@@ -136,7 +140,12 @@ export async function loadAccountingWorkspace(startDate:string,endDate:string){
   return {accounts:(accountResult.data??[]) as AccountingAccountRow[],journals:(journalResult.data??[]) as unknown as JournalEntryRow[],mappings:(mappingResult.data??[]) as AccountingMappingRow[]};
 }
 
-export async function createJournalEntry(input:{entry_date:string;reference:string;description:string;created_by:string;lines:JournalLineInput[];lock:boolean;source_type?:"manual"|"cash_flow"|"payroll"|"tax";source_id?:string|null}){
+export async function createJournalEntry(input:{entry_date:string;reference:string;description:string;created_by:string;lines:JournalLineInput[];lock:boolean;source_type?:JournalEntryRow["source_type"];source_id?:string|null}){
+  if(input.lock){
+    const{data,error}=await supabase.rpc("post_accounting_journal",{p_entry_date:input.entry_date,p_reference:input.reference,p_description:input.description,p_source_type:input.source_type??"manual",p_source_id:input.source_id??"",p_created_by:input.created_by,p_lines:input.lines});
+    if(!error)return data as string;
+    if(error.code!=="PGRST202"&&!isMissingTaxSchema(error))throw error;
+  }
   const {data:entry,error:entryError}=await supabase.from("journal_entries").insert({workspace:"toto",entry_date:input.entry_date,reference:input.reference,description:input.description,source_type:input.source_type??"manual",source_id:input.source_id??null,status:"draft",created_by:input.created_by}).select().single();
   if(entryError)throw entryError;
   const entryId=(entry as {id:string}).id;
@@ -212,14 +221,67 @@ export async function saveAccountingWorkItem(row:AccountingWorkItemRow){
  if(error)throw error;return data as AccountingWorkItemRow;
 }
 
-export async function loadTaxYearReports(year:number){
- const [fiscal,payroll,transactions,compliance,salesHpp]=await Promise.all([
-  loadFiscalWorkspace(year),
+export async function loadAccountingPeriod(period:string){
+ const{data,error}=await supabase.from("accounting_periods").select("*").eq("workspace","toto").eq("period",period).maybeSingle();
+ if(error)throw error;return data as AccountingPeriodRow|null;
+}
+
+export async function saveAccountingPeriod(row:AccountingPeriodRow){
+ const{data,error}=await supabase.from("accounting_periods").upsert({...row,updated_at:new Date().toISOString()},{onConflict:"workspace,period"}).select().single();
+ if(error)throw error;return data as AccountingPeriodRow;
+}
+
+async function loadOpenSupplierBills(){
+ const rows:ReportPayableRow[]=[];let from=0;
+ while(true){
+  const{data,error}=await supabase.from("tagihan_bahan").select("id,no_invoice,tanggal,supplier,grand_total,paid_amount,is_paid").eq("is_paid",false).order("tanggal").range(from,from+999);
+  if(error)throw error;const page=(data??[])as ReportPayableRow[];rows.push(...page);if(page.length<1000)break;from+=1000;
+ }
+ return rows;
+}
+
+async function loadOpenReceivables(){
+ const{data:reconciled,error:reconciledError}=await supabase.rpc("load_open_customer_invoices");
+ if(!reconciledError){
+  return((reconciled??[])as Array<{invoice_key:string;invoice_number:string;customer_name:string;invoice_date:string;outstanding_amount:number}>).map(row=>({
+   id:row.invoice_key,no_inv:row.invoice_number||row.invoice_key,customer:row.customer_name,tanggal:row.invoice_date,
+   harga:Number(row.outstanding_amount),ukuran:1,qty:1,is_paid:false,
+  }))as ReportReceivableRow[];
+ }
+ if(reconciledError.code!=="PGRST202"&&!isMissingTaxSchema(reconciledError))throw reconciledError;
+ const rows:ReportReceivableRow[]=[];let from=0;
+ while(true){
+  const{data,error}=await supabase.from("pesanan_rows").select("id,no_inv,customer,tanggal,harga,ukuran,qty,is_paid").eq("is_paid",false).order("id").range(from,from+999);
+  if(error)throw error;const page=(data??[])as ReportReceivableRow[];rows.push(...page);if(page.length<1000)break;from+=1000;
+ }
+ return rows;
+}
+
+async function loadAccountingReportWorkspace(endDate:string){
+ const accountResult=await supabase.from("accounting_accounts").select("*").eq("workspace","toto").eq("is_active",true).order("code");
+ if(accountResult.error)throw accountResult.error;
+ const journals:JournalEntryRow[]=[];let from=0;
+ while(true){
+  const{data,error}=await supabase.from("journal_entries").select("*,journal_lines(*,accounting_accounts(code,name))").eq("workspace","toto").lte("entry_date",endDate).order("entry_date").range(from,from+999);
+  if(error)throw error;const page=(data??[])as unknown as JournalEntryRow[];journals.push(...page);if(page.length<1000)break;from+=1000;
+ }
+ return{accounts:(accountResult.data??[])as AccountingAccountRow[],journals,mappings:[]as AccountingMappingRow[]};
+}
+
+export async function loadTaxYearReports(year:number,month=12){
+ const end=monthEndDate(year,month),period=`${year}-${String(month).padStart(2,"0")}`;
+ const [accounting,adjustments,returns,payroll,transactions,compliance,salesHpp,receivables,payables,banks,accountingPeriod]=await Promise.all([
+  loadAccountingReportWorkspace(end),
+  supabase.from("fiscal_adjustments").select("*").eq("workspace","toto").eq("tax_year",year).order("created_at",{ascending:false}),
+  supabase.from("corporate_tax_returns").select("*").eq("workspace","toto").eq("tax_year",year).maybeSingle(),
   supabase.from("payroll_tax_periods").select("*").eq("tax_year",year).order("tax_month"),
-  supabase.from("tax_transactions").select("*").eq("workspace","toto").gte("tax_period",`${year}-01`).lte("tax_period",`${year}-12`).order("transaction_date"),
-  supabase.from("tax_compliance_items").select("*").eq("workspace","toto").gte("tax_period",`${year}-01`).lte("tax_period",`${year}-12`).order("tax_period"),
-  supabase.from("sales_hpp_recognitions").select("*").eq("workspace","toto").eq("status","posted").gte("recognition_date",`${year}-01-01`).lte("recognition_date",`${year}-12-31`).order("recognition_date"),
+  supabase.from("tax_transactions").select("*").eq("workspace","toto").gte("tax_period",`${year}-01`).lte("tax_period",period).order("transaction_date"),
+  supabase.from("tax_compliance_items").select("*").eq("workspace","toto").gte("tax_period",`${year}-01`).lte("tax_period",period).order("tax_period"),
+  supabase.from("sales_hpp_recognitions").select("*").eq("workspace","toto").eq("status","posted").gte("recognition_date",`${year}-01-01`).lte("recognition_date",end).order("recognition_date"),
+  loadOpenReceivables(),loadOpenSupplierBills(),
+  supabase.from("bank_accounts").select("id,name,bank,balance,initial_balance").order("name"),
+  loadAccountingPeriod(period).catch(error=>{if(isMissingTaxSchema(error))return null;throw error}),
  ]);
- const error=payroll.error||transactions.error||compliance.error||salesHpp.error;if(error)throw error;
- return{...fiscal,payroll:(payroll.data??[]) as PayrollTaxPeriodRow[],transactions:(transactions.data??[]) as TaxTransactionRow[],compliance:(compliance.data??[]) as TaxComplianceRow[],salesHpp:(salesHpp.data??[]) as SalesHppRecognitionRow[]};
+ const error=adjustments.error||returns.error||payroll.error||transactions.error||compliance.error||salesHpp.error||banks.error;if(error)throw error;
+ return{...accounting,adjustments:(adjustments.data??[])as FiscalAdjustmentRow[],taxReturn:returns.data as CorporateTaxReturnRow|null,payroll:(payroll.data??[]) as PayrollTaxPeriodRow[],transactions:(transactions.data??[]) as TaxTransactionRow[],compliance:(compliance.data??[]) as TaxComplianceRow[],salesHpp:(salesHpp.data??[]) as SalesHppRecognitionRow[],receivables,payables,banks:(banks.data??[])as ReportBankAccountRow[],accountingPeriod};
 }

@@ -8,9 +8,10 @@ type Props = {
     rows: PesananRow[];
     viewMode: "detail" | "simple";
     onUpdate: (id: number, patch: Partial<PesananRow>) => void;
+    onReconcilePayment: (row: PesananRow) => void;
 };
 
-export function VirtualTable({ rows, viewMode, onUpdate }: Props) {
+export function VirtualTable({ rows, viewMode, onUpdate, onReconcilePayment }: Props) {
     const parentRef = useRef<HTMLDivElement>(null);
     const [activeCell, setActiveCell] = useState<{ id: number; key: string } | null>(null);
     const [colorRowId, setColorRowId] = useState<number | null>(null);
@@ -18,6 +19,8 @@ export function VirtualTable({ rows, viewMode, onUpdate }: Props) {
     // Virtualisasi hanya Aktif jika data > 300
     const useVirtual = rows.length >= 300;
 
+    // TanStack Virtual sengaja mengelola fungsi imperatifnya sendiri.
+    // eslint-disable-next-line react-hooks/incompatible-library
     const rowVirtualizer = useVirtualizer({
         count: useVirtual ? rows.length : 0,
         getScrollElement: () => parentRef.current,
@@ -62,6 +65,7 @@ export function VirtualTable({ rows, viewMode, onUpdate }: Props) {
                     activeCell={activeCell}
                     setActiveCell={setActiveCell}
                     onUpdate={onUpdate}
+                    onReconcilePayment={onReconcilePayment}
                     colorRowId={colorRowId}
                     setColorRowId={setColorRowId}
                 />
@@ -82,6 +86,7 @@ export function VirtualTable({ rows, viewMode, onUpdate }: Props) {
                 activeCell={activeCell}
                 setActiveCell={setActiveCell}
                 onUpdate={onUpdate}
+                onReconcilePayment={onReconcilePayment}
                 colorRowId={colorRowId}
                 setColorRowId={setColorRowId}
             />
