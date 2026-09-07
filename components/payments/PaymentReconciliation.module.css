@@ -67,5 +67,7 @@
 .notice, .error { margin-bottom: 11px; border-radius: 8px; padding: 9px 11px; font-size: 10px; }
 .notice { border: 1px solid #f1cf82; color: #805b14; background: #fff9e8; }
 .error { border: 1px solid #fecaca; color: #991b1b; background: #fef2f2; }
+.focusNotice { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 11px; border: 1px solid #c9b092; border-left: 4px solid #a67b5b; border-radius: 8px; padding: 9px 11px; color: #5c4033; background: #fffaf4; font-size: 10px; }
+.focusNotice span { color: #7c685b; }
 @media (max-width: 900px) { .page { padding: 12px; } .header { align-items: flex-start; flex-direction: column; gap: 12px; } .actions { width: 100%; box-sizing: border-box; } .summary { grid-template-columns: 1fr 1fr; } .summaryItem:nth-child(2) { border-right: 0; } .workspace { grid-template-columns: 1fr; } .receipts { border-right: 0; border-bottom: 1px solid #e4d3bf; } .receiptList { max-height: 320px; } }
-@media (max-width: 560px) { .actions { display: grid; grid-template-columns: auto 1fr auto; } .periodField { min-width: 0; } .month { width: 100%; box-sizing: border-box; } .summary { grid-template-columns: 1fr; } .summaryItem { border-right: 0; border-bottom: 1px solid #eee1d2; } .formGrid, .candidateTools, .allocateBox { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .actions { display: grid; grid-template-columns: auto 1fr auto; } .periodField { min-width: 0; } .month { width: 100%; box-sizing: border-box; } .focusNotice { align-items: flex-start; flex-direction: column; gap: 3px; } .summary { grid-template-columns: 1fr; } .summaryItem { border-right: 0; border-bottom: 1px solid #eee1d2; } .formGrid, .candidateTools, .allocateBox { grid-template-columns: 1fr; } }

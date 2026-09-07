@@ -53,6 +53,21 @@ export type OpenCustomerInvoiceRow = {
   outstanding_amount: number;
 };
 
+const POSTGREST_PAGE_SIZE = 1000;
+
+async function loadAllOpenInvoices() {
+  const rows: OpenCustomerInvoiceRow[] = [];
+  for (let from = 0; ; from += POSTGREST_PAGE_SIZE) {
+    const { data, error } = await supabase.rpc("load_open_customer_invoices")
+      .range(from, from + POSTGREST_PAGE_SIZE - 1);
+    if (error) throw error;
+    const page = (data ?? []) as OpenCustomerInvoiceRow[];
+    rows.push(...page);
+    if (page.length < POSTGREST_PAGE_SIZE) break;
+  }
+  return rows;
+}
+
 async function loadAllocations(receiptIds: string[]) {
   const rows: CustomerReceiptAllocationRow[] = [];
   for (let index = 0; index < receiptIds.length; index += 100) {
@@ -67,7 +82,7 @@ async function loadAllocations(receiptIds: string[]) {
 }
 
 export async function loadPaymentReconciliation(startDate: string, endDate: string) {
-  const [flowResult, receiptResult, invoiceResult] = await Promise.all([
+  const [flowResult, receiptResult, invoices] = await Promise.all([
     supabase.from("cash_flow")
       .select("id,amount,date,description,category,bank_account,account_id,created_by")
       .eq("type", "income").eq("is_test", false).is("transfer_group", null)
@@ -77,9 +92,9 @@ export async function loadPaymentReconciliation(startDate: string, endDate: stri
       .select("id,cash_flow_id,receipt_date,amount,bank_account_name,payer_name,bank_reference,bank_description,status,created_by")
       .eq("workspace", "toto").gte("receipt_date", startDate).lte("receipt_date", endDate)
       .order("receipt_date", { ascending: false }),
-    supabase.rpc("load_open_customer_invoices"),
+    loadAllOpenInvoices(),
   ]);
-  const error = flowResult.error || receiptResult.error || invoiceResult.error;
+  const error = flowResult.error || receiptResult.error;
   if (error) throw error;
   const receipts = (receiptResult.data ?? []) as CustomerReceiptRow[];
   const allocations = receipts.length ? await loadAllocations(receipts.map(receipt => receipt.id)) : [];
@@ -87,7 +102,7 @@ export async function loadPaymentReconciliation(startDate: string, endDate: stri
     cashFlows: (flowResult.data ?? []) as PaymentCashFlowRow[],
     receipts,
     allocations,
-    invoices: (invoiceResult.data ?? []) as OpenCustomerInvoiceRow[],
+    invoices,
   };
 }
 

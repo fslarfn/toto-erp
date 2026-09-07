@@ -1,15 +1,15 @@
 "use client";
 import React, { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { usePesanan } from "@/lib/pesanan-store";
 import { useCrm, normalizeName } from "@/lib/crm-store";
 import { waUrl } from "@/lib/wa";
-import { pushNotify } from "@/lib/notify";
 import { usePaged, PageNav } from "@/components/layout/PageNav";
 
 /* ================================================================
    MENU TAGIHAN
    Tampilan piutang per customer per tahun.
-   Admin finance bisa toggle status lunas / belum bayar per invoice.
+   Admin finance membuka rekonsiliasi dari invoice yang dipilih.
 ================================================================ */
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
@@ -39,7 +39,8 @@ function parseIdNum(s: string | undefined): number {
 }
 
 export default function TagihanPage() {
-    const { rows, updateRow } = usePesanan();
+    const router = useRouter();
+    const { rows } = usePesanan();
     const { customers } = useCrm();
     const now = new Date();
     const [year, setYear] = useState(now.getFullYear());
@@ -68,18 +69,17 @@ export default function TagihanPage() {
     const invoiceMap = useMemo(() => {
         const map = new Map<string, {
             no_inv: string; customer: string; tanggal: string;
-            total: number; is_paid: boolean; ids: number[];
+            total: number; is_paid: boolean;
             descs: string[];
         }>();
         baseRows.forEach((r) => {
             const key = r.no_inv.trim();
             const rowTotal = parseIdNum(r.ukuran) * parseIdNum(r.qty) * parseIdNum(r.harga);
             if (!map.has(key)) {
-                map.set(key, { no_inv: key, customer: r.customer, tanggal: r.tanggal, total: 0, is_paid: r.is_paid, ids: [], descs: [] });
+                map.set(key, { no_inv: key, customer: r.customer, tanggal: r.tanggal, total: 0, is_paid: r.is_paid, descs: [] });
             }
             const inv = map.get(key)!;
             inv.total += rowTotal;
-            inv.ids.push(r.id);
             if (r.deskripsi) inv.descs.push(r.deskripsi);
             // Invoice dianggap lunas jika SEMUA row is_paid=true
             inv.is_paid = inv.is_paid && r.is_paid;
@@ -121,19 +121,12 @@ export default function TagihanPage() {
         return { totalAll, totalLunas, totalBelum: totalAll - totalLunas, countAll, countLunas, countBelum: countAll - countLunas };
     }, [invoiceMap]);
 
-    /* ── Toggle lunas untuk semua row dalam satu invoice ─── */
-    const togglePaid = (noInv: string, newVal: boolean) => {
+    /* ── Buka rekonsiliasi dengan invoice sudah terpilih ─── */
+    const openReconciliation = (noInv: string) => {
         const inv = invoiceMap.get(noInv);
         if (!inv) return;
-        inv.ids.forEach((id) => updateRow(id, { is_paid: newVal }, true));
-        if (newVal) {
-            pushNotify({
-                notificationType: "status_bayar",
-                title: "Tagihan Ditandai Lunas",
-                body: `Invoice ${noInv} — ${inv.customer} (${fmtRp(inv.total)})`,
-                url: "/dashboard/tagihan",
-            });
-        }
+        const params = new URLSearchParams({ invoice: noInv, customer: inv.customer });
+        router.push(`/dashboard/keuangan/rekonsiliasi?${params.toString()}`);
     };
 
     const cardSt = (accent: string): React.CSSProperties => ({
@@ -275,14 +268,11 @@ export default function TagihanPage() {
                                                                 </td>
                                                                 <td style={{ padding: "6px 12px" }}>
                                                                     {inv.is_paid ? (
-                                                                        <button onClick={() => togglePaid(inv.no_inv, false)}
-                                                                            style={{ padding: "3px 10px", borderRadius: 5, border: "1px solid #D1BFA3", background: "white", cursor: "pointer", fontSize: 10, fontWeight: 600, color: "#B91C1C", whiteSpace: "nowrap" }}>
-                                                                            ↩ Batalkan Lunas
-                                                                        </button>
+                                                                        <span style={{ color: "#15803D", fontSize: 10, fontWeight: 700, whiteSpace: "nowrap" }}>✓ Terekonsiliasi</span>
                                                                     ) : (
-                                                                        <button onClick={() => togglePaid(inv.no_inv, true)}
-                                                                            style={{ padding: "3px 10px", borderRadius: 5, border: "1px solid #15803D", background: "#F0FDF4", cursor: "pointer", fontSize: 10, fontWeight: 700, color: "#15803D", whiteSpace: "nowrap" }}>
-                                                                            ✓ Tandai Lunas
+                                                                        <button onClick={() => openReconciliation(inv.no_inv)}
+                                                                            style={{ padding: "4px 10px", borderRadius: 5, border: "1px solid #A67B5B", background: "#FFF8F1", cursor: "pointer", fontSize: 10, fontWeight: 700, color: "#7C5136", whiteSpace: "nowrap" }}>
+                                                                            Cari Pembayaran →
                                                                         </button>
                                                                     )}
                                                                 </td>

@@ -24,6 +24,7 @@ export default function PaymentReconciliation() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
   const focusInvoice = (searchParams.get("invoice") ?? "").trim().toUpperCase();
+  const focusCustomer = (searchParams.get("customer") ?? "").trim();
   const [period, setPeriod] = useState(() => { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`; });
   const [data, setData] = useState<Awaited<ReturnType<typeof loadPaymentReconciliation>> | null>(null);
   const [selectedFlowId, setSelectedFlowId] = useState("");
@@ -87,9 +88,15 @@ export default function PaymentReconciliation() {
   const remaining = selected ? Math.max(0, Number(selected.flow.amount) - allocations.reduce((sum, allocation) => sum + Number(allocation.amount), 0)) : 0;
   const candidates = useMemo(() => {
     if (!selected) return [];
-    const matches = rankInvoiceMatches({ amount: remaining || Number(selected.flow.amount), date: selected.flow.date, payerName: receipt?.payer_name || payerName, description: selected.flow.description, reference: receipt?.bank_reference || bankReference }, (data?.invoices ?? []).map(invoice => ({ invoiceKey: invoice.invoice_key, invoiceNumber: invoice.invoice_number, customerName: invoice.customer_name, date: invoice.invoice_date, outstanding: Number(invoice.outstanding_amount) })), 100);
     const query = deferredInvoiceSearch.toLowerCase().trim();
-    return matches.filter(match => !query || `${match.invoiceKey} ${match.invoiceNumber} ${match.customerName}`.toLowerCase().includes(query)).slice(0, 30);
+    const sourceInvoices = query
+      ? (data?.invoices ?? []).filter(invoice => `${invoice.invoice_key} ${invoice.invoice_number} ${invoice.customer_name}`.toLowerCase().includes(query))
+      : (data?.invoices ?? []);
+    return rankInvoiceMatches(
+      { amount: remaining || Number(selected.flow.amount), date: selected.flow.date, payerName: receipt?.payer_name || payerName, description: selected.flow.description, reference: receipt?.bank_reference || bankReference },
+      sourceInvoices.map(invoice => ({ invoiceKey: invoice.invoice_key, invoiceNumber: invoice.invoice_number, customerName: invoice.customer_name, date: invoice.invoice_date, outstanding: Number(invoice.outstanding_amount) })),
+      30,
+    );
   }, [selected, remaining, receipt, payerName, bankReference, data, deferredInvoiceSearch]);
 
   const stats = useMemo(() => {
@@ -160,6 +167,10 @@ export default function PaymentReconciliation() {
         </button>
       </div>
     </div>
+    {focusInvoice ? <div className={styles.focusNotice}>
+      <strong>Invoice {focusInvoice}{focusCustomer ? ` · ${focusCustomer}` : ""}</strong>
+      <span>Pilih mutasi uang masuk di sebelah kiri, lalu hubungkan ke invoice ini.</span>
+    </div> : null}
     {message ? <div className={schemaMissing ? styles.error : styles.notice}><AlertTriangle size={13} style={{ verticalAlign: -2, marginRight: 6 }} />{message}{schemaMissing ? <> Jalankan <b>20260908_customer_payment_reconciliation.sql</b>.</> : null}</div> : null}
     <section className={styles.summary} aria-label="Ringkasan rekonsiliasi">
       <div className={styles.summaryItem}><span className={styles.summaryLabel}>Belum dikenali</span><strong className={styles.summaryValue}>{stats.unidentified}</strong><span className={styles.muted}>{rp(stats.unidentifiedValue)}</span></div>
