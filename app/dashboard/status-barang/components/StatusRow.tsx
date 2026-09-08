@@ -26,6 +26,25 @@ const ROW_COLORS = [
 ];
 type CellOptions = { align?: "left" | "center" | "right"; mono?: boolean; type?: "text" | "number" | "date" };
 
+const AUDIT_DATE_FORMATTER = new Intl.DateTimeFormat("id-ID", {
+    dateStyle: "medium",
+    timeStyle: "short",
+});
+
+function auditInfo(row: PesananRow) {
+    const isEdited = !!row.updated_by;
+    const actor = (isEdited ? row.updated_by : row.created_by)?.trim() || "Data lama";
+    const timestamp = isEdited ? row.updated_at : row.created_at;
+    const formattedTime = timestamp && !Number.isNaN(Date.parse(timestamp))
+        ? AUDIT_DATE_FORMATTER.format(new Date(timestamp))
+        : "Waktu tidak tersedia";
+    return {
+        actor,
+        label: isEdited ? "Edit" : row.created_by ? "Buat" : "Lama",
+        title: `${isEdited ? "Terakhir diedit" : "Dibuat"} oleh ${actor} · ${formattedTime}`,
+    };
+}
+
 /**
  * Memoized Individual Row with scoped editing logic (SCOPE LOCK)
  */
@@ -33,6 +52,7 @@ export const StatusRow = memo(function StatusRow({
     row, idx, viewMode, activeCell, setActiveCell, onUpdate, onReconcilePayment, colorRowId, setColorRowId
 }: Props) {
     const rowBg = row.color_marker || "white";
+    const audit = auditInfo(row);
 
     const badge = (() => {
         if (row.di_kirim) return { label: "Di Kirim", bg: "#DCFCE7", color: "#15803D" };
@@ -150,6 +170,17 @@ export const StatusRow = memo(function StatusRow({
                         ))}
                     </div>
                 )}
+            </td>
+
+            {/* Pengguna terakhir yang membuat/mengedit */}
+            <td
+                title={audit.title}
+                style={{ height: 26, width: 100, minWidth: 100, padding: "2px 6px", boxSizing: "border-box", borderRight: "1px solid #E6D5BE", borderBottom: "1px solid #E6D5BE", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+            >
+                <span style={{ display: "inline-block", marginRight: 5, padding: "1px 4px", borderRadius: 4, background: audit.label === "Edit" ? "#DBEAFE" : audit.label === "Buat" ? "#DCFCE7" : "#F3F4F6", color: audit.label === "Edit" ? "#1D4ED8" : audit.label === "Buat" ? "#15803D" : "#6B7280", fontSize: 8, fontWeight: 800 }}>
+                    {audit.label}
+                </span>
+                <span style={{ color: "#5C4033", fontSize: 10, fontWeight: 600 }}>{audit.actor}</span>
             </td>
 
             {renderCell("tanggal", 70, { align: "center", type: "date" })}

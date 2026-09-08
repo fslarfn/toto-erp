@@ -85,7 +85,10 @@ export default function StatusBarangPage() {
 
     const exportExcel = () => {
         const data = filtered.map((r, i) => ({
-            "No": i + 1, "Tanggal": r.tanggal, "Customer": r.customer,
+            "No": i + 1,
+            "Dibuat/Diedit Oleh": r.updated_by || r.created_by || "Data lama",
+            "Aktivitas": r.updated_by ? "Edit" : r.created_by ? "Buat" : "Data lama",
+            "Tanggal": r.tanggal, "Customer": r.customer,
             "Deskripsi": r.deskripsi, "Ukuran": r.ukuran, "Qty": r.qty,
             "No Invoice": r.no_inv, "Status": r.di_kirim ? "Kirim" : r.siap_kirim ? "Siap" : r.di_warna ? "Warna" : r.di_produksi ? "Produksi" : "Belum"
         }));

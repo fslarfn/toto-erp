@@ -3,6 +3,14 @@ import useSWR from "swr";
 import { supabase } from "@/lib/supabase-client";
 import { PesananRow } from "@/lib/pesanan-store";
 
+// Pilih hanya kolom yang dipakai halaman ini agar payload Supabase tidak membengkak.
+const STATUS_BARANG_COLS =
+    "id,tanggal,customer,deskripsi,ukuran,qty,harga,no_inv,no_sj," +
+    "di_produksi,di_warna,siap_kirim,di_kirim,ekspedisi,color_marker," +
+    "printed_at,po_label,is_packing,is_paid,production_note,metode_kirim," +
+    "shipped_at,sync_id,finishing_status,finishing_operator,finishing_at,is_repair," +
+    "created_by,created_at,updated_by,updated_at";
+
 /**
  * Hook khusus Status Barang (SCOPE LOCK)
  * Menggunakan SWR untuk deduplikasi fetch, caching, dan performance.
@@ -17,7 +25,7 @@ export function useStatusBarangRows(year: number, month: number | "all") {
         let hasMore = true;
 
         while (hasMore) {
-            let query = supabase.from("pesanan_rows").select("*");
+            let query = supabase.from("pesanan_rows").select(STATUS_BARANG_COLS);
 
             if (month !== "all") {
                 const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
@@ -34,7 +42,7 @@ export function useStatusBarangRows(year: number, month: number | "all") {
 
             if (error) throw error;
             if (data && data.length > 0) {
-                allData = [...allData, ...(data as any[])];
+                allData = [...allData, ...(data as unknown as PesananRow[])];
                 if (data.length < 1000) hasMore = false;
                 else from += 1000;
             } else {
@@ -48,7 +56,7 @@ export function useStatusBarangRows(year: number, month: number | "all") {
         return allData;
     };
 
-    const { data, error, mutate, isLoading } = useSWR<PesananRow[]>(key as any, fetcher, {
+    const { data, error, mutate, isLoading } = useSWR<PesananRow[]>(key, fetcher, {
         revalidateOnFocus: true,
         dedupingInterval: 2000, // Reduced to 2s for better reactivity
         revalidateIfStale: true,

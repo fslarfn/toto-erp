@@ -110,6 +110,7 @@ export function VirtualTable({ rows, viewMode, onUpdate, onReconcilePayment }: P
                     <tr>
                         <th style={{ ...th(36), position: "sticky", left: 0, zIndex: 40, borderRight: "2px solid #C5A882" }}>#</th>
                         <th style={{ ...th(30) }}>🎨</th>
+                        <th style={{ ...th(100), textAlign: "left" }}>Dibuat/Edit oleh</th>
                         <th style={{ ...th(70) }}>Tgl</th>
                         <th style={{ ...th(130), textAlign: "left" }}>Customer</th>
                         <th style={{ ...th(200), textAlign: "left" }}>Deskripsi</th>

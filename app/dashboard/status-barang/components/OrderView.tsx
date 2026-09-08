@@ -54,6 +54,15 @@ interface OrderGroup {
     tanggal: string;
     items: PesananRow[];
     total: number;
+    auditActor: string;
+    auditAction: "Buat" | "Edit" | "Lama";
+    auditAt: string;
+}
+
+function rowAudit(row: PesananRow) {
+    if (row.updated_by) return { actor: row.updated_by, action: "Edit" as const, at: row.updated_at || "" };
+    if (row.created_by) return { actor: row.created_by, action: "Buat" as const, at: row.created_at || "" };
+    return { actor: "Data lama", action: "Lama" as const, at: row.created_at || "" };
 }
 
 type Props = {
@@ -92,15 +101,21 @@ export function OrderView({ rows, onUpdate, onReconcilePayment }: Props) {
         for (const r of rows) {
             const inv = (r.no_inv || "").trim();
             const key = inv || `#${r.id}`;
+            const audit = rowAudit(r);
             let g = map.get(key);
             if (!g) {
-                g = { key, no_inv: inv, customer: r.customer || "", tanggal: r.tanggal || "", items: [], total: 0 };
+                g = { key, no_inv: inv, customer: r.customer || "", tanggal: r.tanggal || "", items: [], total: 0, auditActor: audit.actor, auditAction: audit.action, auditAt: audit.at };
                 map.set(key, g);
             }
             g.items.push(r);
             g.total += pesananRowTotal(r);
             if (!g.customer && r.customer) g.customer = r.customer;
             if (!g.tanggal && r.tanggal) g.tanggal = r.tanggal;
+            if (audit.at > g.auditAt) {
+                g.auditActor = audit.actor;
+                g.auditAction = audit.action;
+                g.auditAt = audit.at;
+            }
         }
         return [...map.values()];
     }, [rows]);
@@ -178,6 +193,7 @@ export function OrderView({ rows, onUpdate, onReconcilePayment }: Props) {
                                     <div style={{ fontSize: 10.5, color: "#B89678", fontFamily: "monospace" }}>
                                         {g.no_inv ? `INV ${g.no_inv}` : "tanpa invoice"} · {fmtTanggal(g.tanggal)} · {g.items.length} item
                                         {g.total > 0 && <> · Rp {g.total.toLocaleString("id-ID")}</>}
+                                        <> · {g.auditAction}: {g.auditActor}</>
                                     </div>
                                 </div>
                                 {/* Pipeline tahap per-order */}

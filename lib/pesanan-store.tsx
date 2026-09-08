@@ -38,6 +38,11 @@ export type PesananRow = {
     finishing_operator: string;
     finishing_at: string | null;
     is_repair: boolean;
+    /** Audit pengguna. Baris lama dapat kosong sampai pertama kali diedit. */
+    created_by?: string;
+    created_at?: string;
+    updated_by?: string;
+    updated_at?: string | null;
 };
 
 export const PAGE_SIZE = 100;
