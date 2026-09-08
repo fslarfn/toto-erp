@@ -55,7 +55,36 @@ export type OpenCustomerInvoiceRow = {
 
 const POSTGREST_PAGE_SIZE = 1000;
 
-async function loadAllOpenInvoices() {
+export async function createCustomerPaymentCashFlow(input: {
+  type: "income";
+  category: string;
+  amount: number;
+  description: string;
+  date: string;
+  bankAccount: string;
+  accountId: string | null;
+  createdBy: string;
+}) {
+  const id = crypto.randomUUID();
+  const { error } = await supabase.from("cash_flow").insert({
+    id,
+    type: input.type,
+    category: input.category,
+    amount: input.amount,
+    description: input.description,
+    date: input.date,
+    bank_account: input.bankAccount,
+    account_id: input.accountId,
+    created_by: input.createdBy,
+    is_test: false,
+    is_adjustment: false,
+    transfer_group: null,
+  });
+  if (error) throw error;
+  return { id };
+}
+
+export async function loadOpenCustomerInvoices() {
   const rows: OpenCustomerInvoiceRow[] = [];
   for (let from = 0; ; from += POSTGREST_PAGE_SIZE) {
     const { data, error } = await supabase.rpc("load_open_customer_invoices")
@@ -92,7 +121,7 @@ export async function loadPaymentReconciliation(startDate: string, endDate: stri
       .select("id,cash_flow_id,receipt_date,amount,bank_account_name,payer_name,bank_reference,bank_description,status,created_by")
       .eq("workspace", "toto").gte("receipt_date", startDate).lte("receipt_date", endDate)
       .order("receipt_date", { ascending: false }),
-    loadAllOpenInvoices(),
+    loadOpenCustomerInvoices(),
   ]);
   const error = flowResult.error || receiptResult.error;
   if (error) throw error;

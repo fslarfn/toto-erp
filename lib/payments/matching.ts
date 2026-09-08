@@ -92,3 +92,15 @@ export function rankInvoiceMatches(receipt: MatchReceipt, invoices: MatchInvoice
     .sort((a, b) => b.score - a.score || Math.abs(receipt.amount - a.outstanding) - Math.abs(receipt.amount - b.outstanding))
     .slice(0, limit);
 }
+
+export function calculateInvoicePayment(amount: number, outstanding: number) {
+  const safeAmount = Math.max(0, Math.round(amount));
+  const safeOutstanding = Math.max(0, Math.round(outstanding));
+  const allocatedAmount = Math.min(safeAmount, safeOutstanding);
+  return {
+    allocatedAmount,
+    remainingInvoice: Math.max(safeOutstanding - allocatedAmount, 0),
+    receiptRemainder: Math.max(safeAmount - allocatedAmount, 0),
+    willSettleInvoice: safeOutstanding > 0 && allocatedAmount >= safeOutstanding,
+  };
+}

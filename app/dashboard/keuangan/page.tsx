@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/store";
 import { CashFlow } from "@/types";
@@ -7,6 +7,15 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import ReconciliationPanel from "@/components/ReconciliationPanel";
 import { computeTotals, isTransfer } from "@/lib/balance";
 import { isCashFlowJournalLocked } from "@/lib/pajak/store";
+import { useAuth } from "@/lib/auth";
+import {
+    allocateCustomerReceipt,
+    createCustomerPaymentCashFlow,
+    loadOpenCustomerInvoices,
+    OpenCustomerInvoiceRow,
+    registerCustomerReceipt,
+} from "@/lib/payments/store";
+import { calculateInvoicePayment } from "@/lib/payments/matching";
 
 const BANK_ACCOUNTS = ["Bank BCA Toto", "Bank BCA Yanto", "Cash"];
 // Paginasi riwayat transaksi — meniru pola Input Pesanan (100 baris/halaman).
@@ -52,6 +61,7 @@ type FormState = {
 };
 
 export default function KeuanganPage() {
+    const { user } = useAuth();
     const { cashFlow, bankAccounts, addCashFlow, updateCashFlow, deleteCashFlow, addTransfer, getComputedBalance, addAdjustment, syncAllBalances } = useStore();
 
     const now = new Date();
@@ -78,6 +88,13 @@ export default function KeuanganPage() {
     });
     const [saving, setSaving] = useState(false);
     const [syncing, setSyncing] = useState(false);
+    const [openInvoices, setOpenInvoices] = useState<OpenCustomerInvoiceRow[]>([]);
+    const [loadingInvoices, setLoadingInvoices] = useState(false);
+    const [invoiceLoadError, setInvoiceLoadError] = useState("");
+    const [invoiceQuery, setInvoiceQuery] = useState("");
+    const [selectedInvoiceKey, setSelectedInvoiceKey] = useState("");
+    const [bankReference, setBankReference] = useState("");
+    const [showInvoiceSuggestions, setShowInvoiceSuggestions] = useState(false);
 
     // ── Edit Modal state ───────────────────────────────────────
     const [editingTx, setEditingTx] = useState<CashFlow | null>(null);
@@ -90,6 +107,51 @@ export default function KeuanganPage() {
     const showToast = (msg: string) => {
         setToastMsg(msg);
         setTimeout(() => setToastMsg(""), 3000);
+    };
+
+    const isInvoiceIncome = form.type === "income" && ["Pembayaran Invoice", "DP Invoice"].includes(form.category);
+    const selectedInvoice = openInvoices.find((invoice) => invoice.invoice_key === selectedInvoiceKey) ?? null;
+    const formAmount = parseFloat(form.amount.replace(/[^0-9.]/g, "")) || 0;
+    const deferredInvoiceQuery = useDeferredValue(invoiceQuery.trim().toLowerCase());
+    const invoiceSuggestions = useMemo(() => {
+        if (!deferredInvoiceQuery) return openInvoices.slice(-20).reverse();
+        return openInvoices
+            .filter((invoice) => `${invoice.invoice_number} ${invoice.customer_name}`.toLowerCase().includes(deferredInvoiceQuery))
+            .slice(0, 20);
+    }, [deferredInvoiceQuery, openInvoices]);
+
+    useEffect(() => {
+        if (!isInvoiceIncome || openInvoices.length > 0) return;
+        let cancelled = false;
+        setLoadingInvoices(true);
+        setInvoiceLoadError("");
+        loadOpenCustomerInvoices()
+            .then((rows) => {
+                if (!cancelled) setOpenInvoices(rows);
+            })
+            .catch((error: unknown) => {
+                if (!cancelled) {
+                    const message = error instanceof Error ? error.message : "Daftar invoice gagal dimuat";
+                    setInvoiceLoadError(message);
+                }
+            })
+            .finally(() => {
+                if (!cancelled) setLoadingInvoices(false);
+            });
+        return () => { cancelled = true; };
+    }, [isInvoiceIncome, openInvoices.length]);
+
+    const chooseInvoice = (invoice: OpenCustomerInvoiceRow) => {
+        const generatedDescription = `Pembayaran invoice ${invoice.invoice_number || invoice.invoice_key} — ${invoice.customer_name}`;
+        setSelectedInvoiceKey(invoice.invoice_key);
+        setInvoiceQuery(invoice.invoice_number || invoice.customer_name);
+        setShowInvoiceSuggestions(false);
+        setForm((current) => ({
+            ...current,
+            keterangan: !current.keterangan || current.keterangan.startsWith("Pembayaran invoice ")
+                ? generatedDescription
+                : current.keterangan,
+        }));
     };
 
     const months = [...new Set([...cashFlow.map((c) => c.date.substring(0, 7)), thisMonthStr])].sort().reverse();
@@ -118,6 +180,15 @@ export default function KeuanganPage() {
     // ── Form Input handlers ────────────────────────────────────
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        const amount = parseFloat(form.amount.replace(/[^0-9.]/g, "")) || 0;
+        if (amount <= 0) {
+            alert("Jumlah harus lebih dari 0.");
+            return;
+        }
+        if (isInvoiceIncome && invoiceQuery.trim() && !selectedInvoice) {
+            alert("Pilih invoice dari hasil pencarian agar pembayaran terhubung ke tagihan yang benar.");
+            return;
+        }
         // Peringatan: transfer internal harus lewat "Mutasi Antar Kas", bukan transaksi biasa.
         if (/mutasi/i.test(form.keterangan)) {
             const tetap = confirm(
@@ -129,17 +200,84 @@ export default function KeuanganPage() {
             if (!tetap) return;
         }
         setSaving(true);
-        addCashFlow({
-            type: form.type,
-            category: form.category,
-            amount: parseFloat(form.amount.replace(/[^0-9.]/g, "")) || 0,
-            description: form.keterangan,
-            date: form.tanggal,
-            bankAccount: form.kas,
-            createdBy: "finance",
-        });
-        setForm((p) => ({ ...p, amount: "", keterangan: "" }));
-        setSaving(false);
+        try {
+            const cashFlowInput = {
+                type: form.type,
+                category: form.category,
+                amount,
+                description: form.keterangan,
+                date: form.tanggal,
+                bankAccount: form.kas,
+                createdBy: user?.username || user?.name || "finance",
+            };
+            const savedCashFlow = isInvoiceIncome && selectedInvoice
+                ? await createCustomerPaymentCashFlow({
+                    ...cashFlowInput,
+                    type: "income",
+                    accountId: bankAccounts.find((account) => account.name === form.kas)?.id ?? null,
+                })
+                : addCashFlow(cashFlowInput);
+
+            if (isInvoiceIncome && selectedInvoice) {
+                try {
+                    const username = user?.username || user?.name || "finance";
+                    const receiptId = await registerCustomerReceipt({
+                        cashFlowId: savedCashFlow.id,
+                        payerName: selectedInvoice.customer_name,
+                        bankReference,
+                        username,
+                    });
+                    const { allocatedAmount, remainingInvoice, receiptRemainder } = calculateInvoicePayment(
+                        amount,
+                        selectedInvoice.outstanding_amount,
+                    );
+                    await allocateCustomerReceipt({
+                        receiptId,
+                        invoiceKey: selectedInvoice.invoice_key,
+                        invoiceNumber: selectedInvoice.invoice_number,
+                        customerName: selectedInvoice.customer_name,
+                        amount: allocatedAmount,
+                        username,
+                    });
+
+                    setOpenInvoices((rows) => remainingInvoice <= 0
+                        ? rows.filter((invoice) => invoice.invoice_key !== selectedInvoice.invoice_key)
+                        : rows.map((invoice) => invoice.invoice_key === selectedInvoice.invoice_key
+                            ? {
+                                ...invoice,
+                                allocated_amount: invoice.allocated_amount + allocatedAmount,
+                                outstanding_amount: remainingInvoice,
+                            }
+                            : invoice));
+
+                    if (remainingInvoice <= 0 && receiptRemainder <= 0) {
+                        showToast(`✅ Invoice ${selectedInvoice.invoice_number} lunas dan pembayaran sudah direkonsiliasi`);
+                    } else if (remainingInvoice > 0) {
+                        showToast(`✅ Pembayaran sebagian tercatat · sisa tagihan ${formatCurrency(remainingInvoice)}`);
+                    } else {
+                        showToast(`✅ Invoice lunas · kelebihan ${formatCurrency(receiptRemainder)} masuk antrean rekonsiliasi`);
+                    }
+                } catch (error) {
+                    console.error("Rekonsiliasi otomatis gagal:", error);
+                    showToast("⚠️ Uang masuk tersimpan, tetapi pengaitan invoice gagal. Lanjutkan dari Rekonsiliasi Pembayaran.");
+                }
+            } else if (isInvoiceIncome) {
+                showToast("✅ Uang masuk tersimpan dan masuk antrean Rekonsiliasi Pembayaran");
+            } else {
+                showToast("✅ Transaksi berhasil disimpan");
+            }
+
+            setForm((p) => ({ ...p, amount: "", keterangan: "" }));
+            setInvoiceQuery("");
+            setSelectedInvoiceKey("");
+            setBankReference("");
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Kesalahan database";
+            console.error("Simpan transaksi gagal:", error);
+            alert(`Transaksi gagal disimpan.\n\n${message}`);
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleDelete = async (id: string) => {
@@ -328,14 +466,24 @@ export default function KeuanganPage() {
                             </div>
                             <div>
                                 <label className="form-label">Tipe</label>
-                                <select value={form.type} onChange={(e) => setForm((p) => ({ ...p, type: e.target.value as "income" | "expense", category: e.target.value === "income" ? "Penerimaan Belum Teridentifikasi" : "Bahan Baku" }))} className="form-select">
+                                <select value={form.type} onChange={(e) => {
+                                    setForm((p) => ({ ...p, type: e.target.value as "income" | "expense", category: e.target.value === "income" ? "Penerimaan Belum Teridentifikasi" : "Bahan Baku" }));
+                                    setInvoiceQuery("");
+                                    setSelectedInvoiceKey("");
+                                }} className="form-select">
                                     <option value="income">Pemasukan</option>
                                     <option value="expense">Pengeluaran</option>
                                 </select>
                             </div>
                             <div>
                                 <label className="form-label">Kategori</label>
-                                <select value={form.category} onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))} className="form-select">
+                                <select value={form.category} onChange={(e) => {
+                                    setForm((p) => ({ ...p, category: e.target.value }));
+                                    if (!["Pembayaran Invoice", "DP Invoice"].includes(e.target.value)) {
+                                        setInvoiceQuery("");
+                                        setSelectedInvoiceKey("");
+                                    }
+                                }} className="form-select">
                                     {categoryOptions.map((c) => <option key={c}>{c}</option>)}
                                 </select>
                             </div>
@@ -346,6 +494,84 @@ export default function KeuanganPage() {
                                 </select>
                             </div>
                         </div>
+
+                        {isInvoiceIncome && (
+                            <div style={{ marginBottom: "1rem", padding: "1rem", border: "1px solid #dfc6ad", borderRadius: 12, background: "#fffaf5" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
+                                    <div>
+                                        <div style={{ fontWeight: 700, color: "var(--text-dark)" }}>Hubungkan ke tagihan</div>
+                                        <div style={{ fontSize: 12, color: "#8A7B6E", marginTop: 2 }}>Opsional. Kosongkan jika nomor invoice belum diketahui; transaksi akan masuk antrean rekonsiliasi.</div>
+                                    </div>
+                                    {selectedInvoice && (
+                                        <span style={{ alignSelf: "flex-start", padding: "4px 9px", borderRadius: 999, background: "#dcfce7", color: "#15803d", fontSize: 11, fontWeight: 700 }}>Invoice dipilih</span>
+                                    )}
+                                </div>
+
+                                <div className="rgrid rgrid-3" style={{ gap: "0.75rem", alignItems: "start" }}>
+                                    <div style={{ position: "relative" }}>
+                                        <label className="form-label">Nomor invoice / nama customer</label>
+                                        <input
+                                            type="text"
+                                            value={invoiceQuery}
+                                            onChange={(e) => {
+                                                setInvoiceQuery(e.target.value);
+                                                setSelectedInvoiceKey("");
+                                                setShowInvoiceSuggestions(true);
+                                            }}
+                                            onFocus={() => setShowInvoiceSuggestions(true)}
+                                            onBlur={() => setShowInvoiceSuggestions(false)}
+                                            placeholder={loadingInvoices ? "Memuat invoice…" : "Cari nomor invoice atau customer…"}
+                                            className="form-input"
+                                            disabled={loadingInvoices}
+                                            autoComplete="off"
+                                        />
+                                        {showInvoiceSuggestions && !loadingInvoices && invoiceSuggestions.length > 0 && (
+                                            <div style={{ position: "absolute", zIndex: 30, left: 0, right: 0, top: "calc(100% + 4px)", maxHeight: 260, overflowY: "auto", background: "white", border: "1px solid #dfc6ad", borderRadius: 10, boxShadow: "0 12px 28px rgba(76,55,38,.14)" }}>
+                                                {invoiceSuggestions.map((invoice) => (
+                                                    <button
+                                                        key={invoice.invoice_key}
+                                                        type="button"
+                                                        onMouseDown={(event) => event.preventDefault()}
+                                                        onClick={() => chooseInvoice(invoice)}
+                                                        style={{ width: "100%", display: "flex", justifyContent: "space-between", gap: 10, padding: "10px 12px", border: 0, borderBottom: "1px solid #f0e4d8", background: "white", textAlign: "left", cursor: "pointer" }}
+                                                    >
+                                                        <span>
+                                                            <strong style={{ display: "block", color: "#3f342d" }}>{invoice.invoice_number || "Tanpa nomor"}</strong>
+                                                            <span style={{ fontSize: 12, color: "#7c6d62" }}>{invoice.customer_name}</span>
+                                                        </span>
+                                                        <span style={{ color: "#9a6847", fontWeight: 700, whiteSpace: "nowrap", fontSize: 12 }}>{formatCurrency(invoice.outstanding_amount)}</span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {invoiceLoadError && <div style={{ marginTop: 5, color: "#b91c1c", fontSize: 11 }}>Gagal memuat invoice: {invoiceLoadError}</div>}
+                                    </div>
+
+                                    <div>
+                                        <label className="form-label">Nama pemesan/customer</label>
+                                        <input type="text" value={selectedInvoice?.customer_name ?? ""} placeholder="Terisi otomatis setelah invoice dipilih" className="form-input" readOnly />
+                                    </div>
+
+                                    <div>
+                                        <label className="form-label">Referensi bukti/mutasi</label>
+                                        <input type="text" value={bankReference} onChange={(e) => setBankReference(e.target.value)} placeholder="Opsional" className="form-input" />
+                                    </div>
+                                </div>
+
+                                {selectedInvoice && (
+                                    <div style={{ marginTop: 10, display: "flex", gap: 14, flexWrap: "wrap", padding: "9px 11px", borderRadius: 8, background: "#f4ece4", fontSize: 12, color: "#665447" }}>
+                                        <span>Total: <strong>{formatCurrency(selectedInvoice.total_amount)}</strong></span>
+                                        <span>Sudah dibayar: <strong>{formatCurrency(selectedInvoice.allocated_amount)}</strong></span>
+                                        <span>Sisa tagihan: <strong style={{ color: "#b45309" }}>{formatCurrency(selectedInvoice.outstanding_amount)}</strong></span>
+                                        {form.amount && formAmount > 0 && (
+                                            <span style={{ marginLeft: "auto", fontWeight: 700, color: formAmount >= selectedInvoice.outstanding_amount ? "#15803d" : "#b45309" }}>
+                                                {formAmount >= selectedInvoice.outstanding_amount ? "Akan ditandai lunas" : `Pembayaran sebagian · sisa ${formatCurrency(selectedInvoice.outstanding_amount - formAmount)}`}
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         <div className="rform-amount">
                             <div>
