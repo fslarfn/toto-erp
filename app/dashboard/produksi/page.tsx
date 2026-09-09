@@ -1,11 +1,12 @@
 "use client";
 import DesktopOnly from "@/components/layout/DesktopOnly";
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import * as XLSX from "xlsx";
 import { usePesanan, PesananRow } from "@/lib/pesanan-store";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase-client";
 import { pushNotify } from "@/lib/notify";
+import { pesananRowTotal } from "@/lib/piutang";
 import TabFinishing from "./components/TabFinishing";
 
 /* ================================================================
@@ -25,6 +26,89 @@ function fmtTimeShort(iso: string) { try { return new Date(iso).toLocaleTimeStri
 
 async function addLog(pesanan_id: number, action: string, from_status: string, to_status: string, note: string, user_name: string) {
     try { await supabase.from("production_logs").insert({ pesanan_id, action, from_status, to_status, note, user_name }); } catch {}
+}
+
+/**
+ * Daftar otoritatif isi Gudang dari status di pesanan_rows.
+ *
+ * Store global tetap dipakai untuk detail barang dan optimistic update, tetapi
+ * Barang masuk setelah tahap Warna selesai dan keluar setelah Dikirim. Id
+ * Gudang dibaca langsung dengan filter server-side agar cache lama tidak
+ * membuat barang yang sudah dikirim masih terlihat. Query hanya mengambil id
+ * (payload kecil), lalu perubahan status aktif diikuti lewat Realtime.
+ */
+function useGudangStatusIds() {
+    const [ids, setIds] = useState<Set<number> | null>(null);
+
+    useEffect(() => {
+        let active = true;
+
+        const refresh = async () => {
+            try {
+                const nextIds = new Set<number>();
+                let from = 0;
+                let hasMore = true;
+
+                while (hasMore) {
+                    const { data, error } = await supabase
+                        .from("pesanan_rows")
+                        .select("id")
+                        .eq("di_warna", true)
+                        .eq("di_kirim", false)
+                        .order("id", { ascending: true })
+                        .range(from, from + 999);
+
+                    if (error) throw error;
+                    (data || []).forEach(row => nextIds.add(row.id));
+                    hasMore = (data?.length || 0) === 1000;
+                    from += 1000;
+                }
+
+                if (active) setIds(nextIds);
+            } catch (error) {
+                // Jika sinkronisasi ringan gagal, tampilan tetap memakai status
+                // dari store sehingga halaman tidak kosong atau terkunci.
+                console.error("Gagal menyinkronkan status Gudang:", error);
+            }
+        };
+
+        void refresh();
+
+        const channel = supabase
+            .channel("gudang_status_sync")
+            .on(
+                "postgres_changes",
+                { event: "*", schema: "public", table: "pesanan_rows", filter: "di_warna=eq.true" },
+                payload => {
+                    if (payload.eventType === "DELETE") return;
+                    const row = payload.new as { id?: number; di_warna?: boolean; di_kirim?: boolean };
+                    if (typeof row.id !== "number") return;
+
+                    setIds(previous => {
+                        const next = new Set(previous || []);
+                        if (row.di_warna === true && row.di_kirim !== true) next.add(row.id!);
+                        else next.delete(row.id!);
+                        return next;
+                    });
+                }
+            )
+            .subscribe();
+
+        const refreshWhenVisible = () => {
+            if (document.visibilityState === "visible") void refresh();
+        };
+        window.addEventListener("focus", refresh);
+        document.addEventListener("visibilitychange", refreshWhenVisible);
+
+        return () => {
+            active = false;
+            window.removeEventListener("focus", refresh);
+            document.removeEventListener("visibilitychange", refreshWhenVisible);
+            supabase.removeChannel(channel);
+        };
+    }, []);
+
+    return ids;
 }
 
 /* ── SVG Icons for tabs ── */
@@ -110,49 +194,109 @@ function WaButtons({ title, items, ekspedisi, statusOf }: { title: string; items
 }
 
 /* ================================================================
-   TAB 2: GUDANG — barang SIAP KIRIM (dari Finishing klik GUDANG atau
-   ceklis "Siap" di Status Barang). PIC Gudang cek kelengkapan, isi
-   ekspedisi, lalu tandai Dikirim ✓ — barang pindah ke tab Kirim.
+   TAB 2: GUDANG — kartu ringkas per invoice untuk barang SELESAI WARNA.
+   Barang masuk dari ceklis "Warna" di Status Barang. PIC Gudang membuka
+   rincian bila perlu, mengisi ekspedisi, lalu menandai kirim.
 ================================================================ */
-function TabGudang() {
+function TabGudang({ statusIds }: { statusIds: Set<number> | null }) {
     const { rows, updateRow } = usePesanan();
     const { user } = useAuth();
     const [search, setSearch] = useState("");
     const [editingNote, setEditingNote] = useState<number | null>(null);
     const [noteText, setNoteText] = useState("");
-    const [flash, setFlash] = useState<number | null>(null);
-    const [ekspedisiInputs, setEkspedisiInputs] = useState<Record<number, string>>({});
+    const [flash, setFlash] = useState<string | null>(null);
+    const [openKeys, setOpenKeys] = useState<Set<string>>(new Set());
+    const [ekspedisiInputs, setEkspedisiInputs] = useState<Record<string, string>>({});
 
-    // Sinkron dua arah dgn Status Barang: siap_kirim ✓ & belum dikirim.
-    const items = rows.filter(r => (r.customer || r.deskripsi) && r.siap_kirim === true && r.di_kirim === false);
-    const filtered = items.filter(r => {
+    // Sumber utama adalah status di database. Pengecekan boolean lokal tetap
+    // dipertahankan agar item langsung masuk setelah Warna dicentang dan
+    // langsung hilang setelah tombol Kirim ditekan.
+    const items = useMemo(
+        () => rows.filter(r =>
+            (r.customer || r.deskripsi) &&
+            r.di_warna === true &&
+            r.di_kirim === false &&
+            (statusIds === null || statusIds.has(r.id))
+        ),
+        [rows, statusIds]
+    );
+    const filtered = useMemo(() => items.filter(r => {
         if (!search) return true;
         return [r.customer, r.deskripsi, r.po_label, r.no_inv, r.production_note, r.ekspedisi].join(" ").toLowerCase().includes(search.toLowerCase());
-    });
+    }), [items, search]);
 
-    const groups: Record<string, PesananRow[]> = {};
-    filtered.forEach(r => { const k = r.po_label || "(Tanpa PO)"; if (!groups[k]) groups[k] = []; groups[k].push(r); });
-
-    const getEkspedisiValue = (row: PesananRow) => ekspedisiInputs[row.id] !== undefined ? ekspedisiInputs[row.id] : (row.ekspedisi || "");
-    const setEkspedisiInput = (rowId: number, val: string) => setEkspedisiInputs(prev => ({ ...prev, [rowId]: val }));
-
-    const markDikirim = (row: PesananRow) => {
-        const eks = getEkspedisiValue(row);
-        if (!eks.trim()) { alert("Harap isi ekspedisi terlebih dahulu (mis. JNE, SiCepat, Lalamove, Diambil)!"); return; }
-        updateRow(row.id, { di_kirim: true, shipped_at: new Date().toISOString(), ekspedisi: eks.trim() }, true);
-        addLog(row.id, "status_change", "siap_kirim", "di_kirim", `via ${eks}`, user?.name || "");
-        pushNotify({ notificationType: "status_produksi", title: "Pesanan Dikirim", body: `${row.customer || "—"} — ${row.deskripsi || "—"} via ${eks}`, url: "/dashboard/produksi" });
-        setFlash(row.id); setTimeout(() => setFlash(null), 1200);
+    type GudangOrder = {
+        key: string;
+        noInv: string;
+        customer: string;
+        tanggal: string;
+        items: PesananRow[];
+        total: number;
     };
 
-    const markAllDikirim = (rowList: PesananRow[]) => {
-        const missing = rowList.filter(r => !getEkspedisiValue(r).trim());
-        if (missing.length > 0) { alert(`${missing.length} item belum diisi ekspedisinya!`); return; }
-        rowList.forEach(r => {
-            const eks = getEkspedisiValue(r);
-            updateRow(r.id, { di_kirim: true, shipped_at: new Date().toISOString(), ekspedisi: eks.trim() }, true);
-            addLog(r.id, "status_change", "siap_kirim", "di_kirim", `via ${eks}`, user?.name || "");
+    const orders = useMemo<GudangOrder[]>(() => {
+        const grouped = new Map<string, GudangOrder>();
+        filtered.forEach(row => {
+            const invoice = (row.no_inv || "").trim();
+            const key = invoice ? `inv:${invoice}` : `row:${row.id}`;
+            const current = grouped.get(key) || {
+                key,
+                noInv: invoice,
+                customer: row.customer || "",
+                tanggal: row.tanggal || "",
+                items: [],
+                total: 0,
+            };
+            current.items.push(row);
+            current.total += pesananRowTotal(row);
+            if (!current.customer && row.customer) current.customer = row.customer;
+            if (!current.tanggal && row.tanggal) current.tanggal = row.tanggal;
+            grouped.set(key, current);
         });
+        return [...grouped.values()].sort((a, b) => {
+            const byDate = (b.tanggal || "").localeCompare(a.tanggal || "");
+            if (byDate !== 0) return byDate;
+            return (Number(b.noInv) || 0) - (Number(a.noInv) || 0);
+        });
+    }, [filtered]);
+
+    const toggleOpen = (key: string) => {
+        setOpenKeys(prev => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            return next;
+        });
+    };
+
+    const getRowEkspedisi = (row: PesananRow) => ekspedisiInputs[`row:${row.id}`] ?? row.ekspedisi ?? "";
+    const getOrderEkspedisi = (order: GudangOrder) => {
+        const pending = ekspedisiInputs[`order:${order.key}`];
+        if (pending !== undefined) return pending;
+        const existing = [...new Set(order.items.map(row => (row.ekspedisi || "").trim()).filter(Boolean))];
+        return existing.length === 1 ? existing[0] : "";
+    };
+    const setEkspedisiInput = (key: string, value: string) => setEkspedisiInputs(prev => ({ ...prev, [key]: value }));
+
+    const markDikirim = (row: PesananRow) => {
+        const eks = getRowEkspedisi(row);
+        if (!eks.trim()) { alert("Harap isi ekspedisi terlebih dahulu (mis. JNE, SiCepat, Lalamove, Diambil)!"); return; }
+        updateRow(row.id, { siap_kirim: true, di_kirim: true, shipped_at: new Date().toISOString(), ekspedisi: eks.trim() }, true);
+        addLog(row.id, "status_change", row.siap_kirim ? "siap_kirim" : "di_warna", "di_kirim", `via ${eks}`, user?.name || "");
+        pushNotify({ notificationType: "status_produksi", title: "Pesanan Dikirim", body: `${row.customer || "—"} — ${row.deskripsi || "—"} via ${eks}`, url: "/dashboard/produksi" });
+        setFlash(`row:${row.id}`); setTimeout(() => setFlash(null), 1200);
+    };
+
+    const markOrderDikirim = (order: GudangOrder) => {
+        const eks = getOrderEkspedisi(order).trim();
+        if (!eks) { alert("Isi ekspedisi untuk order ini sebelum ditandai Dikirim."); return; }
+        const shippedAt = new Date().toISOString();
+        order.items.forEach(row => {
+            updateRow(row.id, { siap_kirim: true, di_kirim: true, shipped_at: shippedAt, ekspedisi: eks }, true);
+            addLog(row.id, "status_change", row.siap_kirim ? "siap_kirim" : "di_warna", "di_kirim", `via ${eks}`, user?.name || "");
+        });
+        pushNotify({ notificationType: "status_produksi", title: "Pesanan Dikirim", body: `${order.customer || "—"} · INV ${order.noInv || "—"} via ${eks}`, url: "/dashboard/produksi" });
+        setFlash(order.key); setTimeout(() => setFlash(null), 1200);
     };
 
     const saveNote = (row: PesananRow) => {
@@ -163,71 +307,95 @@ function TabGudang() {
 
     return (
         <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
-            <SectionHeader title="Barang di Gudang · Siap Kirim" count={items.length} countBg="#DBEAFE" countColor="#1D4ED8"
+            <SectionHeader title="Barang di Gudang · Selesai Warna" count={orders.length} countBg="#DBEAFE" countColor="#1D4ED8"
                 actions={<WaButtons title="Ready Gudang" items={filtered} statusOf={() => "✅"} />}>
                 <SearchBar value={search} onChange={setSearch} placeholder="Cari customer, invoice, catatan..." />
             </SectionHeader>
-            <div style={{ flex: 1, overflow: "auto", padding: "12px 16px", background: "#F8F4EF" }}>
-                {Object.keys(groups).length === 0 ? (
-                    <EmptyState icon={<IconGudang size={48} color="#C5A882" />} title="Gudang kosong" subtitle="Barang masuk sini saat Finishing klik GUDANG atau Status Barang dicentang Siap" />
-                ) : Object.entries(groups).sort(([a], [b]) => a.localeCompare(b)).map(([opKey, opRows]) => (
-                    <div key={opKey} style={{ marginBottom: 12, borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.03)" }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "linear-gradient(135deg, #1E3A5F, #2563EB)" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                <span style={{ fontSize: 13, fontWeight: 700, color: "white" }}>PO {opKey}</span>
-                                <span style={{ background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.9)", borderRadius: 99, padding: "1px 8px", fontSize: 11, fontWeight: 600 }}>{opRows.length}</span>
-                            </div>
-                            <button onClick={() => markAllDikirim(opRows)} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.9)", fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "background 0.2s" }}
-                                onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.2)")}
-                                onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}>
-                                Kirim Semua ✓
-                            </button>
-                        </div>
-                        <div style={{ background: "white" }}>
-                            {opRows.map((row, idx) => (
-                                <div key={row.id} style={{ padding: "11px 14px", borderBottom: idx < opRows.length - 1 ? "1px solid #F5F0EC" : "none", background: flash === row.id ? "#F0FFF4" : "white", transition: "background 0.4s" }}>
-                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{ fontWeight: 600, fontSize: 13, color: "#3C2F2F" }}>{row.customer || "—"}</div>
-                                            <div style={{ fontSize: 11.5, color: "#8A7B6E", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>{row.deskripsi || "—"}</div>
-                                            <div style={{ fontSize: 10.5, color: "#B89678", marginTop: 2 }}>UK: {row.ukuran || "—"} · Qty: {row.qty || "—"} · Inv: {row.no_inv || "—"} · {fmtShort(row.tanggal)}</div>
+            <div style={{ flex: 1, overflow: "auto", padding: "10px 12px", background: "#F5EBDD" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, maxWidth: 1160, margin: "0 auto" }}>
+                    {orders.length === 0 ? (
+                        <EmptyState icon={<IconGudang size={48} color="#C5A882" />} title="Gudang kosong" subtitle="Barang muncul setelah status Warna dicentang di menu Status Barang" />
+                    ) : orders.map(order => {
+                        const isOpen = openKeys.has(order.key);
+                        const orderEkspedisi = getOrderEkspedisi(order);
+                        const stageSummary = [
+                            { label: "Produksi", done: order.items.every(row => row.di_produksi) },
+                            { label: "Warna", done: order.items.every(row => row.di_warna) },
+                            { label: "Siap", done: order.items.every(row => row.siap_kirim) },
+                        ];
+                        return (
+                            <div key={order.key} style={{ background: flash === order.key ? "#F0FFF4" : "white", border: "1px solid #E6D5BE", borderRadius: 10, overflow: "hidden", transition: "background .35s" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", flexWrap: "wrap" }}>
+                                    <button onClick={() => toggleOpen(order.key)} title={isOpen ? "Tutup detail" : "Lihat detail item"}
+                                        style={{ border: "1px solid #D1BFA3", background: "#FFFBF7", borderRadius: 6, width: 28, height: 28, cursor: "pointer", color: "#5C4033", fontSize: 11, flexShrink: 0 }}>
+                                        {isOpen ? "▾" : "▸"}
+                                    </button>
+                                    <div style={{ minWidth: 190, flex: "1 1 280px" }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+                                            <strong style={{ fontSize: 13, color: "#5C4033" }}>{order.customer || "—"}</strong>
+                                            <span style={{ background: "#DBEAFE", color: "#1D4ED8", borderRadius: 99, padding: "2px 8px", fontSize: 10, fontWeight: 700 }}>
+                                                {order.items.every(row => row.siap_kirim) ? "Siap Kirim" : "Selesai Warna"}
+                                            </span>
                                         </div>
-                                        <button onClick={() => markDikirim(row)} style={{ padding: "7px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12, whiteSpace: "nowrap", background: "#15803D", color: "white", transition: "opacity 0.15s" }}
-                                            onMouseEnter={e => { e.currentTarget.style.opacity = "0.85"; }}
-                                            onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}>
-                                            Dikirim ✓
-                                        </button>
+                                        <div style={{ fontSize: 10.5, color: "#B89678", marginTop: 2 }}>
+                                            {order.noInv ? `INV ${order.noInv}` : "Tanpa invoice"} · {fmtFull(order.tanggal)} · {order.items.length} item
+                                            {order.total > 0 && ` · Rp ${order.total.toLocaleString("id-ID")}`}
+                                        </div>
                                     </div>
-                                    {editingNote === row.id ? (
-                                        <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                                            <input type="text" value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="Catatan gudang..." autoFocus
-                                                onKeyDown={e => { if (e.key === "Enter") saveNote(row); if (e.key === "Escape") setEditingNote(null); }}
-                                                style={{ flex: 1, border: "1.5px solid #D1BFA3", borderRadius: 8, padding: "7px 10px", fontSize: 12, outline: "none", background: "#FAFAF8" }} />
-                                            <button onClick={() => saveNote(row)} style={{ padding: "7px 12px", borderRadius: 8, border: "none", background: "#2563EB", color: "white", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>OK</button>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 12, marginLeft: "auto", flexWrap: "wrap" }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                            {stageSummary.map(stage => (
+                                                <div key={stage.label} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, color: stage.done ? "#15803D" : "#8A7B6E", fontSize: 9.5, fontWeight: 700 }}>
+                                                    <span aria-label={`${stage.label} ${stage.done ? "selesai" : "belum"}`} style={{ width: 16, height: 16, borderRadius: 3, border: `1.5px solid ${stage.done ? "#A67B5B" : "#9CA3AF"}`, background: stage.done ? "#A67B5B" : "white", color: "white", display: "grid", placeItems: "center", fontSize: 11 }}>{stage.done ? "✓" : ""}</span>
+                                                    {stage.label}
+                                                </div>
+                                            ))}
                                         </div>
-                                    ) : row.production_note ? (
-                                        <div onClick={() => { setEditingNote(row.id); setNoteText(row.production_note); }} style={{ marginTop: 6, padding: "4px 8px", background: "#FAFAF5", borderRadius: 6, fontSize: 11, color: "#8A6D55", cursor: "pointer", border: "1px dashed #E8DDD0" }}>📝 {row.production_note}</div>
-                                    ) : null}
-                                    <div style={{ display: "flex", gap: 6, marginTop: 8, alignItems: "flex-end" }}>
-                                        <div style={{ flex: 1 }}>
-                                            <label style={{ display: "block", fontSize: 9, fontWeight: 700, color: "#B89678", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 3 }}>Ekspedisi</label>
-                                            <input
-                                                type="text"
-                                                value={getEkspedisiValue(row)}
-                                                onChange={e => setEkspedisiInput(row.id, e.target.value)}
-                                                onBlur={e => { updateRow(row.id, { ekspedisi: e.target.value.trim() }, true); e.target.style.borderColor = e.target.value.trim() ? "#22C55E" : "#FCA5A5"; e.target.style.boxShadow = "none"; }}
-                                                placeholder="JNE, SiCepat, LION, Lalamove, Diambil..."
-                                                style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: getEkspedisiValue(row).trim() ? "1.5px solid #22C55E" : "1.5px solid #FCA5A5", fontSize: 12, color: "#3C2F2F", background: getEkspedisiValue(row).trim() ? "#F0FFF4" : "#FFF5F5", outline: "none", boxSizing: "border-box", transition: "border-color 0.2s, background 0.2s" }}
-                                                onFocus={e => { e.target.style.borderColor = "#A67B5B"; e.target.style.boxShadow = "0 0 0 3px rgba(166,123,91,0.08)"; }}
-                                            />
+                                        <div style={{ display: "flex", alignItems: "flex-end", gap: 7, flex: "1 1 260px" }}>
+                                            <label style={{ display: "grid", gap: 3, flex: 1, minWidth: 170, fontSize: 9.5, fontWeight: 700, color: "#8A6D55" }}>
+                                                Ekspedisi
+                                                <input value={orderEkspedisi} onChange={e => setEkspedisiInput(`order:${order.key}`, e.target.value)} placeholder="JNE, travel, diambil..."
+                                                    style={{ width: "100%", boxSizing: "border-box", height: 34, border: `1.5px solid ${orderEkspedisi.trim() ? "#86C99A" : "#E8DDD0"}`, borderRadius: 7, padding: "0 10px", background: orderEkspedisi.trim() ? "#F4FBF6" : "#FFFBF7", color: "#3C2F2F", outline: "none", fontSize: 12 }} />
+                                            </label>
+                                            <button onClick={() => markOrderDikirim(order)} title="Tandai semua item dalam order sebagai dikirim"
+                                                style={{ height: 34, border: 0, borderRadius: 7, padding: "0 13px", background: "#15803D", color: "white", fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+                                                Kirim ✓
+                                            </button>
                                         </div>
-                                        <button onClick={() => { setEditingNote(row.id); setNoteText(row.production_note || ""); }} style={{ padding: "8px 12px", borderRadius: 8, border: "1.5px solid #E8DDD0", background: "white", cursor: "pointer", fontSize: 12, color: "#B89678" }}>📝</button>
                                     </div>
                                 </div>
-                            ))}
-                        </div>
-                    </div>
-                ))}
+
+                                {isOpen && (
+                                    <div style={{ borderTop: "1px solid #E6D5BE", background: "#FFFCF9" }}>
+                                        {order.items.map((row, idx) => {
+                                            const rowEkspedisi = getRowEkspedisi(row);
+                                            return (
+                                                <div key={row.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px 9px 50px", borderBottom: idx < order.items.length - 1 ? "1px solid #F1E7DA" : "none", flexWrap: "wrap", background: flash === `row:${row.id}` ? "#F0FFF4" : "transparent" }}>
+                                                    <div style={{ flex: "1 1 300px", minWidth: 0 }}>
+                                                        <div style={{ fontSize: 11.5, fontWeight: 700, color: "#3C2F2F" }}>{row.deskripsi || "—"}</div>
+                                                        <div style={{ fontSize: 10.5, color: "#8A7B6E", marginTop: 2 }}>Ukuran {row.ukuran || "—"} · Qty {row.qty || "—"}{row.po_label ? ` · PO ${row.po_label}` : ""}</div>
+                                                        {editingNote === row.id ? (
+                                                            <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                                                                <input value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="Catatan gudang..." autoFocus onKeyDown={e => { if (e.key === "Enter") saveNote(row); if (e.key === "Escape") setEditingNote(null); }}
+                                                                    style={{ flex: 1, minWidth: 0, border: "1px solid #D1BFA3", borderRadius: 6, padding: "6px 8px", fontSize: 11 }} />
+                                                                <button onClick={() => saveNote(row)} style={{ border: 0, borderRadius: 6, padding: "0 10px", background: "#2563EB", color: "white", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>Simpan</button>
+                                                            </div>
+                                                        ) : (
+                                                            <button onClick={() => { setEditingNote(row.id); setNoteText(row.production_note || ""); }} style={{ border: 0, padding: 0, marginTop: 4, background: "transparent", color: "#A67B5B", fontSize: 10.5, cursor: "pointer", textAlign: "left" }}>📝 {row.production_note || "Tambah catatan"}</button>
+                                                        )}
+                                                    </div>
+                                                    <input value={rowEkspedisi} onChange={e => setEkspedisiInput(`row:${row.id}`, e.target.value)} onBlur={e => updateRow(row.id, { ekspedisi: e.target.value.trim() }, true)} placeholder="Ekspedisi item"
+                                                        style={{ flex: "1 1 180px", maxWidth: 250, minWidth: 150, height: 32, border: "1px solid #E8DDD0", borderRadius: 7, padding: "0 9px", fontSize: 11.5, background: "white", color: "#3C2F2F" }} />
+                                                    <button onClick={() => markDikirim(row)} style={{ height: 32, border: "1px solid #B7D9C1", borderRadius: 7, padding: "0 11px", background: "#F0FFF4", color: "#15803D", fontSize: 10.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>Kirim item</button>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
             </div>
         </div>
     );
@@ -483,9 +651,12 @@ function IconFinishing({ size = 16, color = "currentColor" }: { size?: number; c
 }
 
 function AlurPesananPage() {
-    const [activeTab, setActiveTab] = useState<"finishing" | "gudang" | "pengiriman" | "riwayat">("finishing");
     const { rows } = usePesanan();
     const { user } = useAuth();
+    const gudangStatusIds = useGudangStatusIds();
+    const [activeTab, setActiveTab] = useState<"finishing" | "gudang" | "pengiriman" | "riwayat">(
+        user?.username?.toLowerCase() === "dika" ? "gudang" : "finishing"
+    );
     const isFinishing = user?.role === "finishing";
 
     /* Operator finishing langsung lihat tab Finishing saja */
@@ -494,8 +665,9 @@ function AlurPesananPage() {
     }
 
     const countFinishing  = rows.filter(r => (r.customer || r.deskripsi) && r.printed_at && !r.di_kirim && r.finishing_status === "belum").length;
-    // Gudang = barang siap kirim (sinkron ceklis "Siap" di Status Barang).
-    const countGudang     = rows.filter(r => (r.customer || r.deskripsi) && r.siap_kirim === true && r.di_kirim === false).length;
+    // Gudang = barang selesai warna dan belum dikirim.
+    const countGudang = gudangStatusIds?.size
+        ?? rows.filter(r => (r.customer || r.deskripsi) && r.di_warna === true && r.di_kirim === false).length;
     // Kirim = sudah dikirim bulan berjalan (sinkron ceklis "Kirim" di Status Barang).
     const nowT = new Date();
     const curYT = nowT.getFullYear(), curMT = nowT.getMonth() + 1;
@@ -546,7 +718,7 @@ function AlurPesananPage() {
             {/* ── Tab Content ── */}
             <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
                 {activeTab === "finishing" && <TabFinishing />}
-                {activeTab === "gudang"    && <TabGudang />}
+                {activeTab === "gudang"    && <TabGudang statusIds={gudangStatusIds} />}
                 {activeTab === "pengiriman"&& <TabKirim />}
                 {activeTab === "riwayat"   && <TabRiwayatPO />}
             </div>
@@ -555,8 +727,9 @@ function AlurPesananPage() {
 }
 
 // Di HP tampilkan keterangan "buka di komputer" (components/layout/DesktopOnly).
-// PENGECUALIAN: operator finishing bekerja pakai TABLET di lantai produksi —
-// jangan diblok (mereka hanya melihat tab Finishing, tanpa menu lain/Alucurv).
+// PENGECUALIAN: operator finishing bekerja pakai TABLET di lantai produksi.
+// Dika juga mendapat bypass melalui DesktopOnly agar seluruh menu yang memang
+// diberikan oleh role-nya dapat dibuka di HP (tanpa menambah hak akses baru).
 export default function AlurPesananPageMobileGuard() {
     const { user } = useAuth();
     if (user?.role === "finishing") return <AlurPesananPage />;

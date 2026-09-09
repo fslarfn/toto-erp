@@ -20,11 +20,18 @@ export async function POST(req: Request) {
 
     const supabase = getAdminSupabase();
 
-    const { data: user } = await supabase
+    const { data: user, error: userError } = await supabase
       .from("app_users")
       .select("id, name, username, password_hash, role, avatar")
       .eq("username", username.toLowerCase().trim())
       .maybeSingle();
+
+    // Jangan samarkan gangguan koneksi/izin database sebagai password salah.
+    // Pesan detail hanya masuk log server; browser menerima error umum.
+    if (userError) {
+      console.error("[auth/login] app_users lookup failed:", userError.message);
+      return NextResponse.json({ error: "Layanan login sedang bermasalah." }, { status: 503 });
+    }
 
     // Delay konstan agar attacker tidak bisa deteksi username valid/tidak
     await new Promise((r) => setTimeout(r, 200));

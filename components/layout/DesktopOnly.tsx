@@ -8,8 +8,10 @@
 // ============================================================
 import { useState, useEffect, type ReactNode } from "react";
 import Link from "next/link";
+import { useAuth } from "@/lib/auth";
 
 export default function DesktopOnly({ label, children }: { label: string; children: ReactNode }) {
+    const { user } = useAuth();
     // null = belum tahu (render kosong sesaat, hindari kedip salah tampilan)
     const [isMobile, setIsMobile] = useState<boolean | null>(null);
 
@@ -22,7 +24,10 @@ export default function DesktopOnly({ label, children }: { label: string; childr
     }, []);
 
     if (isMobile === null) return null;
-    if (!isMobile) return <>{children}</>;
+    // Dika bekerja sebagai PIC gudang melalui HP. Bypass ini hanya membuka
+    // tampilan mobile; hak menu tetap mengikuti roleAccess/hasAccess.
+    const mobileAllowed = user?.username?.toLowerCase() === "dika";
+    if (!isMobile || mobileAllowed) return <>{children}</>;
 
     return (
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: "#F5EBDD" }}>

@@ -1,20 +1,18 @@
 "use client";
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { usePesanan, PesananRow, FinishingStatus } from "@/lib/pesanan-store";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase-client";
 import { pushNotify } from "@/lib/notify";
 
 /* ================================================================
-   TAB FINISHING — 4 checkbox: PRODUKSI · REPAIR · WARNA · GUDANG
+   TAB FINISHING — 3 checkbox: PRODUKSI · REPAIR · WARNA
    Setiap checkbox independen & sync langsung ke pesanan_rows:
      PRODUKSI → di_produksi
      REPAIR   → is_repair + di_produksi=true + finishing_status='repair'
      WARNA    → di_warna   + finishing_status='warna'
-     GUDANG   → siap_kirim + di_warna=true + finishing_status='gudang'
 ================================================================ */
 
-const MN = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"];
 const ML = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
 
 function fmtDateFull(iso: string) {
@@ -43,12 +41,11 @@ function useToast() {
 }
 
 /* ── Checkbox metadata ── */
-type CheckField = 'produksi' | 'repair' | 'warna' | 'gudang';
+type CheckField = 'produksi' | 'repair' | 'warna';
 const CB: Record<CheckField, { label: string; color: string; bg: string; border: string; beep: number }> = {
     produksi: { label: "Produksi", color: "#7C5A3C", bg: "#FDF4E7", border: "#F5D9A8", beep: 550 },
     repair:   { label: "Repair",   color: "#BE123C", bg: "#FFF1F2", border: "#FECDD3", beep: 440 },
     warna:    { label: "Warna",    color: "#1D4ED8", bg: "#EFF6FF", border: "#BFDBFE", beep: 660 },
-    gudang:   { label: "Gudang",   color: "#15803D", bg: "#F0FFF4", border: "#BBF7D0", beep: 880 },
 };
 
 /* ── Whether a row's checkbox is checked ── */
@@ -56,13 +53,11 @@ function isChecked(item: PesananRow, field: CheckField): boolean {
     if (field === 'produksi') return item.di_produksi;
     if (field === 'repair')   return item.is_repair;
     if (field === 'warna')    return item.di_warna;
-    if (field === 'gudang')   return item.siap_kirim;
     return false;
 }
 
 /* ── Row background based on highest status ── */
 function rowBg(item: PesananRow): string {
-    if (item.siap_kirim) return "#F0FFF4";
     if (item.di_warna)   return "#EFF6FF";
     if (item.is_repair)  return "#FFF1F2";
     if (item.di_produksi) return "#FDF4E7";
@@ -98,9 +93,9 @@ function buildSesiList(rows: PesananRow[], year: number, month: number): Sesi[] 
     return Object.values(map)
         .map(s => ({
             ...s,
-            // 100% only when all items are in gudang (siap_kirim)
+            // Pekerjaan finishing selesai ketika semua item sudah masuk tahap warna.
             progress: s.rows.length === 0 ? 0 : Math.round(
-                (s.rows.filter(r => r.siap_kirim).length / s.rows.length) * 100
+                (s.rows.filter(r => r.di_warna).length / s.rows.length) * 100
             ),
         }))
         .sort((a, b) => b.printedAt.localeCompare(a.printedAt));
@@ -139,17 +134,13 @@ export default function TabFinishing() {
         return list;
     }, [allSesi, search, sortBy]);
 
-    const selectedSesi = useMemo(() => filteredSesi.find(s => s.key === selectedKey) ?? null, [filteredSesi, selectedKey]);
-
-    useEffect(() => {
-        if (!selectedKey && filteredSesi.length > 0) setSelectedKey(filteredSesi[0].key);
-    }, [filteredSesi, selectedKey]);
-
-    useEffect(() => {
-        if (selectedKey && !filteredSesi.find(s => s.key === selectedKey)) {
-            setSelectedKey(filteredSesi[0]?.key ?? null);
-        }
-    }, [filteredSesi, selectedKey]);
+    const effectiveSelectedKey = filteredSesi.some(s => s.key === selectedKey)
+        ? selectedKey
+        : filteredSesi[0]?.key ?? null;
+    const selectedSesi = useMemo(
+        () => filteredSesi.find(s => s.key === effectiveSelectedKey) ?? null,
+        [filteredSesi, effectiveSelectedKey]
+    );
 
     const displayRows = useMemo(() => {
         const rows = selectedSesi?.rows ?? [];
@@ -161,13 +152,12 @@ export default function TabFinishing() {
     const stats = useMemo(() => {
         const items = selectedSesi?.rows ?? [];
         const total    = items.length;
-        const belum    = items.filter(r => !r.di_produksi && !r.is_repair && !r.di_warna && !r.siap_kirim).length;
+        const belum    = items.filter(r => !r.di_produksi && !r.is_repair && !r.di_warna).length;
         const produksi = items.filter(r => r.di_produksi).length;
         const repair   = items.filter(r => r.is_repair).length;
         const warna    = items.filter(r => r.di_warna).length;
-        const gudang   = items.filter(r => r.siap_kirim).length;
         const operators = [...new Set(items.filter(r => r.finishing_operator).map(r => r.finishing_operator))];
-        return { total, belum, produksi, repair, warna, gudang, operators };
+        return { total, belum, produksi, repair, warna, operators };
     }, [selectedSesi]);
 
     /* ── Unified checkbox handler (4 independent fields) ── */
@@ -195,14 +185,6 @@ export default function TabFinishing() {
             } else {
                 updateRow(item.id, { di_warna: false, finishing_status: (item.is_repair ? 'repair' : 'belum') as FinishingStatus, finishing_operator: "", finishing_at: null }, true);
                 showToast("Warna dibatalkan", "#6B7280");
-            }
-        } else if (field === 'gudang') {
-            if (!cur) {
-                updateRow(item.id, { siap_kirim: true, di_warna: true, finishing_status: 'gudang', ...ts }, true);
-                showToast(`Gudang ✓ ${item.customer}`, CB.gudang.color);
-            } else {
-                updateRow(item.id, { siap_kirim: false, finishing_status: (item.di_warna ? 'warna' : item.is_repair ? 'repair' : 'belum') as FinishingStatus, finishing_operator: "", finishing_at: null }, true);
-                showToast("Gudang dibatalkan", "#6B7280");
             }
         }
 
@@ -245,7 +227,7 @@ export default function TabFinishing() {
                             <div style={{ fontSize: 11, fontWeight: 700, color: "#8A6D55" }}>Belum ada sesi PO</div>
                         </div>
                     ) : filteredSesi.map(s => {
-                        const isActive = s.key === selectedKey;
+                        const isActive = s.key === effectiveSelectedKey;
                         const totalQty = s.rows.reduce((a, r) => a + parseQty(r.qty), 0);
                         return (
                             <div key={s.key} onClick={() => setSelectedKey(s.key)}
@@ -287,7 +269,7 @@ export default function TabFinishing() {
                             </div>
                         </div>
 
-                        {/* Stats: 6 cards */}
+                        {/* Ringkasan tahap finishing */}
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))", gap: 6, marginTop: 10 }}>
                             {[
                                 { label: "Total",    val: stats.total,    color: "#3C2F2F", bg: "#F8F4EF" },
@@ -295,7 +277,6 @@ export default function TabFinishing() {
                                 { label: "Produksi", val: stats.produksi, color: CB.produksi.color, bg: CB.produksi.bg },
                                 { label: "Repair",   val: stats.repair,   color: CB.repair.color,   bg: CB.repair.bg },
                                 { label: "Warna",    val: stats.warna,    color: CB.warna.color,    bg: CB.warna.bg },
-                                { label: "Gudang",   val: stats.gudang,   color: CB.gudang.color,   bg: CB.gudang.bg },
                             ].map(c => (
                                 <div key={c.label} style={{ background: c.bg, borderRadius: 7, padding: "6px 8px", textAlign: "center" }}>
                                     <div style={{ fontSize: 16, fontWeight: 800, color: c.color }}>{c.val}</div>
@@ -315,7 +296,7 @@ export default function TabFinishing() {
                             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                                 <thead>
                                     <tr style={{ background: "#FAF7F3", position: "sticky", top: 0, zIndex: 2 }}>
-                                        {["NO", "CUSTOMER", "DESKRIPSI", "UK", "QTY", "PRODUKSI", "REPAIR", "WARNA", "GUDANG", "WAKTU", "OPERATOR"].map(h => (
+                                        {["NO", "CUSTOMER", "DESKRIPSI", "UK", "QTY", "PRODUKSI", "REPAIR", "WARNA", "WAKTU", "OPERATOR"].map(h => (
                                             <th key={h} style={{ padding: "9px 10px", textAlign: h === "NO" ? "center" : "left", fontSize: 9, fontWeight: 800, color: "#8A6D55", letterSpacing: "0.08em", textTransform: "uppercase", borderBottom: "1.5px solid #E8DDD0", whiteSpace: "nowrap" }}>{h}</th>
                                         ))}
                                     </tr>
@@ -331,8 +312,8 @@ export default function TabFinishing() {
                                                 <td style={{ padding: "9px 10px", color: "#8A7B6E", whiteSpace: "nowrap" }}>{item.ukuran || "—"}</td>
                                                 <td style={{ padding: "9px 10px", color: "#3C2F2F", fontWeight: 700, whiteSpace: "nowrap" }}>{item.qty || "—"}</td>
 
-                                                {/* 4 checkbox columns */}
-                                                {(["produksi", "repair", "warna", "gudang"] as CheckField[]).map(f => {
+                                                {/* 3 checkbox tahap finishing */}
+                                                {(["produksi", "repair", "warna"] as CheckField[]).map(f => {
                                                     const checked = isChecked(item, f);
                                                     const m = CB[f];
                                                     return (
@@ -359,9 +340,9 @@ export default function TabFinishing() {
                                         <td colSpan={5} style={{ padding: "9px 10px", fontSize: 10, fontWeight: 700, color: "#5C4033" }}>
                                             Total: {stats.total} · Belum: {stats.belum} · Progress: {stats.total ? Math.round(((stats.total - stats.belum) / stats.total) * 100) : 0}%
                                         </td>
-                                        {(["produksi", "repair", "warna", "gudang"] as CheckField[]).map(f => (
+                                        {(["produksi", "repair", "warna"] as CheckField[]).map(f => (
                                             <td key={f} style={{ padding: "9px 10px", textAlign: "center", fontSize: 10, fontWeight: 800, color: CB[f].color }}>
-                                                {f === 'produksi' ? stats.produksi : f === 'repair' ? stats.repair : f === 'warna' ? stats.warna : stats.gudang}
+                                                {f === 'produksi' ? stats.produksi : f === 'repair' ? stats.repair : stats.warna}
                                             </td>
                                         ))}
                                         <td colSpan={2} />
