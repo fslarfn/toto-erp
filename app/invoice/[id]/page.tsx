@@ -5,6 +5,7 @@ import { formatCurrency } from "@/lib/utils";
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 import { FileText, Printer, Loader2 } from "lucide-react";
+import { ACCOUNTING_TAX_BILLING } from "@/lib/billing/accounting-tax";
 
 export default function PublicInvoicePage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
@@ -42,6 +43,8 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ id: st
             </div>
         );
     }
+
+    const isAccountingTaxPayment = invoice.payment_type === ACCOUNTING_TAX_BILLING.paymentType;
 
     return (
         <div className="min-h-screen bg-gray-100 py-10 px-4 flex flex-col items-center print:bg-white print:py-0">
@@ -92,7 +95,7 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ id: st
                         </div>
                         <div className="flex gap-4">
                             <span className="text-slate-400 font-bold uppercase text-[9px] w-16">Keterangan</span>
-                            <span className="text-slate-500 italic">Langganan Toto ERP</span>
+                            <span className="text-slate-500 italic">{isAccountingTaxPayment ? ACCOUNTING_TAX_BILLING.title : "Langganan Toto ERP"}</span>
                         </div>
                     </div>
                 </div>
@@ -110,11 +113,15 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ id: st
                         <tr className="border-b border-slate-50">
                             <td className="py-6">
                                 <p className="font-bold text-base text-slate-800">
-                                    {invoice.payment_type === 'initial' 
-                                        ? "Setup Biaya Server + Lisensi Digital (2 Bulan)" 
-                                        : "Perpanjangan Masa Aktif Lisensi ERP (30 Hari)"}
+                                    {isAccountingTaxPayment
+                                        ? ACCOUNTING_TAX_BILLING.title
+                                        : invoice.payment_type === 'initial'
+                                            ? "Setup Biaya Server + Lisensi Digital (2 Bulan)"
+                                            : "Perpanjangan Masa Aktif Lisensi ERP (30 Hari)"}
                                 </p>
-                                <p className="text-[10px] text-slate-400 mt-1 italic">Lisensi valid untuk 7 Akun Pengguna Terdaftar</p>
+                                <p className="text-[10px] text-slate-400 mt-1 italic">
+                                    {isAccountingTaxPayment ? ACCOUNTING_TAX_BILLING.description : "Lisensi valid untuk 7 Akun Pengguna Terdaftar"}
+                                </p>
                             </td>
                             <td className="py-6 text-right font-bold text-slate-700">1</td>
                             <td className="py-6 text-right font-black text-slate-800 text-lg">{formatCurrency(Number(invoice.amount))}</td>

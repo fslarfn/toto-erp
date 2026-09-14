@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { ACCOUNTING_TAX_BILLING } from "@/lib/billing/accounting-tax";
 
 function getServiceSupabase() {
   return createClient(
@@ -25,17 +26,32 @@ export async function POST(req: Request) {
 
     // Aktivasi absensi harus menyertakan bukti bayar
     const isAbsensi = type === "aktivasi_absensi";
-    if (isAbsensi && !bukti_url) {
-      return NextResponse.json({ error: "Bukti transfer wajib untuk aktivasi absensi" }, { status: 400 });
+    const isAccountingTax = type === "akuntansi_pajak";
+    if ((isAbsensi || isAccountingTax) && !bukti_url) {
+      return NextResponse.json({ error: "Bukti transfer wajib untuk pembayaran ini" }, { status: 400 });
     }
 
+    const effectiveAmount = isAccountingTax ? ACCOUNTING_TAX_BILLING.amount : Number(amount);
+
     const supabase = getServiceSupabase();
+
+    if (isAccountingTax) {
+      const { data: paidInvoice, error: paidInvoiceError } = await supabase
+        .from("billing_history")
+        .select("id")
+        .eq("order_id", ACCOUNTING_TAX_BILLING.orderId)
+        .maybeSingle();
+      if (paidInvoiceError) throw paidInvoiceError;
+      if (paidInvoice) {
+        return NextResponse.json({ error: "Pembayaran Akuntansi & Perpajakan sudah dikonfirmasi." }, { status: 409 });
+      }
+    }
 
     const { data, error } = await supabase
       .from("billing_manual_confirmations")
       .insert({
         username: sessionUsername,
-        amount: Number(amount),
+        amount: effectiveAmount,
         reference_number,
         bukti_url: bukti_url || null,
         notes: notes || null,

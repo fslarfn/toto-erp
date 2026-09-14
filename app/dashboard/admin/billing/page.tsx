@@ -10,6 +10,7 @@ import {
     X, Zap, History, Printer, Download, QrCode
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { ACCOUNTING_TAX_BILLING } from "@/lib/billing/accounting-tax";
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 
@@ -28,17 +29,20 @@ function BillingPage() {
     const [buktiFile, setBuktiFile] = useState<File | null>(null);
     const [buktiPreview, setBuktiPreview] = useState<string>("");
     const [notes, setNotes] = useState("");
-    const [paymentPurpose, setPaymentPurpose] = useState<"perpanjang_web_app" | "aktivasi_absensi">("perpanjang_web_app");
+    const [paymentPurpose, setPaymentPurpose] = useState<"perpanjang_web_app" | "aktivasi_absensi" | "akuntansi_pajak">("perpanjang_web_app");
     const [showInvoice, setShowInvoice] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showApproveSuccess, setShowApproveSuccess] = useState(false);
     const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
     const [showQrisModal, setShowQrisModal] = useState(false);
     const [showAbsensiConfirmSuccess, setShowAbsensiConfirmSuccess] = useState(false);
+    const [confirmingAccountingTax, setConfirmingAccountingTax] = useState(false);
 
     const isOwner = user?.username === "faisal";
     const isAdminFinance = ["vira", "riska", "toto", "fauzi", "yuni"].includes(user?.username || "");
     const hasAccess = isOwner || isAdminFinance;
+    const accountingTaxPayment = history.find(item => item.payment_type === ACCOUNTING_TAX_BILLING.paymentType);
+    const firstManualReport = manualReports[0];
 
     const refreshLicense = useCallback(async () => {
         const { data, error } = await supabase.from("app_config").select("*").eq("id", 1).single();
@@ -101,7 +105,12 @@ function BillingPage() {
             const { data: { publicUrl } } = supabase.storage.from("bukti-transfer").getPublicUrl(fileName);
 
             const isAbsensi = paymentPurpose === "aktivasi_absensi";
-            const amount = isAbsensi ? 6100000 : (license?.is_setup_completed ? 6200000 : 20800000);
+            const isAccountingTax = paymentPurpose === "akuntansi_pajak";
+            const amount = isAbsensi
+                ? 6100000
+                : isAccountingTax
+                    ? ACCOUNTING_TAX_BILLING.amount
+                    : (license?.is_setup_completed ? 6200000 : 20800000);
 
             const reportRes = await fetch("/api/billing/manual-report", {
                 method: "POST",
@@ -219,6 +228,41 @@ function BillingPage() {
         } catch (err: any) { alert("Gagal: " + (err.message ?? "Sistem error.")); } finally { setLoading(false); }
     };
 
+    const confirmAccountingTax = async (reportId?: string) => {
+        if (accountingTaxPayment && !reportId) {
+            setActiveTab("history");
+            openInvoice(accountingTaxPayment);
+            return;
+        }
+
+        const confirmationMessage = accountingTaxPayment
+            ? "Tandai bukti pembayaran ini sudah diperiksa?\nInvoice yang sudah ada tidak akan dibuat ulang."
+            : `Konfirmasi pembayaran ${formatCurrency(ACCOUNTING_TAX_BILLING.amount)} sudah diterima?\nInvoice akan masuk ke Riwayat & Invoice.`;
+        if (!confirm(confirmationMessage)) return;
+
+        setConfirmingAccountingTax(true);
+        try {
+            const res = await fetch("/api/billing/confirm-accounting-tax", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ reportId }),
+            });
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.error ?? "Gagal mengonfirmasi pembayaran.");
+
+            await fetchData();
+            setActiveTab("history");
+            if (result.invoice) {
+                setSelectedInvoice(result.invoice);
+                setShowInvoice(true);
+            }
+        } catch (err: unknown) {
+            alert(err instanceof Error ? err.message : "Gagal mengonfirmasi pembayaran.");
+        } finally {
+            setConfirmingAccountingTax(false);
+        }
+    };
+
     if (!hasAccess) return <div className="page-content text-center py-20 opacity-50">AKSES DITOLAK</div>;
 
     return (
@@ -250,6 +294,35 @@ function BillingPage() {
                 </div>
             </div>
 
+            {isOwner && (
+                <section style={{ marginBottom: 24, background: "#fff", border: "1px solid #e5d4c2", borderRadius: 14, overflow: "hidden", boxShadow: "0 8px 24px rgba(91,64,53,0.06)" }}>
+                    <div style={{ height: 5, background: accountingTaxPayment ? "#5a8f6e" : "linear-gradient(90deg, #5C4033 0%, #D4AF37 100%)" }} />
+                    <div style={{ padding: "18px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, flexWrap: "wrap" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 260, flex: "1 1 440px" }}>
+                            <div style={{ width: 44, height: 44, borderRadius: 12, background: accountingTaxPayment ? "#e8f5e9" : "#f7efe5", color: accountingTaxPayment ? "#2e7d32" : "#7a563f", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>
+                                {accountingTaxPayment ? "✓" : "▤"}
+                            </div>
+                            <div>
+                                <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#3a2e25" }}>{ACCOUNTING_TAX_BILLING.title}</h2>
+                                <p style={{ margin: "4px 0 0", fontSize: 12, lineHeight: 1.5, color: "#8a7e72" }}>
+                                    {accountingTaxPayment
+                                        ? `Pembayaran ${formatCurrency(ACCOUNTING_TAX_BILLING.amount)} sudah dikonfirmasi dan invoice tersimpan.`
+                                        : `Setelah bukti transfer diterima, konfirmasi pembayaran ${formatCurrency(ACCOUNTING_TAX_BILLING.amount)} untuk membuat invoice resmi.`}
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => confirmAccountingTax()}
+                            disabled={confirmingAccountingTax}
+                            style={{ background: accountingTaxPayment ? "#edf7f0" : "#5C4033", color: accountingTaxPayment ? "#2e7d32" : "#fff", padding: "11px 18px", borderRadius: 8, fontSize: 12, fontWeight: 700, border: accountingTaxPayment ? "1px solid #b9dfc5" : "1px solid #5C4033", cursor: confirmingAccountingTax ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, minWidth: 190 }}
+                        >
+                            {confirmingAccountingTax ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+                            {confirmingAccountingTax ? "Memproses..." : accountingTaxPayment ? "Lihat invoice" : "Konfirmasi pembayaran"}
+                        </button>
+                    </div>
+                </section>
+            )}
+
             {isOwner && manualReports.length > 0 && (
                 <div style={{ marginBottom: 24, padding: "20px 24px", background: "#d63230", borderRadius: 14, boxShadow: "0 10px 25px rgba(214,50,48,0.2)", border: "4px solid white", display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 16, color: "white" }}>
@@ -258,11 +331,15 @@ function BillingPage() {
                         </div>
                         <div>
                             <h4 style={{ margin: 0, fontWeight: 900, fontSize: 14, textTransform: "uppercase", letterSpacing: 1 }}>Ada {manualReports.length} Laporan Pembayaran Baru!</h4>
-                            <p style={{ margin: "4px 0 0", fontSize: 11, fontWeight: 600, opacity: 0.9, fontStyle: "italic" }}>Klik tombol di samping untuk mengaktifkan lisensi {license?.is_setup_completed ? '1 Bulan' : '3 Bulan'}.</p>
+                            <p style={{ margin: "4px 0 0", fontSize: 11, fontWeight: 600, opacity: 0.9 }}>
+                                {firstManualReport?.type === "akuntansi_pajak"
+                                    ? "Periksa bukti transfer, lalu konfirmasi agar invoice masuk ke riwayat pembayaran."
+                                    : `Klik tombol di samping untuk mengaktifkan lisensi ${license?.is_setup_completed ? "1 Bulan" : "3 Bulan"}.`}
+                            </p>
                         </div>
                     </div>
-                    <button onClick={() => approveManual(manualReports[0].id)} style={{ background: "white", color: "#d63230", padding: "12px 24px", borderRadius: 30, fontWeight: 900, textTransform: "uppercase", fontSize: 11, letterSpacing: 1.5, border: "none", cursor: "pointer", boxShadow: "0 4px 10px rgba(0,0,0,0.1)" }}>
-                        AKTIFKAN LISENSI SEKARANG
+                    <button onClick={() => firstManualReport?.type === "akuntansi_pajak" ? confirmAccountingTax(firstManualReport!.id) : approveManual(firstManualReport!.id)} style={{ background: "white", color: "#d63230", padding: "12px 24px", borderRadius: 30, fontWeight: 900, textTransform: "uppercase", fontSize: 11, letterSpacing: 1.2, border: "none", cursor: "pointer", boxShadow: "0 4px 10px rgba(0,0,0,0.1)" }}>
+                        {firstManualReport?.type === "akuntansi_pajak" ? "KONFIRMASI & BUAT INVOICE" : "AKTIFKAN LISENSI SEKARANG"}
                     </button>
                 </div>
             )}
@@ -423,15 +500,21 @@ function BillingPage() {
                                     </label>
                                     <select
                                         value={paymentPurpose}
-                                        onChange={e => setPaymentPurpose(e.target.value as "perpanjang_web_app" | "aktivasi_absensi")}
+                                        onChange={e => setPaymentPurpose(e.target.value as "perpanjang_web_app" | "aktivasi_absensi" | "akuntansi_pajak")}
                                         style={{ width: "100%", padding: "11px 14px", borderRadius: 8, border: "1.5px solid #ddd6cd", fontSize: 13.5, fontFamily: "'DM Sans', sans-serif", background: "#faf8f5", outline: "none", boxSizing: "border-box" as const, cursor: "pointer" }}
                                     >
                                         <option value="perpanjang_web_app">Perpanjang Web App</option>
                                         <option value="aktivasi_absensi">Aktivasi Absensi</option>
+                                        <option value="akuntansi_pajak">Menu Akuntansi & Perpajakan - Rp7.750.000</option>
                                     </select>
                                     {paymentPurpose === "aktivasi_absensi" && (
                                         <div style={{ marginTop: 6, padding: "8px 12px", background: "rgba(29,78,216,0.06)", borderRadius: 8, fontSize: 11.5, color: "#1D4ED8", lineHeight: 1.5 }}>
                                             ℹ️ Setelah bukti dikirim, fitur absensi langsung aktif dan banner hilang otomatis.
+                                        </div>
+                                    )}
+                                    {paymentPurpose === "akuntansi_pajak" && (
+                                        <div style={{ marginTop: 6, padding: "8px 12px", background: "#f7efe5", borderRadius: 8, fontSize: 11.5, color: "#7a563f", lineHeight: 1.5 }}>
+                                            Bayar Rp7.750.000 melalui QRIS pada Portal Pembayaran di atas, lalu unggah bukti. Invoice dibuat setelah Faisal menekan Konfirmasi pembayaran.
                                         </div>
                                     )}
                                 </div>
@@ -495,8 +578,8 @@ function BillingPage() {
                             {history.length > 0 ? history.map(item => (
                                 <tr key={item.order_id} style={{ borderBottom: "1px solid #f5f3f0" }}>
                                     <td style={{ padding: "14px 16px", fontSize: 13, fontWeight: 500 }}>{format(new Date(item.created_at), 'dd MMM yyyy')}</td>
-                                    <td style={{ padding: "14px 16px", fontSize: 11, textTransform: "uppercase", fontWeight: 700, color: item.payment_type === 'absensi_activation' ? "#1D4ED8" : "#8a7e72" }}>
-                                        {item.payment_type === 'initial' ? 'Setup + Lisensi' : item.payment_type === 'absensi_activation' ? '📋 Aktivasi Absensi' : item.payment_type === 'extend_5m' ? '🗓️ Langganan 5 Bulan' : 'Langganan Bulanan'}
+                                    <td style={{ padding: "14px 16px", fontSize: 11, textTransform: "uppercase", fontWeight: 700, color: item.payment_type === 'absensi_activation' ? "#1D4ED8" : item.payment_type === ACCOUNTING_TAX_BILLING.paymentType ? "#7a563f" : "#8a7e72" }}>
+                                        {item.payment_type === 'initial' ? 'Setup + Lisensi' : item.payment_type === 'absensi_activation' ? '📋 Aktivasi Absensi' : item.payment_type === ACCOUNTING_TAX_BILLING.paymentType ? '▤ Akuntansi & Perpajakan' : item.payment_type === 'extend_5m' ? '🗓️ Langganan 5 Bulan' : 'Langganan Bulanan'}
                                     </td>
                                     <td style={{ padding: "14px 16px", fontSize: 13, fontWeight: 700, fontFamily: "'Playfair Display', serif" }}>{formatCurrency(item.amount)}</td>
                                     <td style={{ padding: "14px 16px", textAlign: "center" }}>
@@ -531,8 +614,8 @@ function BillingPage() {
                                 <div><div style={{ fontSize: 10, fontWeight: 700, color: "#a09488", textTransform: "uppercase", marginBottom: 2 }}>Tanggal</div><div style={{ fontSize: 13, color: "#3a2e25" }}>{format(new Date(report.created_at), "dd MMM yyyy HH:mm", { locale: localeId })}</div></div>
                                 <div>
                                     <div style={{ fontSize: 10, fontWeight: 700, color: "#a09488", textTransform: "uppercase", marginBottom: 4 }}>Keperluan</div>
-                                    <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, background: report.type === "aktivasi_absensi" ? "rgba(29,78,216,0.1)" : "rgba(90,143,110,0.1)", color: report.type === "aktivasi_absensi" ? "#1D4ED8" : "#3d6b50" }}>
-                                        {report.type === "aktivasi_absensi" ? "📋 Aktivasi Absensi" : "🔄 Perpanjang Web App"}
+                                    <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, background: report.type === "aktivasi_absensi" ? "rgba(29,78,216,0.1)" : report.type === "akuntansi_pajak" ? "#f7efe5" : "rgba(90,143,110,0.1)", color: report.type === "aktivasi_absensi" ? "#1D4ED8" : report.type === "akuntansi_pajak" ? "#7a563f" : "#3d6b50" }}>
+                                        {report.type === "aktivasi_absensi" ? "📋 Aktivasi Absensi" : report.type === "akuntansi_pajak" ? "▤ Akuntansi & Perpajakan" : "🔄 Perpanjang Web App"}
                                     </span>
                                 </div>
                                 {report.notes && <div style={{ gridColumn: "span 4" }}><div style={{ fontSize: 10, fontWeight: 700, color: "#a09488", textTransform: "uppercase", marginBottom: 2 }}>Catatan</div><div style={{ fontSize: 13, color: "#4a4440" }}>{report.notes}</div></div>}
@@ -556,6 +639,11 @@ function BillingPage() {
                                     <div style={{ fontSize: 12, color: "#1D4ED8", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
                                         <CheckCircle2 size={14} /> Sudah diproses otomatis saat pengiriman bukti
                                     </div>
+                                ) : report.type === "akuntansi_pajak" ? (
+                                    <button onClick={() => confirmAccountingTax(report.id)} disabled={confirmingAccountingTax} style={{ background: "#5C4033", color: "white", border: "none", padding: "10px 20px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: confirmingAccountingTax ? "wait" : "pointer", boxShadow: "0 4px 10px rgba(92,64,51,0.2)", display: "flex", alignItems: "center", gap: 7 }}>
+                                        {confirmingAccountingTax ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                                        {confirmingAccountingTax ? "Memproses..." : "Konfirmasi & buat invoice"}
+                                    </button>
                                 ) : (
                                     <button onClick={() => approveManual(report.id)} style={{ background: "#5a8f6e", color: "white", border: "none", padding: "10px 20px", borderRadius: 8, fontSize: 11, fontWeight: 700, textTransform: "uppercase", cursor: "pointer", boxShadow: "0 4px 10px rgba(90,143,110,0.2)" }}>
                                         ✓ Aktifkan Lisensi Web App
@@ -697,7 +785,11 @@ function BillingPage() {
 
                             <div className="cert-title">
                                 <h2>Payment Successful Notice</h2>
-                                <p className="text-[10px] text-gray-400 mt-1">Dokumen ini merupakan pengakuan resmi atas transaksi lisensi aktif.</p>
+                                <p className="text-[10px] text-gray-400 mt-1">
+                                    {selectedInvoice.payment_type === ACCOUNTING_TAX_BILLING.paymentType
+                                        ? "Dokumen ini merupakan pengakuan resmi atas pembayaran pengembangan fitur ERP."
+                                        : "Dokumen ini merupakan pengakuan resmi atas transaksi lisensi aktif."}
+                                </p>
                                 <div className="line"></div>
                             </div>
 
@@ -715,7 +807,23 @@ function BillingPage() {
                                     <span className="cert-value uppercase">{selectedInvoice.order_id}</span>
                                 </div>
                                 
-                                {selectedInvoice.payment_type === 'initial' ? (
+                                {selectedInvoice.payment_type === ACCOUNTING_TAX_BILLING.paymentType ? (
+                                    <div className="mt-4 pt-4 border-t border-dashed border-gray-200">
+                                        <div className="cert-row">
+                                            <span className="cert-label">Jenis Layanan</span>
+                                            <span className="cert-value uppercase">Menu Akuntansi & Perpajakan</span>
+                                        </div>
+                                        <div className="cert-row">
+                                            <span className="cert-label">Nomor Invoice</span>
+                                            <span className="cert-value">{ACCOUNTING_TAX_BILLING.invoiceNumber}</span>
+                                        </div>
+                                        <p className="cert-label mb-2">Rincian Pekerjaan:</p>
+                                        <div className="cert-row !border-none !mb-1">
+                                            <span style={{ fontSize: 10, color: "#6b7280", maxWidth: "72%" }}>Pembuatan dan implementasi menu, integrasi data keuangan ERP, serta dukungan alur kerja pelaporan Coretax</span>
+                                            <span style={{ fontSize: 11, fontWeight: 900 }}>{formatCurrency(ACCOUNTING_TAX_BILLING.amount)}</span>
+                                        </div>
+                                    </div>
+                                ) : selectedInvoice.payment_type === 'initial' ? (
                                     <div className="mt-4 pt-4 border-t border-dashed border-gray-200">
                                         <p className="cert-label mb-2">Rincian Paket Aktivasi:</p>
                                         <div className="cert-row !border-none !mb-1">
@@ -857,12 +965,17 @@ function BillingPage() {
                         </button>
                         <div style={{ fontSize: 11, fontWeight: 700, color: "#a09488", letterSpacing: "0.1em", marginBottom: 6, textTransform: "uppercase" }}>Scan untuk Membayar</div>
                         <h3 style={{ margin: "0 0 16px", fontSize: 17, fontWeight: 800, color: "#3a2e25" }}>QRIS Pembayaran</h3>
+                        {paymentPurpose === "akuntansi_pajak" && (
+                            <div style={{ margin: "-6px 0 14px", padding: "9px 12px", background: "#f7efe5", borderRadius: 9, color: "#7a563f", fontSize: 12, fontWeight: 700 }}>
+                                Menu Akuntansi &amp; Perpajakan · Rp7.750.000
+                            </div>
+                        )}
                         <div style={{ borderRadius: 12, overflow: "hidden", border: "2px solid #ebe5dd", marginBottom: 16 }}>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src="/qris-payment.jpeg" alt="QRIS Pembayaran" style={{ width: "100%", display: "block" }} />
                         </div>
                         <p style={{ margin: "0 0 20px", fontSize: 12, color: "#8a7e72", lineHeight: 1.6 }}>
-                            Buka aplikasi bank / dompet digital Anda, pilih <b>Scan QR</b>, lalu arahkan ke kode di atas.
+                            Buka aplikasi bank / dompet digital Anda, pilih <b>Scan QR</b>, lalu arahkan ke kode di atas dan masukkan nominal sesuai tagihan.
                         </p>
                         <button onClick={() => setShowQrisModal(false)} style={{ width: "100%", padding: "13px", background: "#3a2e25", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: "pointer", letterSpacing: 0.5 }}>
                             TUTUP
