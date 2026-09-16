@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { useAuth, roleLabels, getRoleDisplay } from "@/lib/auth";
+import { useAuth, getRoleDisplay } from "@/lib/auth";
 import { useLicense } from "@/lib/license-store";
 import { useWorkspace, getWorkspaceFromPath } from "@/lib/workspace-store";
 import WorkspaceSwitcher from "@/components/layout/WorkspaceSwitcher";
@@ -15,7 +15,7 @@ import { CrmProvider } from "@/lib/crm-store";
 import NotificationSettings from "@/components/notifications/NotificationSettings";
 import NotificationPanel from "@/components/NotificationPanel";
 import { useNotifications } from "@/hooks/useNotifications";
-import { useRuangTimAlert } from "@/hooks/useRuangTimAlert";
+import GlobalSearch, { type GlobalSearchMenuItem } from "@/components/layout/GlobalSearch";
 
 const NAV_ITEMS = [
     {
@@ -24,7 +24,6 @@ const NAV_ITEMS = [
             { href: "/dashboard", label: "Dashboard", module: "dashboard", icon: HomeIcon },
             { href: "/dashboard/pesanan", label: "Input Pesanan", module: "pesanan", icon: ClipboardIcon },
             { href: "/dashboard/status-barang", label: "Status Barang", module: "status-barang", icon: PackageIcon },
-            { href: "/dashboard/ruang-tim", label: "Ruang Tim", module: "any", icon: RuangTimIcon },
         ],
     },
     {
@@ -138,9 +137,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const [notifPanelOpen, setNotifPanelOpen] = useState(false);
     const [showTrialModal, setShowTrialModal] = useState(false);
     const { notifications, unreadCount, loading: notifLoading, markAsRead, markAllRead } = useNotifications();
-    // Badge + toast pesan Ruang Tim (pengganti sinyal floating chat lama).
-    const { unread: chatUnread, toast: chatToast, dismissToast: dismissChatToast } = useRuangTimAlert(user?.id, pathname);
-
     const isAdmin = ["faisal", "vira", "riska", "toto", "fauzi", "yuni"].includes(user?.username || "");
     const isFinishing = user?.role === "finishing";
     // Fail-open: hanya blokir kalau memberships sudah pasti ke-fetch (>0 baris) dan
@@ -152,9 +148,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         if (!user) router.replace("/login");
         else if (isFinishing && pathname !== "/dashboard/produksi") {
             router.replace("/dashboard/produksi");
-        } else if (isAlucurvOnly && !pathname.startsWith("/dashboard/alucurv") && !pathname.startsWith("/dashboard/gabungan") && pathname !== "/dashboard/ruang-tim") {
-            // Ruang Tim dikecualikan: chat/koordinasi berlaku lintas brand
-            // (menggantikan floating chat lama yang bisa diakses semua user).
+        } else if (isAlucurvOnly && !pathname.startsWith("/dashboard/alucurv") && !pathname.startsWith("/dashboard/gabungan")) {
             router.replace("/dashboard/alucurv");
         } else if (!isFinishing && !isAlucurvOnly && license && !license.is_setup_completed) {
             setShowTrialModal(true);
@@ -226,6 +220,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     ].filter(Boolean).join(" ");
 
     const isCockpit = pathname === "/dashboard/cockpit";
+    const canShowTotoItem = (item: (typeof NAV_ITEMS)[number]["items"][number]) => {
+        if (item.href === "/dashboard/absensi") return true;
+        if (item.module === "faisal-only") return user?.username === "faisal";
+        if (item.module === "admin-only") return isAdmin;
+        if (item.module === "any") return true;
+        return hasAccess(item.module);
+    };
+    const searchableMenuItems: GlobalSearchMenuItem[] = (
+        activeWorkspace === "toto"
+            ? NAV_ITEMS.flatMap((group) => group.items.filter(canShowTotoItem).map((item) => ({ href: item.href, label: item.label, section: group.section })))
+            : (activeWorkspace === "alucurv" ? ALUCURV_NAV_ITEMS : GABUNGAN_NAV_ITEMS)
+                .flatMap((group) => group.items.map((item) => ({ href: item.href, label: item.label, section: group.section })))
+    );
 
     return (
         <PesananProvider>
@@ -257,13 +264,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
                         <div className="sidebar-content">
                             {activeWorkspace === "toto" && NAV_ITEMS.map((group) => {
-                                const visibleItems = group.items.filter((item) => {
-                                    if (item.href === "/dashboard/absensi") return true;
-                                    if (item.module === "faisal-only") return user?.username === "faisal";
-                                    if (item.module === "admin-only") return isAdmin;
-                                    if (item.module === "any") return true;
-                                    return hasAccess(item.module);
-                                });
+                                const visibleItems = group.items.filter(canShowTotoItem);
                                 if (visibleItems.length === 0) return null;
                                 return (
                                     <div key={group.section}>
@@ -350,6 +351,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                     </div>
 
                                     <div className="flex items-center gap-3">
+                                        <GlobalSearch menuItems={searchableMenuItems} workspace={activeWorkspace} />
+
                                         {/* Notification Bell */}
                                         <button
                                             onClick={() => setNotifPanelOpen(true)}
@@ -367,26 +370,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                                     border: "1.5px solid white",
                                                 }}>
                                                     {unreadCount > 99 ? "99+" : unreadCount}
-                                                </span>
-                                            )}
-                                        </button>
-
-                                        <button
-                                            onClick={() => router.push("/dashboard/ruang-tim")}
-                                            className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-slate-100 transition-colors text-primary relative"
-                                            title="Ruang Tim"
-                                        >
-                                            <MessageSquareIcon size={20} />
-                                            {chatUnread > 0 && (
-                                                <span style={{
-                                                    position: "absolute", top: 4, right: 4,
-                                                    background: "#EF4444", color: "white",
-                                                    borderRadius: 99, fontSize: 9, fontWeight: 700,
-                                                    minWidth: 16, height: 16, lineHeight: "16px",
-                                                    textAlign: "center", padding: "0 3px",
-                                                    border: "1.5px solid white",
-                                                }}>
-                                                    {chatUnread > 99 ? "99+" : chatUnread}
                                                 </span>
                                             )}
                                         </button>
@@ -448,61 +431,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     />
                     <NotificationSettings isOpen={notifOpen} onClose={() => setNotifOpen(false)} />
 
-                    {/* ── Toast pesan Ruang Tim (pengganti toast floating chat lama) ── */}
-                    {chatToast && (
-                        <div className="rt-toast-anim" style={{
-                            position: "fixed", bottom: 24, right: 20, zIndex: 9999,
-                            background: "white", borderRadius: 14,
-                            boxShadow: "0 8px 32px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.06)",
-                            padding: "12px 14px", maxWidth: 300, minWidth: 240,
-                            display: "flex", flexDirection: "column", gap: 6,
-                            animation: "slideInRight 0.25s ease",
-                        }}>
-                            <style>{`
-                                @keyframes slideInRight { from { transform: translateX(110%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-                                @media (prefers-reduced-motion: reduce) { .rt-toast-anim { animation: none !important; } }
-                            `}</style>
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                    <div style={{
-                                        width: 30, height: 30, borderRadius: "50%",
-                                        background: "linear-gradient(135deg, #A67B5B, #7C5A3C)",
-                                        display: "flex", alignItems: "center", justifyContent: "center",
-                                        color: "white", fontSize: 13, fontWeight: 700, flexShrink: 0,
-                                    }}>
-                                        {chatToast.senderName[0]?.toUpperCase()}
-                                    </div>
-                                    <div>
-                                        <div style={{ fontSize: 12, fontWeight: 700, color: "#3C2F2F" }}>
-                                            {chatToast.type === "tugas" ? "📋" : chatToast.type === "pengumuman" ? "📣" : "💬"} {chatToast.senderName}
-                                        </div>
-                                        <div style={{ fontSize: 10, color: "#B89678" }}>
-                                            {chatToast.type === "tugas" ? "Tugas baru" : chatToast.type === "pengumuman" ? "Pengumuman" : "Pesan baru"}
-                                        </div>
-                                    </div>
-                                </div>
-                                <button onClick={dismissChatToast} style={{
-                                    background: "none", border: "none", cursor: "pointer",
-                                    color: "#B89678", fontSize: 16, lineHeight: 1, padding: 2, flexShrink: 0,
-                                }}>×</button>
-                            </div>
-                            <div style={{
-                                fontSize: 12, color: "#5C4033", lineHeight: 1.5,
-                                background: "#F8F4EF", borderRadius: 8, padding: "7px 10px",
-                                overflow: "hidden", display: "-webkit-box",
-                                WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
-                            }}>
-                                {chatToast.body}
-                            </div>
-                            <button onClick={() => { dismissChatToast(); router.push("/dashboard/ruang-tim"); }} style={{
-                                background: "#A67B5B", color: "white", border: "none",
-                                borderRadius: 8, padding: "6px 0", fontSize: 11, fontWeight: 700,
-                                cursor: "pointer", width: "100%",
-                            }}>
-                                Buka Ruang Tim
-                            </button>
-                        </div>
-                    )}
                 </div>
                         </CrmProvider>
                         </QuotationProvider>
@@ -526,16 +454,13 @@ function TagihanIcon({ size = 18 }: { size?: number }) { return ( <svg width={si
 function KaryawanIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 00-3-3.87" /><path d="M16 3.13a4 4 0 010 7.75" /></svg> ); }
 function AbsensiIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /><polyline points="9 16 11 18 15 14" /></svg> ); }
 function EditAbsenIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> ); }
-function ClockIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg> ); }
 function ColorPaletteIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor" /><circle cx="17.5" cy="10.5" r=".5" fill="currentColor" /><circle cx="8.5" cy="7.5" r=".5" fill="currentColor" /><circle cx="6.5" cy="12.5" r=".5" fill="currentColor" /><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 011.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" /></svg> ); }
 function BillingIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" /><line x1="2" y1="10" x2="22" y2="10" /><line x1="7" y1="15" x2="7.01" y2="15" /><line x1="11" y1="15" x2="11.01" y2="15" /></svg> ); }
 function UserCircleIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 00-4-4H9a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" /></svg> ); }
-function MessageSquareIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg> ); }
 function BellIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 01-3.46 0" /></svg> ); }
 function CustomerIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 00-3-3.87" /><path d="M16 3.13a4 4 0 010 7.75" /></svg> ); }
 function PenawaranIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /><path d="M16 13H8" /><path d="M16 17H8" /><path d="M10 9H9H8" /><path d="M12 2v6" /></svg> ); }
 function BarChartIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /><line x1="3" y1="20" x2="21" y2="20" /></svg> ); }
-function RuangTimIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /><path d="M8 9h8" /><path d="M8 13h5" /></svg> ); }
 function GabunganIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="12" r="5" /><circle cx="16" cy="12" r="5" /></svg> ); }
 function CartIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6" /></svg> ); }
 function CalculatorIcon({ size = 18 }: { size?: number }) { return ( <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" /><line x1="8" y1="6" x2="16" y2="6" /><line x1="8" y1="11" x2="8" y2="11.01" /><line x1="12" y1="11" x2="12" y2="11.01" /><line x1="16" y1="11" x2="16" y2="11.01" /><line x1="8" y1="15" x2="8" y2="15.01" /><line x1="12" y1="15" x2="12" y2="15.01" /><line x1="16" y1="15" x2="16" y2="17" /><line x1="8" y1="19" x2="12" y2="19" /></svg> ); }

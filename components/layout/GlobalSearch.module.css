@@ -1,0 +1,236 @@
+.trigger {
+    height: 34px;
+    min-width: 190px;
+    padding: 0 8px 0 11px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.34);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.12);
+    color: white;
+    cursor: pointer;
+    font: inherit;
+    transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.trigger:hover,
+.trigger:focus-visible {
+    background: rgba(255, 255, 255, 0.21);
+    border-color: rgba(255, 255, 255, 0.58);
+    outline: none;
+}
+
+.triggerLabel {
+    flex: 1;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.shortcut,
+.closeButton,
+.footer kbd {
+    border: 1px solid currentColor;
+    border-radius: 5px;
+    font-family: inherit;
+    font-size: 9px;
+    line-height: 1;
+}
+
+.shortcut {
+    padding: 4px 5px;
+    color: rgba(255, 255, 255, 0.82);
+    border-color: rgba(255, 255, 255, 0.28);
+}
+
+.backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 10050;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: min(13vh, 110px) 18px 24px;
+    background: rgba(38, 28, 22, 0.46);
+    backdrop-filter: blur(3px);
+}
+
+.palette {
+    width: min(680px, 100%);
+    max-height: min(680px, 78vh);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: #fffdf9;
+    border: 1px solid #d9c4aa;
+    border-radius: 14px;
+    box-shadow: 0 28px 72px rgba(54, 35, 22, 0.25);
+}
+
+.searchBox {
+    min-height: 62px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 17px;
+    color: #8d6648;
+    border-bottom: 1px solid #eadfce;
+}
+
+.searchBox input {
+    min-width: 0;
+    flex: 1;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: #34261f;
+    font: inherit;
+    font-size: 16px;
+}
+
+.searchBox input::placeholder { color: #ac9a8b; }
+
+.closeButton {
+    padding: 5px 7px;
+    color: #8d7b6c;
+    border-color: #d9ccbd;
+    background: #f7f1e9;
+    cursor: pointer;
+}
+
+.resultArea {
+    min-height: 190px;
+    overflow-y: auto;
+    padding: 8px;
+}
+
+.groupLabel {
+    padding: 9px 9px 5px;
+    color: #9a806b;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.result {
+    width: 100%;
+    min-height: 55px;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: #49372d;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.result.active { background: #f2e6d7; }
+
+.resultIcon {
+    width: 31px;
+    height: 31px;
+    flex: 0 0 31px;
+    display: grid;
+    place-items: center;
+    border-radius: 8px;
+    background: #e8d5c0;
+    color: #765136;
+    font-size: 15px;
+    font-weight: 800;
+}
+
+.resultIcon.orderIcon {
+    background: #e3f0eb;
+    color: #28725a;
+}
+
+.resultCopy {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.resultCopy strong {
+    overflow: hidden;
+    color: #3d2d25;
+    font-size: 12.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.resultCopy span {
+    overflow: hidden;
+    color: #89766a;
+    font-size: 10.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.meta {
+    max-width: 170px;
+    flex-shrink: 0;
+    color: #a07b5e;
+    font-size: 9.5px;
+    text-align: right;
+}
+
+.empty {
+    min-height: 180px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    color: #9f8b7d;
+    text-align: center;
+}
+
+.empty strong { color: #5b4436; font-size: 13px; }
+.empty span { max-width: 360px; font-size: 11px; }
+
+.footer {
+    min-height: 38px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 0 15px;
+    border-top: 1px solid #eadfce;
+    background: #faf6f0;
+    color: #8d7b6c;
+    font-size: 9.5px;
+}
+
+.footer span:last-child { margin-left: auto; }
+.footer kbd { margin-right: 3px; padding: 3px 4px; border-color: #d9ccbd; background: white; }
+
+@media (max-width: 760px) {
+    .trigger {
+        width: 40px;
+        min-width: 40px;
+        height: 40px;
+        justify-content: center;
+        padding: 0;
+        border: 0;
+        border-radius: 50%;
+        background: transparent;
+    }
+    .triggerLabel,
+    .shortcut { display: none; }
+    .backdrop { padding: 12px; align-items: flex-start; }
+    .palette { max-height: calc(100vh - 24px); border-radius: 12px; }
+    .searchBox { min-height: 56px; padding: 0 13px; }
+    .searchBox input { font-size: 14px; }
+    .meta { max-width: 105px; }
+    .footer span:last-child { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .trigger { transition: none; }
+}

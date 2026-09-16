@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo, useDeferredValue, useCallback } from "react";
+import { useState, useMemo, useDeferredValue, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
 import { useAuth } from "@/lib/auth";
@@ -28,6 +28,18 @@ export default function StatusBarangPage() {
     const [viewMode, setViewMode] = useState<"detail" | "simple" | "order">("detail");
     const [statusFilter, setStatusFilter] = useState<string | null>(null);
     const [savedFlash, setSavedFlash] = useState(false);
+
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const targetYear = Number(params.get("year"));
+        const targetMonth = Number(params.get("month"));
+        const targetSearch = params.get("search");
+        if (Number.isInteger(targetYear) && targetYear >= 2023 && targetYear <= now.getFullYear() + 1) setYear(targetYear);
+        if (Number.isInteger(targetMonth) && targetMonth >= 1 && targetMonth <= 12) setMonth(targetMonth);
+        if (targetSearch) setSearch(targetSearch);
+    // Filter URL hanya dibaca saat halaman dibuka dari pencarian global.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // Optimized specialized hook: Server-side filtered & Deduped
     const { rows, isLoading, updateLocalRow, updateLocalRows, mutate } = useStatusBarangRows(year, month);
