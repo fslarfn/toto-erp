@@ -118,11 +118,36 @@ export function useStatusBarangRows(year: number, month: number | "all") {
         }
     };
 
+    // Update satu invoice dalam satu request. Ini menghindari banyak request
+    // Supabase ketika satu invoice terdiri dari beberapa baris barang.
+    const updateLocalRows = async (ids: number[], patch: Partial<PesananRow>) => {
+        const uniqueIds = [...new Set(ids)].filter((id) => Number.isFinite(id));
+        if (uniqueIds.length === 0) return;
+
+        mutate((current?: PesananRow[]) => {
+            if (!current) return current;
+            const targets = new Set(uniqueIds);
+            return current.map((row) => targets.has(row.id) ? { ...row, ...patch } : row);
+        }, false);
+
+        const { error: dbErr } = await supabase
+            .from("pesanan_rows")
+            .update(patch)
+            .in("id", uniqueIds);
+
+        if (dbErr) {
+            console.error("Failed to update invoice rows:", dbErr);
+            mutate();
+            throw dbErr;
+        }
+    };
+
     return {
         rows: data || [],
         isLoading,
         isError: !!error,
         updateLocalRow,
+        updateLocalRows,
         mutate,
     };
 }

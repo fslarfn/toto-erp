@@ -143,7 +143,7 @@ export const StatusRow = memo(function StatusRow({
                     type="checkbox"
                     checked={!!row[key]}
                     onChange={(e) => handleCheckUpdate(e.target.checked)}
-                    title={key === "is_paid" ? "Kelola melalui Rekonsiliasi Pembayaran" : undefined}
+                    title={key === "is_paid" ? "Kelola status pembayaran" : undefined}
                     style={{ accentColor: "#A67B5B", width: 14, height: 14, cursor: "pointer" }}
                 />
             </td>

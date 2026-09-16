@@ -209,7 +209,7 @@ export function OrderView({ rows, onUpdate, onReconcilePayment }: Props) {
                                         );
                                     })}
                                     <label style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, fontSize: 9.5, fontWeight: 700, color: allPaid ? "#15803D" : somePaid ? "#B45309" : "#8A7B6E", cursor: "pointer" }}>
-                                        <TriCheckbox all={allPaid} some={somePaid} title="Kelola pembayaran melalui Rekonsiliasi" onToggle={() => setPaidForGroup(g)} />
+                                        <TriCheckbox all={allPaid} some={somePaid} title="Kelola status pembayaran" onToggle={() => setPaidForGroup(g)} />
                                         💰 Bayar
                                     </label>
                                 </div>
@@ -251,7 +251,7 @@ export function OrderView({ rows, onUpdate, onReconcilePayment }: Props) {
                                                             type="checkbox"
                                                             checked={!!it.is_paid}
                                                             onChange={() => onReconcilePayment(it)}
-                                                            title="Kelola melalui Rekonsiliasi Pembayaran"
+                                                            title="Kelola status pembayaran"
                                                             style={{ accentColor: "#A67B5B", width: 13, height: 13, cursor: "pointer" }}
                                                         />
                                                     </td>

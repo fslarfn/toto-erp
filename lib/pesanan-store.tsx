@@ -83,6 +83,7 @@ type Ctx = {
     /** Id baris yang gagal tersimpan (jaringan/DB) — ditampilkan badge merah di grid. */
     failedRowIds: Set<number>;
     updateRow: (id: number, patch: Partial<PesananRow>, autoFlush?: boolean) => void;
+    updateRowsDirect: (ids: number[], patch: Partial<PesananRow>) => Promise<void>;
     flushRow: (id: number) => Promise<void>;
     flushAllRows: () => Promise<void>;
     addRows: (count?: number) => void;
@@ -685,6 +686,33 @@ export function PesananProvider({ children }: { children: ReactNode }) {
         }
     }, [flushRow]);
 
+    const updateRowsDirect = useCallback(async (ids: number[], patch: Partial<PesananRow>) => {
+        const uniqueIds = [...new Set(ids)].filter((id) => Number.isFinite(id));
+        if (uniqueIds.length === 0) return;
+
+        const targets = new Set(uniqueIds);
+        const previousValues = new Map<number, Partial<PesananRow>>();
+        const patchKeys = Object.keys(patch) as (keyof PesananRow)[];
+        setRows((previous) => {
+            return previous.map((row) => {
+                if (!targets.has(row.id)) return row;
+                previousValues.set(row.id, Object.fromEntries(
+                    patchKeys.map((key) => [key, row[key]]),
+                ) as Partial<PesananRow>);
+                return { ...row, ...patch };
+            });
+        });
+
+        const { error } = await supabase.from("pesanan_rows").update(patch).in("id", uniqueIds);
+        if (error) {
+            setRows((current) => current.map((row) => {
+                const previous = previousValues.get(row.id);
+                return previous ? { ...row, ...previous } : row;
+            }));
+            throw error;
+        }
+    }, []);
+
     // Menghapus total fungsi reset untuk keamanan data (instruksi Faisal 13/04/26)
 
     const addRows = useCallback((count = 100) => {
@@ -723,7 +751,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
     }, []);
 
     return (
-        <PesananCtx.Provider value={{ rows, loading, failedRowIds, updateRow, flushRow, flushAllRows, addRows, addRow, importRows, fetchFilter, ensureLoaded }}>
+        <PesananCtx.Provider value={{ rows, loading, failedRowIds, updateRow, updateRowsDirect, flushRow, flushAllRows, addRows, addRow, importRows, fetchFilter, ensureLoaded }}>
             {children}
         </PesananCtx.Provider>
     );
