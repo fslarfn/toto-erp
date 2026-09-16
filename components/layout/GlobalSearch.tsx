@@ -30,6 +30,7 @@ const MENU_KEYWORDS: Record<string, string> = {
     "/dashboard": "ringkasan beranda omzet laba saldo",
     "/dashboard/pesanan": "order input pesanan penjualan",
     "/dashboard/status-barang": "status order produksi warna siap kirim bayar",
+    "/dashboard/kalender": "kalender agenda jadwal libur nasional cuti bersama thr payroll family gathering maintenance rapat operasional",
     "/dashboard/crm": "customer pelanggan whatsapp piutang",
     "/dashboard/penawaran": "quotation harga penawaran",
     "/dashboard/keuangan": "kas bank uang masuk keluar transaksi mutasi rekonsiliasi",
