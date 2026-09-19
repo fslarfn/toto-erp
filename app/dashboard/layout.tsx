@@ -80,6 +80,7 @@ const ALUCURV_NAV_ITEMS = [
     {
         section: "Keuangan",
         items: [
+            { href: "/dashboard/alucurv/penawaran", label: "Penawaran", icon: PenawaranIcon },
             { href: "/dashboard/alucurv/invoice", label: "Invoice", icon: InvoiceIcon },
             { href: "/dashboard/alucurv/keuangan", label: "Keuangan", icon: WalletIcon },
             { href: "/dashboard/alucurv/laporan", label: "Laporan", icon: BarChartIcon },

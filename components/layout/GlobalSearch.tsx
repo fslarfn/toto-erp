@@ -47,6 +47,7 @@ const MENU_KEYWORDS: Record<string, string> = {
     "/dashboard/absensi": "kehadiran karyawan",
     "/dashboard/alucurv": "ringkasan beranda alucurv",
     "/dashboard/alucurv/order": "pesanan customer alucurv",
+    "/dashboard/alucurv/penawaran": "quotation penawaran harga customer alucurv cetak pdf",
     "/dashboard/alucurv/hpp": "harga pokok produk komponen margin",
     "/dashboard/alucurv/stok": "persediaan barang gudang",
     "/dashboard/alucurv/pengadaan": "supplier pembelian bahan baku",
