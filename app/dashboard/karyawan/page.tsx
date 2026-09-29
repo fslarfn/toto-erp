@@ -9,7 +9,7 @@ import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase-client";
 import {
     bulanPeriode, periodeKustom, mingguPeriode, isoAddDays, tipeGajianOf, tarifHarianOf,
-    hitungKehadiran, keteranganTelat, HALF_DAY_CUTOFF,
+    hitungKehadiran, keteranganTelat, HALF_DAY_CUTOFF, punyaGajiPokok, hitungGajiDasar,
     type PeriodeGaji, type TipeGajian, type AbsensiLike, type KehadiranSummary,
 } from "@/lib/gaji-absensi";
 
@@ -317,7 +317,7 @@ function PrintSlipModal({ row, periode, periodeKey, periodeEnd, catatanTelat, on
                                     <td colSpan={2} style={{ padding: "5px 10px", fontWeight: 800, color: "#15803D", fontSize: 10, letterSpacing: 1, textTransform: "uppercase" }}>{'>'} Pendapatan</td>
                                 </tr>
                                 <tr>
-                                    <td style={tdL}>Gaji Harian</td>
+                                    <td style={tdL}>{punyaGajiPokok(k) ? "Gaji Pokok Bulanan" : "Gaji Harian"}</td>
                                     <td style={tdR}>{row.base.toLocaleString("id-ID")}</td>
                                 </tr>
                                 {row.lembur > 0 && <tr style={{ background: "#FAFAF8" }}>
@@ -711,6 +711,7 @@ function TabDataGaji() {
     const [hasResult, setHasResult] = useState(false);
     const [printRekap, setPrintRekap] = useState(false);
     const [printSlip, setPrintSlip] = useState(false);
+    const [savedSlipRow, setSavedSlipRow] = useState<GajiInfo | null>(null);
     const [showCatat, setShowCatat] = useState(false);
 
     const keh = kehadiranOf.get(selectedKId);
@@ -726,7 +727,7 @@ function TabDataGaji() {
                 potongan_lain: g.potongan_lain ?? 0,
                 bpjs_tk: g.bpjs_tk ?? k?.bpjs_tk ?? 0, bpjs_kes: g.bpjs_kes ?? k?.bpjs_kes ?? 0,
             });
-            setHasResult(true);
+            setHasResult(!k || !punyaGajiPokok(k) || g.gaji_pokok === hitungGajiDasar(k, 0));
         } else {
             setForm({
                 hari_kerja: kh?.hariKerja ?? 0, hari_lembur: kh?.hariLembur ?? 0,
@@ -739,9 +740,10 @@ function TabDataGaji() {
     }, [selectedKId, periode.key, absLoading, kehadiranOf, gaji]);
 
     /* -- Hitungan -- */
+    const gajiTetap = !!selectedK && punyaGajiPokok(selectedK);
     const effectiveHarian = selectedK ? tarifHarianOf(selectedK.gaji_harian, selectedK.gaji_pokok) : 0;
     const tarifLembur = selectedK ? (selectedK.tarif_lembur || effectiveHarian) : 0;
-    const base = Math.round(effectiveHarian * form.hari_kerja);
+    const base = selectedK ? hitungGajiDasar(selectedK, form.hari_kerja) : 0;
     const lemburNominal = Math.round(tarifLembur * form.hari_lembur);
     const totalPendapatan = base + lemburNominal + form.tunjangan;
     const totalPotongan = form.kasbon_potong + form.potongan_lain + form.bpjs_tk + form.bpjs_kes;
@@ -750,10 +752,10 @@ function TabDataGaji() {
     const hitungDanSimpan = () => {
         if (!selectedK) return;
         const kh = kehadiranOf.get(selectedK.id);
-        const autoMatch = !!kh && form.hari_kerja === kh.hariKerja && form.hari_lembur === kh.hariLembur;
+        const autoMatch = !gajiTetap && !!kh && form.hari_kerja === kh.hariKerja && form.hari_lembur === kh.hariLembur;
         upsertGaji({
             karyawan_id: selectedK.id, periode: periode.key,
-            gaji_pokok: base, hari_kerja: form.hari_kerja, hari_lembur: form.hari_lembur,
+            gaji_pokok: base, hari_kerja: gajiTetap ? 0 : form.hari_kerja, hari_lembur: form.hari_lembur,
             lembur: lemburNominal, tunjangan: form.tunjangan,
             kasbon_potong: form.kasbon_potong, potongan_lain: form.potongan_lain,
             bpjs_tk: form.bpjs_tk, bpjs_kes: form.bpjs_kes,
@@ -773,7 +775,7 @@ function TabDataGaji() {
         const effHarian = tarifHarianOf(k.gaji_harian, k.gaji_pokok);
         const hk = g?.hari_kerja ?? kh?.hariKerja ?? 0;
         const hl = g?.hari_lembur ?? kh?.hariLembur ?? 0;
-        const b = g?.gaji_pokok ?? Math.round(effHarian * hk);
+        const b = g?.gaji_pokok ?? hitungGajiDasar(k, hk);
         const lembur = g?.lembur ?? Math.round((k.tarif_lembur || effHarian) * hl);
         const tunjangan = g?.tunjangan ?? 0;
         const kasbonP = g?.kasbon_potong ?? 0;
@@ -812,7 +814,7 @@ function TabDataGaji() {
     const exportExcel = () => {
         const data = gajiRows.map(r => ({
             "Nama": r.karyawan.nama,
-            "Hari Kerja": getGaji(r.karyawan.id)?.hari_kerja ?? "-",
+            "Hari Kerja": punyaGajiPokok(r.karyawan) ? "Tidak berlaku (gaji pokok)" : getGaji(r.karyawan.id)?.hari_kerja ?? "-",
             "Gaji Harian/Pokok": r.base, "Hari Lembur": getGaji(r.karyawan.id)?.hari_lembur ?? 0,
             "Lembur": r.lembur, "Tunjangan": r.tunjangan,
             "Kasbon Potong": r.kasbon, "Potongan Lain": r.potongan,
@@ -899,7 +901,7 @@ function TabDataGaji() {
 
                     {/* -- KIRI: Kalkulator -- */}
                     <div style={{ background: "white", borderRadius: 12, padding: 24, boxShadow: "0 2px 12px rgba(0,0,0,0.07)" }}>
-                        <div style={{ fontSize: 16, fontWeight: 800, color: "#5C4033", marginBottom: 18 }}>Gaji dari Absensi</div>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: "#5C4033", marginBottom: 18 }}>{gajiTetap ? "Gaji Pokok Bulanan" : "Gaji dari Absensi"}</div>
 
                         {/* Pilih Karyawan */}
                         <div style={{ marginBottom: 14 }}>
@@ -910,12 +912,12 @@ function TabDataGaji() {
                             {selectedK && (
                                 <div style={{ marginTop: 6, padding: "6px 10px", background: "#FEF3E8", borderRadius: 6, fontSize: 11, color: "#A67B5B", display: "flex", gap: 14, flexWrap: "wrap" }}>
                                     <span>📁 {selectedK.divisi}</span>
-                                    <span>💰 Rp {effectiveHarian.toLocaleString("id-ID")}/hari{selectedK.gaji_pokok && !selectedK.gaji_harian ? ` (pokok/26)` : ""}</span>
+                                    <span>💰 {gajiTetap ? `${fmtRp(selectedK.gaji_pokok)}/bulan (tetap)` : `${fmtRp(effectiveHarian)}/hari`}</span>
                                     {keh && keh.telatCount > 0 && <span style={{ color: "#B8860B" }}>⏰ telat {keh.telatCount}× ({keh.telatMenit} mnt)</span>}
                                 </div>
                             )}
                             {/* Rincian kehadiran periode ini */}
-                            {selectedK && !absLoading && (
+                            {selectedK && !gajiTetap && !absLoading && (
                                 <div style={{ marginTop: 6, display: "flex", gap: 4, flexWrap: "wrap" }}>
                                     {(keh?.detail ?? []).length === 0 ? (
                                         <span style={{ fontSize: 10.5, color: "#C5A882" }}>Tidak ada absensi pada periode ini.</span>
@@ -931,8 +933,18 @@ function TabDataGaji() {
                         </div>
 
                         {/* Input grid */}
+                        {gajiTetap && getGaji(selectedKId) && getGaji(selectedKId)!.gaji_pokok !== base && (
+                            <div style={{ padding: 10, marginBottom: 12, background: "#FFFBEB", color: "#92400E", fontSize: 12, borderRadius: 6 }}>
+                                Gaji tersimpan masih memakai nominal sebelumnya. Periksa lalu simpan ulang agar rekap dan slip memakai gaji pokok tetap. Riwayat tidak diubah otomatis.
+                            </div>
+                        )}
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
                             <div>
+                                {gajiTetap ? <>
+                                    <label style={lbl}>GAJI POKOK TETAP</label>
+                                    <div style={field}>{fmtRp(base)} / bulan</div>
+                                    <div style={hint}>Tidak dikalikan hari kerja atau jumlah absensi.</div>
+                                </> : <>
                                 <label style={lbl}>HARI KERJA</label>
                                 <input type="number" min={0} max={31} step={0.5} value={form.hari_kerja}
                                     onChange={e => { setForm(p => ({ ...p, hari_kerja: +e.target.value })); setHasResult(false); }}
@@ -944,6 +956,7 @@ function TabDataGaji() {
                                             style={{ border: "1px dashed #D1BFA3", background: "none", borderRadius: 5, padding: "0 6px", fontSize: 9.5, color: "#A67B5B", cursor: "pointer" }}>↻ pakai</button>
                                     )}
                                 </div>
+                                </>}
                             </div>
                             <div>
                                 <label style={lbl}>HARI LEMBUR</label>
@@ -1023,7 +1036,7 @@ function TabDataGaji() {
                                 <div style={{ borderBottom: "1px solid #E6D5BE", paddingBottom: 12, marginBottom: 12 }}>
                                     <div style={{ fontSize: 10, fontWeight: 800, color: "#15803D", letterSpacing: 1, marginBottom: 8, textTransform: "uppercase" }}>{'>'} Pendapatan · {periodeLabel}</div>
                                     {[
-                                        { l: `Gaji Harian (Rp ${effectiveHarian.toLocaleString("id-ID")}) × ${form.hari_kerja} hari`, v: base },
+                                        { l: gajiTetap ? "Gaji Pokok Bulanan (tetap)" : `Gaji Harian (Rp ${effectiveHarian.toLocaleString("id-ID")}) × ${form.hari_kerja} hari`, v: base },
                                         ...(form.hari_lembur > 0 ? [{ l: `Lembur (Rp ${tarifLembur.toLocaleString("id-ID")}) × ${form.hari_lembur} hari`, v: lemburNominal }] : []),
                                         ...(form.tunjangan > 0 ? [{ l: "Tunjangan", v: form.tunjangan }] : []),
                                     ].map(({ l, v }) => (
@@ -1066,7 +1079,7 @@ function TabDataGaji() {
                                     <span style={{ fontWeight: 900, fontSize: 18, color: "white" }}>Rp {bersih.toLocaleString("id-ID")}</span>
                                 </div>
 
-                                <button onClick={() => { hitungDanSimpan(); setPrintSlip(true); }}
+                                <button onClick={() => { setSavedSlipRow(null); hitungDanSimpan(); setPrintSlip(true); }}
                                     style={{ width: "100%", padding: "9px 0", borderRadius: 8, border: "2px solid #D1BFA3", background: "#F5EBDD", color: "#A67B5B", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>
                                     🖨️ Cetak Slip Gaji
                                 </button>
@@ -1103,7 +1116,7 @@ function TabDataGaji() {
                                         </td>
                                         <td style={{ padding: "7px 12px", borderBottom: "1px solid #E6D5BE", color: "#6B5E55" }}>{r.karyawan.divisi}</td>
                                         <td style={{ padding: "7px 12px", borderBottom: "1px solid #E6D5BE", textAlign: "center" }}>
-                                            <span style={{ background: "#FEF3E8", borderRadius: 5, padding: "2px 8px", color: "#A67B5B", fontWeight: 700 }}>{g?.hari_kerja ?? kh?.hariKerja ?? 0} hr</span>
+                                            <span style={{ background: "#FEF3E8", borderRadius: 5, padding: "2px 8px", color: "#A67B5B", fontWeight: 700 }}>{punyaGajiPokok(r.karyawan) ? "Gaji tetap" : `${g?.hari_kerja ?? kh?.hariKerja ?? 0} hr`}</span>
                                         </td>
                                         <td style={{ padding: "7px 12px", borderBottom: "1px solid #E6D5BE", textAlign: "center" }}>
                                             {(g?.hari_lembur ?? kh?.hariLembur ?? 0) > 0
@@ -1116,13 +1129,13 @@ function TabDataGaji() {
                                                 : <span style={{ color: "#D1BFA3" }}>-</span>}
                                         </td>
                                         <td style={{ padding: "7px 12px", borderBottom: "1px solid #E6D5BE", color: "#6B5E55" }}>
-                                            {fmtRp(tarifHarianOf(r.karyawan.gaji_harian, r.karyawan.gaji_pokok))}
+                                            {punyaGajiPokok(r.karyawan) ? `${fmtRp(r.karyawan.gaji_pokok)}/bln` : `${fmtRp(tarifHarianOf(r.karyawan.gaji_harian, r.karyawan.gaji_pokok))}/hr`}
                                         </td>
                                         <td style={{ padding: "7px 12px", borderBottom: "1px solid #E6D5BE", textAlign: "center", fontWeight: 800, color: g ? "#15803D" : "#B89678" }}>
                                             {fmtRp(r.bersih)}{!g && <span style={{ fontWeight: 600, fontSize: 9, marginLeft: 4, color: "#C5A882" }}>(preview)</span>}
                                         </td>
                                         <td style={{ padding: "7px 12px", borderBottom: "1px solid #E6D5BE", textAlign: "center" }}>
-                                            <button onClick={e => { e.stopPropagation(); setSelectedKId(r.karyawan.id); setHasResult(true); setPrintSlip(true); }}
+                                            <button onClick={e => { e.stopPropagation(); setSavedSlipRow(r); setSelectedKId(r.karyawan.id); setPrintSlip(true); }}
                                                 disabled={!g}
                                                 style={{ padding: "3px 10px", borderRadius: 5, border: "none", background: g ? "#A67B5B" : "#E6D5BE", color: g ? "white" : "#B89678", cursor: g ? "pointer" : "not-allowed", fontSize: 11, fontWeight: 700 }}>
                                                 Print
@@ -1146,7 +1159,7 @@ function TabDataGaji() {
             {/* Print & Catat Modals */}
             {printRekap && <PrintRekapModal rows={gajiRows} periode={periodeLabel} onClose={() => setPrintRekap(false)} />}
             {printSlip && selectedK && (
-                <PrintSlipModal row={{
+                <PrintSlipModal row={savedSlipRow ?? {
                     karyawan: selectedK, base, lembur: lemburNominal, tunjangan: form.tunjangan,
                     kasbon: form.kasbon_potong, potongan: form.potongan_lain,
                     bpjs_tk: form.bpjs_tk, bpjs_kes: form.bpjs_kes,

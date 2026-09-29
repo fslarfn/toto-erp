@@ -11,7 +11,8 @@
 //   - Telat TIDAK memotong gaji — hanya keterangan di slip.
 //   - Hadir hari MINGGU = hari lembur (bukan hari kerja) — semi-otomatis,
 //     angka tetap bisa diedit di UI sebelum disimpan.
-//   - Bulanan dihitung dari total hari masuk (bukan pro-rata).
+//   - Karyawan dengan gaji pokok mendapat nominal bulanan tetap.
+//   - Tanpa gaji pokok: tarif harian × hari masuk, termasuk periode bulanan.
 // ============================================================
 
 /** Pulang sebelum jam ini = setengah hari (owner: "pulang jam 12 siang"). */
@@ -24,8 +25,19 @@ export function tarifHarianOf(gajiHarian: number, gajiPokok: number): number {
 
 export type TipeGajian = "mingguan" | "bulanan";
 
+export function punyaGajiPokok(k: { gaji_pokok: number }): boolean {
+    return k.gaji_pokok > 0;
+}
+
+/** Gaji dasar, tanpa lembur/tunjangan/potongan; tidak bergantung nama/jabatan. */
+export function hitungGajiDasar(k: { gaji_pokok: number; gaji_harian: number }, hariKerja: number): number {
+    return punyaGajiPokok(k) ? k.gaji_pokok : Math.round(k.gaji_harian * hariKerja);
+}
+
 /** Tipe gajian karyawan; '' → otomatis dari struktur gajinya. */
 export function tipeGajianOf(k: { periode_gaji?: string; gaji_harian: number; gaji_pokok: number }): TipeGajian {
+    // Jangan membayarkan gaji pokok penuh berulang pada setiap periode mingguan.
+    if (punyaGajiPokok(k)) return "bulanan";
     if (k.periode_gaji === "mingguan" || k.periode_gaji === "bulanan") return k.periode_gaji;
     return k.gaji_harian > 0 ? "mingguan" : "bulanan";
 }
