@@ -18,6 +18,7 @@ const DEFAULT_NOTES = "Sistem pembayaran: DP 50% dari total harga.\nPelunasan ke
 
 type EditorDraft = {
     number: string;
+    numberManuallyEdited?: boolean;
     date: string;
     customer: string;
     status: AlucurvQuotationStatus;
@@ -51,6 +52,7 @@ export default function AlucurvQuotationPage() {
     const [editorOpen, setEditorOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [number, setNumber] = useState("");
+    const [numberManuallyEdited, setNumberManuallyEdited] = useState(false);
     const [date, setDate] = useState(today());
     const [customer, setCustomer] = useState("");
     const [status, setStatus] = useState<AlucurvQuotationStatus>("DRAFT");
@@ -69,6 +71,7 @@ export default function AlucurvQuotationPage() {
             if (stored) {
                 const draft = JSON.parse(stored) as EditorDraft;
                 setNumber(draft.number || nextNumber(draft.date || today(), rows));
+                setNumberManuallyEdited(draft.numberManuallyEdited ?? Boolean(draft.number));
                 setDate(draft.date || today());
                 setCustomer(draft.customer || "");
                 setStatus(draft.status || "DRAFT");
@@ -90,11 +93,11 @@ export default function AlucurvQuotationPage() {
     useEffect(() => {
         if (!draftReady || !editorOpen || editingId) return;
         const timer = window.setTimeout(() => {
-            const draft: EditorDraft = { number, date, customer, status, items, discount, notes };
+            const draft: EditorDraft = { number, numberManuallyEdited, date, customer, status, items, discount, notes };
             localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
         }, 350);
         return () => window.clearTimeout(timer);
-    }, [draftReady, editorOpen, editingId, number, date, customer, status, items, discount, notes]);
+    }, [draftReady, editorOpen, editingId, number, numberManuallyEdited, date, customer, status, items, discount, notes]);
 
     const subtotal = useMemo(() => items.reduce((sum, item) => sum + Number(item.qty || 0) * Number(item.unit_price || 0), 0), [items]);
     const grandTotal = Math.max(0, subtotal - Number(discount || 0));
@@ -108,6 +111,7 @@ export default function AlucurvQuotationPage() {
         const nextDate = today();
         setEditingId(null);
         setNumber(nextNumber(nextDate, rows));
+        setNumberManuallyEdited(false);
         setDate(nextDate);
         setCustomer("");
         setStatus("DRAFT");
@@ -126,6 +130,7 @@ export default function AlucurvQuotationPage() {
     const startEdit = (quote: AlucurvQuotation) => {
         setEditingId(quote.id);
         setNumber(quote.number);
+        setNumberManuallyEdited(true);
         setDate(quote.date);
         setCustomer(quote.customer);
         setStatus(quote.status);
@@ -138,6 +143,10 @@ export default function AlucurvQuotationPage() {
     };
 
     const save = async () => {
+        if (!number.trim()) return alert("Nomor penawaran wajib diisi.");
+        if (rows.some(row => row.id !== editingId && row.number.trim().toLowerCase() === number.trim().toLowerCase())) {
+            return alert("Nomor penawaran sudah digunakan. Gunakan nomor yang berbeda.");
+        }
         const filledItems = items.filter((item) => item.description.trim() && Number(item.qty) > 0);
         if (!customer.trim()) return alert("Nama customer wajib diisi.");
         if (!date) return alert("Tanggal penawaran wajib diisi.");
@@ -164,6 +173,7 @@ export default function AlucurvQuotationPage() {
                 : await createQuotation(payload);
             localStorage.removeItem(DRAFT_KEY);
             setEditingId(saved.id);
+            setNumber(saved.number);
             setLastSavedId(saved.id);
             alert(mode === "local" ? "Draft tersimpan di perangkat ini untuk pengujian lokal." : "Penawaran berhasil disimpan.");
         } catch (saveError) {
@@ -214,8 +224,8 @@ export default function AlucurvQuotationPage() {
 
                     <div className={styles.editorBody}>
                         <div className={styles.metaGrid}>
-                            <label className={styles.field}><span className={styles.label}>No. Penawaran</span><input className={styles.input} value={number} readOnly /></label>
-                            <label className={styles.field}><span className={styles.label}>Tanggal</span><input className={styles.input} type="date" value={date} onChange={(event) => { const value = event.target.value; setDate(value); if (!editingId && value) setNumber(nextNumber(value, rows)); }} /></label>
+                            <label className={styles.field}><span className={styles.label}>No. Penawaran</span><input className={styles.input} value={number} onChange={(event) => { setNumber(event.target.value); setNumberManuallyEdited(true); }} placeholder="Contoh: AL/QTN/10/2026/001" disabled={saving} /></label>
+                            <label className={styles.field}><span className={styles.label}>Tanggal</span><input className={styles.input} type="date" value={date} onChange={(event) => { const value = event.target.value; setDate(value); if (!editingId && !numberManuallyEdited && value) setNumber(nextNumber(value, rows)); }} /></label>
                             <label className={styles.field}><span className={styles.label}>Customer</span><input className={styles.input} value={customer} onChange={(event) => setCustomer(event.target.value)} placeholder="Nama customer / perusahaan" /></label>
                             <label className={styles.field}><span className={styles.label}>Status</span><select className={styles.select} value={status} onChange={(event) => setStatus(event.target.value as AlucurvQuotationStatus)}><option value="DRAFT">Draft</option><option value="DIKIRIM">Dikirim</option><option value="DISETUJUI">Disetujui</option><option value="DIBATALKAN">Dibatalkan</option></select></label>
                         </div>
