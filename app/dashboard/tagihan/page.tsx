@@ -6,6 +6,8 @@ import { useCrm, normalizeName } from "@/lib/crm-store";
 import { waUrl } from "@/lib/wa";
 import { usePaged, PageNav } from "@/components/layout/PageNav";
 import { useAuth } from "@/lib/auth";
+import { matchesPaymentFilter, type InvoicePaymentFilter } from "@/lib/invoice-payment-filter";
+import { usePaymentDataRefresh } from "@/lib/use-payment-data-refresh";
 import {
     canDirectlyMarkLegacyPayment,
     isLegacyDirectPaymentUser,
@@ -47,11 +49,13 @@ function parseIdNum(s: string | undefined): number {
 export default function TagihanPage() {
     const router = useRouter();
     const { user } = useAuth();
-    const { rows, updateRowsDirect } = usePesanan();
+    const { rows, updateRowsDirect, fetchFilter } = usePesanan();
     const { customers } = useCrm();
     const now = new Date();
     const [year, setYear] = useState(now.getFullYear());
     const [month, setMonth] = useState<number | "all">("all");
+    const [paymentFilter, setPaymentFilter] = useState<InvoicePaymentFilter>("unpaid");
+    usePaymentDataRefresh(fetchFilter, year, month);
     const [search, setSearch] = useState("");
     const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -98,12 +102,13 @@ export default function TagihanPage() {
     const customerMap = useMemo(() => {
         const map = new Map<string, typeof Array.prototype>();
         invoiceMap.forEach((inv) => {
+            if (!matchesPaymentFilter(inv.is_paid, paymentFilter)) return;
             const key = inv.customer || "(Tanpa Customer)";
             if (!map.has(key)) map.set(key, []);
             map.get(key)!.push(inv);
         });
         return map;
-    }, [invoiceMap]);
+    }, [invoiceMap, paymentFilter]);
 
     const filteredCustomers = useMemo(() => {
         const q = search.toLowerCase();
@@ -178,23 +183,33 @@ export default function TagihanPage() {
             </div>
 
             {/* Toolbar */}
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 18px", background: "white", borderBottom: "1px solid #E6D5BE", flexShrink: 0 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, padding: "8px 18px", background: "white", borderBottom: "1px solid #E6D5BE", flexShrink: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <span style={{ fontSize: 11, color: "#B89678", fontWeight: 600 }}>Tahun:</span>
-                    <select value={year} onChange={(e) => setYear(+e.target.value)}
+                    <select value={year} onChange={(e) => { setYear(+e.target.value); setPage(1); }}
                         style={{ border: "1px solid #D1BFA3", borderRadius: 6, padding: "4px 8px", fontSize: 12, color: "#5C4033", background: "#FFFBF7", height: 30 }}>
                         {years.map((y) => <option key={y} value={y}>{y}</option>)}
                     </select>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <span style={{ fontSize: 11, color: "#B89678", fontWeight: 600 }}>Bulan:</span>
-                    <select value={month} onChange={(e) => setMonth(e.target.value === "all" ? "all" : +e.target.value)}
+                    <select value={month} onChange={(e) => { setMonth(e.target.value === "all" ? "all" : +e.target.value); setPage(1); }}
                         style={{ border: "1px solid #D1BFA3", borderRadius: 6, padding: "4px 8px", fontSize: 12, color: "#5C4033", background: "#FFFBF7", height: 30 }}>
                         <option value="all">Semua Bulan</option>
                         {MONTH_NAMES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
                     </select>
                 </div>
-                <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <label htmlFor="tagihan-payment-filter" style={{ fontSize: 11, color: "#B89678", fontWeight: 600 }}>Status:</label>
+                    <select id="tagihan-payment-filter" value={paymentFilter}
+                        onChange={(e) => { setPaymentFilter(e.target.value as InvoicePaymentFilter); setPage(1); setExpanded(null); }}
+                        style={{ border: "1px solid #D1BFA3", borderRadius: 6, padding: "4px 8px", fontSize: 12, color: "#5C4033", background: "#FFFBF7", height: 30 }}>
+                        <option value="unpaid">Belum Lunas ({countBelum})</option>
+                        <option value="paid">Sudah Lunas ({countLunas})</option>
+                        <option value="all">Semua ({countAll})</option>
+                    </select>
+                </div>
+                <input type="text" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                     placeholder="🔍 Cari nama customer..."
                     style={{ border: "1px solid #D1BFA3", borderRadius: 6, padding: "4px 10px", fontSize: 12, width: 220, color: "#5C4033", background: "#FFFBF7", height: 30 }} />
             </div>
@@ -223,11 +238,15 @@ export default function TagihanPage() {
                     </div>
                 </div>
 
+                <div role="status" style={{ fontSize: 12, color: "#8B735E", marginBottom: 12 }}>
+                    {filteredCustomers.length} customer · {paymentFilter === "all" ? "Semua invoice" : paymentFilter === "paid" ? "Invoice sudah lunas" : "Invoice belum lunas"}.
+                    Ringkasan di atas mencakup seluruh invoice pada periode terpilih; rincian customer mengikuti filter.
+                </div>
                 {filteredCustomers.length === 0 ? (
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "5rem 0", color: "#C5A882" }}>
                         <div style={{ fontSize: 48, marginBottom: 12 }}>🧾</div>
-                        <div style={{ fontWeight: 700, fontSize: 14 }}>Belum ada tagihan tahun {year}</div>
-                        <div style={{ fontSize: 12, marginTop: 4 }}>Pastikan pesanan sudah diisi No Invoice di menu Status Barang</div>
+                        <div style={{ fontWeight: 700, fontSize: 14 }}>Tidak ada tagihan yang cocok dengan filter</div>
+                        <div style={{ fontSize: 12, marginTop: 4 }}>Coba ubah status pembayaran, periode, atau pencarian customer.</div>
                     </div>
                 ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

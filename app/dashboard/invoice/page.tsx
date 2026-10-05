@@ -4,6 +4,7 @@ import { usePesanan, PesananRow } from "@/lib/pesanan-store";
 import { TTD_YANTO } from "@/lib/ttd-yanto";
 import { STEMPEL_TOTO } from "@/lib/stempel-toto";
 import { filterInvoiceNumbers, isInvoicePaid, type InvoicePaymentFilter } from "@/lib/invoice-payment-filter";
+import { usePaymentDataRefresh } from "@/lib/use-payment-data-refresh";
 
 /* ================================================================
    MENU INVOICE
@@ -64,11 +65,12 @@ function groupByInvoice(rows: PesananRow[]): Map<string, PesananRow[]> {
 }
 
 export default function InvoicePage() {
-    const { rows } = usePesanan();
+    const { rows, fetchFilter } = usePesanan();
     const now = new Date();
     const [month, setMonth] = useState(now.getMonth() + 1);
     const [year, setYear] = useState(now.getFullYear());
     const [paymentFilter, setPaymentFilter] = useState<InvoicePaymentFilter>("unpaid");
+    usePaymentDataRefresh(fetchFilter, year, month);
     const [noInvInput, setNoInvInput] = useState("");
     const [searchedInv, setSearchedInv] = useState<string | null>(null);
     const [dp, setDp] = useState("");

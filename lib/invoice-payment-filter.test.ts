@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { filterInvoiceNumbers, isInvoicePaid } from "./invoice-payment-filter";
+import { filterInvoiceNumbers, isInvoicePaid, matchesPaymentFilter } from "./invoice-payment-filter";
 
 describe("invoice payment filter", () => {
+    it("filters individual invoices before grouping a mixed customer", () => {
+        const invoices = [{ customer: "A", is_paid: true }, { customer: "A", is_paid: false }];
+        expect(invoices.filter((inv) => matchesPaymentFilter(inv.is_paid, "paid"))).toEqual([invoices[0]]);
+        expect(invoices.filter((inv) => matchesPaymentFilter(inv.is_paid, "unpaid"))).toEqual([invoices[1]]);
+        expect(invoices.filter((inv) => matchesPaymentFilter(inv.is_paid, "all"))).toEqual(invoices);
+    });
     const invoices = new Map([
         ["101", [{ is_paid: false, di_kirim: true }]],
         ["102", [{ is_paid: true, di_kirim: false }]],
