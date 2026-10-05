@@ -3,6 +3,7 @@ import { useState, useMemo } from "react";
 import { usePesanan, PesananRow } from "@/lib/pesanan-store";
 import { TTD_YANTO } from "@/lib/ttd-yanto";
 import { STEMPEL_TOTO } from "@/lib/stempel-toto";
+import { filterInvoiceNumbers, isInvoicePaid, type InvoicePaymentFilter } from "@/lib/invoice-payment-filter";
 
 /* ================================================================
    MENU INVOICE
@@ -67,6 +68,7 @@ export default function InvoicePage() {
     const now = new Date();
     const [month, setMonth] = useState(now.getMonth() + 1);
     const [year, setYear] = useState(now.getFullYear());
+    const [paymentFilter, setPaymentFilter] = useState<InvoicePaymentFilter>("unpaid");
     const [noInvInput, setNoInvInput] = useState("");
     const [searchedInv, setSearchedInv] = useState<string | null>(null);
     const [dp, setDp] = useState("");
@@ -92,9 +94,10 @@ export default function InvoicePage() {
 
     // unique invoice numbers this month
     const totalInvoices = allInvNos.length;
-    // "Sudah Bayar" = semua item di invoice itu di_kirim=true
-    const sudahBayar = allInvNos.filter((k) => invoiceMap.get(k)!.every((r) => r.di_kirim)).length;
+    // Payment status is independent of shipping; partial payments remain unpaid.
+    const sudahBayar = allInvNos.filter((k) => isInvoicePaid(invoiceMap.get(k)!)).length;
     const belumBayar = totalInvoices - sudahBayar;
+    const filteredInvNos = useMemo(() => filterInvoiceNumbers(invoiceMap, paymentFilter), [invoiceMap, paymentFilter]);
 
     /* ── searched invoice items ──────────────────────────────── */
     const invoiceItems: PesananRow[] = useMemo(() => {
@@ -341,15 +344,33 @@ export default function InvoicePage() {
                                 {statCard("Belum Bayar", belumBayar, "#B91C1C")}
                             </div>
 
-                            {/* List no invoice bulan ini */}
-                            {allInvNos.length > 0 && (
+                            <div style={{ marginTop: 14 }}>
+                                <label htmlFor="invoice-payment-filter" style={labelSt}>Status Pembayaran</label>
+                                <select id="invoice-payment-filter" value={paymentFilter}
+                                    onChange={(e) => setPaymentFilter(e.target.value as InvoicePaymentFilter)} style={inputSt}>
+                                    <option value="unpaid">Belum Lunas ({belumBayar})</option>
+                                    <option value="paid">Sudah Lunas ({sudahBayar})</option>
+                                    <option value="all">Semua ({totalInvoices})</option>
+                                </select>
+                            </div>
+
+                            {/* Filter applies to the monthly list; individual search stays available. */}
                                 <div style={{ marginTop: 12 }}>
                                     <div style={{ fontSize: 10, fontWeight: 700, color: "#B89678", letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>No. Invoice Bulan Ini</div>
+                                    <div role="status" style={{ fontSize: 11, color: "#8B735E", marginBottom: 8 }}>
+                                        Menampilkan {filteredInvNos.length} dari {totalInvoices} invoice
+                                    </div>
+                                    {filteredInvNos.length === 0 && (
+                                        <div style={{ fontSize: 12, color: "#8B735E", padding: "12px 0" }}>
+                                            {totalInvoices === 0 ? "Belum ada invoice pada bulan ini." : `Tidak ada invoice ${paymentFilter === "paid" ? "sudah lunas" : "belum lunas"} pada bulan ini.`}
+                                        </div>
+                                    )}
                                     <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                                        {allInvNos.map((inv) => {
-                                            const done = invoiceMap.get(inv)!.every((r) => r.di_kirim);
+                                        {filteredInvNos.map((inv) => {
+                                            const done = isInvoicePaid(invoiceMap.get(inv)!);
                                             return (
                                                 <button key={inv}
+                                                    title={`Invoice ${inv} — ${done ? "Sudah Lunas" : "Belum Lunas"}`}
                                                     onClick={() => { setNoInvInput(inv); doSearch(inv); }}
                                                     style={{
                                                         padding: "3px 10px", borderRadius: 99, border: "none", cursor: "pointer",
@@ -363,7 +384,6 @@ export default function InvoicePage() {
                                         })}
                                     </div>
                                 </div>
-                            )}
                         </div>
 
                         <hr style={{ border: "none", borderTop: "1px solid #F0E6D8" }} />
