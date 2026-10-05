@@ -13,7 +13,7 @@ describe("payment data auto refresh", () => {
         await vi.advanceTimersByTimeAsync(60_000);
         expect(refresh).toHaveBeenCalledTimes(2);
         await vi.advanceTimersByTimeAsync(3_000);
-        win.dispatchEvent(new Event("focus"));
+        win.dispatchEvent(new Event("erp:realtime-reconnected"));
         doc.dispatchEvent(new Event("visibilitychange"));
         expect(refresh).toHaveBeenCalledTimes(3);
         stop();

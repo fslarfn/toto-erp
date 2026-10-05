@@ -20,6 +20,7 @@ export function startAutoRefresh(
     const onWake = () => { void run(); };
     windowTarget.addEventListener("focus", onWake);
     windowTarget.addEventListener("online", onWake);
+    windowTarget.addEventListener("erp:realtime-reconnected", onWake);
     documentTarget.addEventListener("visibilitychange", onWake);
     const timer = setInterval(onWake, intervalMs);
     onWake();
@@ -28,6 +29,7 @@ export function startAutoRefresh(
         clearInterval(timer);
         windowTarget.removeEventListener("focus", onWake);
         windowTarget.removeEventListener("online", onWake);
+        windowTarget.removeEventListener("erp:realtime-reconnected", onWake);
         documentTarget.removeEventListener("visibilitychange", onWake);
     };
 }

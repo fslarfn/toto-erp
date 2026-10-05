@@ -317,8 +317,13 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                 (payload) => {
                     const { eventType, new: newRow, old: oldRow } = payload;
 
-                    // Hanya proses INSERT dan UPDATE — abaikan DELETE
-                    if (eventType === "DELETE") return;
+                    if (eventType === "DELETE") {
+                        const id = Number((oldRow as { id?: number }).id);
+                        if (Number.isFinite(id) && !pendingPatches.current[id] && !savingRef.current[id]) {
+                            setRows(prev => prev.filter(row => row.id !== id));
+                        }
+                        return;
+                    }
                     if (!newRow || typeof (newRow as any).id !== "number") return;
 
                     setRows((prev) => {
@@ -404,7 +409,9 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                     });
                 }
             )
-            .subscribe();
+            .subscribe((status) => {
+                if (status === "SUBSCRIBED") window.dispatchEvent(new Event("erp:realtime-reconnected"));
+            });
 
         return () => {
             supabase.removeChannel(channel);

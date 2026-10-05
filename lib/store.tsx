@@ -4,6 +4,8 @@ import { Order, Material, CashFlow, Payment, BankAccount, AccountReconciliation 
 import { supabase } from "@/lib/supabase-client";
 import { generateNumbers } from "@/lib/utils";
 import { computeBalance, resolveAccountId, reconcileAccounts, buildTransferPair } from "@/lib/balance";
+import { startAutoRefresh } from "@/lib/auto-refresh";
+import { mergeLiveSnapshot } from "@/lib/merge-live-snapshot";
 
 // Input transaksi: kolom turunan (accountId/flags/transferGroup) opsional —
 // store akan mengisinya (resolusi account_id dari nama kas, default flag false).
@@ -176,6 +178,40 @@ async function fetchAllPaged(
     return all;
 }
 
+function reportWriteError(action: string, error: unknown) {
+    const message = error instanceof Error
+        ? error.message
+        : error && typeof error === "object" && "message" in error
+            ? String((error as { message?: unknown }).message ?? "Kesalahan database")
+            : String(error || "Kesalahan database");
+    console.error(`${action} gagal:`, error);
+    if (typeof window !== "undefined") {
+        window.alert(`${action} gagal disimpan.\n\n${message}\n\nSilakan periksa koneksi lalu coba lagi.`);
+    }
+}
+
+let pendingStoreWrites = 0;
+let storeWriteRevision = 0;
+function runWrite(
+    action: string,
+    request: PromiseLike<{ error: unknown }>,
+    onError?: () => void,
+) {
+    pendingStoreWrites++;
+    storeWriteRevision++;
+    void Promise.resolve(request)
+        .then(({ error }) => {
+            if (error) {
+                onError?.();
+                reportWriteError(action, error);
+            }
+        })
+        .catch((error: unknown) => {
+            onError?.();
+            reportWriteError(action, error);
+        }).finally(() => { pendingStoreWrites--; });
+}
+
 export function StoreProvider({ children }: { children: ReactNode }) {
     const [orders, setOrders] = useState<Order[]>([]);
     const [materials, setMaterials] = useState<Material[]>([]);
@@ -183,6 +219,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const [payments] = useState<Payment[]>([]);
     const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
     const [loading, setLoading] = useState(true);
+    const financeState = useRef({ cashFlow, bankAccounts });
+    financeState.current = { cashFlow, bankAccounts };
+    const financeRefreshing = useRef(false);
 
     // Lazy-load: fetch 3 tabel aktif (paginasi → hindari cap 1000 baris) baru dimulai
     // saat ada halaman yang memakai useStore — BUKAN saat provider mount.
@@ -198,6 +237,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return () => { cancelledRef.current = true; };
     }, []);
 
+    const refreshFinance = useCallback(async () => {
+        if (financeRefreshing.current || pendingStoreWrites > 0) return;
+        financeRefreshing.current = true;
+        const revision = storeWriteRevision;
+        const baseline = financeState.current;
+        try {
+            const [cf, ba] = await Promise.all([
+                fetchAllPaged((f, t) => supabase.from("cash_flow").select("id, type, category, amount, description, date, bank_account, account_id, created_by, is_test, is_adjustment, transfer_group").order("id").range(f, t)),
+                fetchAllPaged((f, t) => supabase.from("bank_accounts").select("id, name, bank, account_number, balance, initial_balance").order("id").range(f, t)),
+            ]);
+            if (cancelledRef.current || revision !== storeWriteRevision || pendingStoreWrites > 0) return;
+            setCashFlow(current => mergeLiveSnapshot(baseline.cashFlow, current, cf.map(dbToCashFlow)));
+            setBankAccounts(current => mergeLiveSnapshot(baseline.bankAccounts, current, ba.map(dbToBankAccount)));
+        } finally { financeRefreshing.current = false; }
+    }, []);
+
+    useEffect(() => {
+        if (!started) return;
+        return startAutoRefresh(refreshFinance, window, document,
+            () => document.visibilityState === "visible" && navigator.onLine);
+    }, [started, refreshFinance]);
+
     const ensureLoaded = useCallback(() => {
         if (startedRef.current) return;
         startedRef.current = true;
@@ -205,15 +266,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const cancelled = () => cancelledRef.current;
         (async () => {
             try {
-                const [mats, cf, ba] = await Promise.all([
+                const [mats] = await Promise.all([
                     fetchAllPaged((f, t) => supabase.from("materials").select("id, code, name, category, unit, current_stock, minimum_stock, location, last_updated").order("code").range(f, t)),
-                    fetchAllPaged((f, t) => supabase.from("cash_flow").select("id, type, category, amount, description, date, bank_account, account_id, created_by, is_test, is_adjustment, transfer_group").order("date", { ascending: false }).range(f, t)),
-                    fetchAllPaged((f, t) => supabase.from("bank_accounts").select("id, name, bank, account_number, balance, initial_balance").range(f, t)),
+                    refreshFinance(),
                 ]);
                 if (!cancelled()) {
                     setMaterials(mats.map(dbToMaterial));
-                    setCashFlow(cf.map(dbToCashFlow));
-                    setBankAccounts(ba.map(dbToBankAccount));
                 }
             } catch (e) {
                 console.error("Store fetch error:", e);
@@ -221,7 +279,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 if (!cancelled()) setLoading(false);
             }
         })();
-    }, []);
+    }, [refreshFinance]);
 
     // Realtime Subscriptions — ikut lazy: baru connect setelah data mulai dimuat.
     useEffect(() => {
@@ -280,7 +338,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             // 3. Bank Accounts
             .on("postgres_changes", { event: "*", schema: "public", table: "bank_accounts" }, (payload) => {
                 const { eventType, new: n, old: o } = payload;
-                if (eventType === "INSERT") setBankAccounts(prev => [...prev, dbToBankAccount(n as Record<string, unknown>)]);
+                if (eventType === "INSERT") {
+                    const account = dbToBankAccount(n as Record<string, unknown>);
+                    setBankAccounts(prev => prev.some(row => row.id === account.id) ? prev : [...prev, account]);
+                }
                 else if (eventType === "UPDATE") {
                     const row = n as Record<string, unknown>;
                     const mapped: Partial<BankAccount> = {};
@@ -296,6 +357,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             })
             .subscribe((status) => {
                 console.log("General Store Realtime Status:", status);
+                if (status === "SUBSCRIBED") window.dispatchEvent(new Event("erp:realtime-reconnected"));
             });
 
         return () => {
@@ -352,7 +414,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             prev.map((b) => {
                 if (b.id === id) {
                     const newBal = b.balance + delta;
-                    supabase.from("bank_accounts").update({ balance: newBal }).eq("id", id).then();
+                    runWrite("Memperbarui saldo rekening", supabase.from("bank_accounts").update({ balance: newBal }).eq("id", id));
                     return { ...b, balance: newBal };
                 }
                 return b;
@@ -381,7 +443,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // Optimistic: realtime juga akan menyusulkan. Saldo = TERHITUNG dari cash_flow
         // (lihat lib/balance.computeBalance) → tidak ada lagi mutasi balance manual.
         setCashFlow(prev => [newCf, ...prev]);
-        supabase.from("cash_flow").insert(cashFlowToDb(newCf)).then();
+        runWrite("Menambah transaksi keuangan", supabase.from("cash_flow").insert(cashFlowToDb(newCf)), () => {
+            setCashFlow((prev) => prev.filter((row) => row.id !== id));
+        });
         return newCf;
     }, [bankAccounts]);
 
@@ -391,7 +455,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const outRow: CashFlow = { ...out, id: crypto.randomUUID(), bankAccount: nameOf(out.accountId!) };
         const innRow: CashFlow = { ...inn, id: crypto.randomUUID(), bankAccount: nameOf(inn.accountId!) };
         setCashFlow(prev => [innRow, outRow, ...prev]);
-        supabase.from("cash_flow").insert([cashFlowToDb(outRow), cashFlowToDb(innRow)]).then();
+        runWrite("Mencatat mutasi rekening", supabase.from("cash_flow").insert([cashFlowToDb(outRow), cashFlowToDb(innRow)]), () => {
+            setCashFlow((prev) => prev.filter((row) => row.id !== outRow.id && row.id !== innRow.id));
+        });
     }, [bankAccounts]);
 
     const updateCashFlow = useCallback((id: string, updates: Partial<CashFlow>) => {
@@ -408,9 +474,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             const resolved = resolveAccountId(newRecord.bankAccount, bankAccounts);
             newRecord.accountId = resolved;
             setCashFlow(prev => prev.map(c => c.id === id ? newRecord : c));
-            supabase.from("cash_flow").update(cashFlowToDb({ ...updates, accountId: resolved })).eq("id", id).then();
+            runWrite("Mengubah transaksi keuangan", supabase.from("cash_flow").update(cashFlowToDb({ ...updates, accountId: resolved })).eq("id", id), () => {
+                setCashFlow((prev) => prev.map((row) => row.id === id ? oldRecord : row));
+            });
         } else {
-            supabase.from("cash_flow").update(cashFlowToDb(updates)).eq("id", id).then();
+            runWrite("Mengubah transaksi keuangan", supabase.from("cash_flow").update(cashFlowToDb(updates)).eq("id", id), () => {
+                setCashFlow((prev) => prev.map((row) => row.id === id ? oldRecord : row));
+            });
         }
         // Saldo = TERHITUNG dari cash_flow → tidak ada mutasi balance manual lagi.
     }, [cashFlow, bankAccounts]);
@@ -420,7 +490,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (!target) return;
 
         setCashFlow((prev) => prev.filter((c) => c.id !== id));
-        supabase.from("cash_flow").delete().eq("id", id).then();
+        runWrite("Menghapus transaksi keuangan", supabase.from("cash_flow").delete().eq("id", id), () => {
+            setCashFlow((prev) => prev.some((row) => row.id === target.id) ? prev : [target, ...prev]);
+        });
         // Saldo = TERHITUNG dari cash_flow → recalc effect akan menyesuaikan cache.
     }, [cashFlow]);
 
@@ -474,7 +546,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             transferGroup: null,
         };
         setCashFlow(prev => [entry, ...prev]);
-        supabase.from("cash_flow").insert(cashFlowToDb(entry)).then();
+        runWrite("Mencatat penyesuaian saldo", supabase.from("cash_flow").insert(cashFlowToDb(entry)), () => {
+            setCashFlow((prev) => prev.filter((row) => row.id !== id));
+        });
     }, [bankAccounts, cashFlow]);
 
     const reconcile = useCallback((opts?: { includeTest?: boolean }) => {
@@ -490,7 +564,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             return prev.map(bank => {
                 const newBalance = computeBalance(bank.id, prev, cashFlow);
                 if (Math.abs(bank.balance - newBalance) > 0.01) {
-                    supabase.from("bank_accounts").update({ balance: newBalance }).eq("id", bank.id).then();
+                    runWrite("Menyinkronkan saldo rekening", supabase.from("bank_accounts").update({ balance: newBalance }).eq("id", bank.id));
                     return { ...bank, balance: newBalance };
                 }
                 return bank;
