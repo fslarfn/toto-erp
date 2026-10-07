@@ -54,7 +54,7 @@ export default function StatusBarangPage() {
                 : [row];
 
             if (targets.every((candidate) => candidate.is_paid)) {
-                alert("Status lunas tidak dapat dibatalkan langsung. Gunakan Rekonsiliasi Pembayaran agar jejak pembayaran tetap aman.");
+                alert("Status lunas tidak dapat dibatalkan langsung. Hubungi admin finance untuk koreksi pembayaran.");
                 return;
             }
 
@@ -72,11 +72,10 @@ export default function StatusBarangPage() {
         }
 
         if (user?.role !== "owner" && user?.role !== "finance") {
-            alert("Status pembayaran dikelola oleh admin finance melalui Rekonsiliasi Pembayaran.");
+            alert("Status pembayaran dikelola oleh admin finance di menu Tagihan.");
             return;
         }
-        const invoice = row.no_inv?.trim() || `ROW:${row.id}`;
-        router.push(`/dashboard/keuangan/rekonsiliasi?invoice=${encodeURIComponent(invoice)}`);
+        router.push("/dashboard/tagihan");
     }, [router, rows, updateLocalRows, user?.role, user?.username]);
 
     const handleUpdate = async (id: number, patch: Partial<PesananRow>) => {
@@ -199,7 +198,7 @@ export default function StatusBarangPage() {
 
             {isLegacyDirectPaymentUser(user?.username) && (
                 <div style={{ padding: "5px 12px", background: "#FFF7E6", color: "#8A5A18", borderBottom: "1px solid #F1D39A", fontSize: 10.5, fontWeight: 600, flexShrink: 0 }}>
-                    Jan–Sep 2026: pembayaran boleh ditandai lunas langsung. Mulai Oktober 2026 wajib melalui Rekonsiliasi Pembayaran.
+                    Jan–Sep 2026: pembayaran boleh ditandai lunas langsung. Mulai Oktober 2026 tandai lunas di menu Tagihan.
                 </div>
             )}
 

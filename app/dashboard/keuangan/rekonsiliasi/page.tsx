@@ -1,6 +1,5 @@
-import { Suspense } from "react";
-import PaymentReconciliation from "@/components/payments/PaymentReconciliation";
+import { redirect } from "next/navigation";
 
-export default function PaymentReconciliationPage() {
-  return <Suspense fallback={<div className="page-content">Memuat rekonsiliasi pembayaran...</div>}><PaymentReconciliation /></Suspense>;
+export default function RetiredReconciliationPage() {
+    redirect("/dashboard/keuangan");
 }

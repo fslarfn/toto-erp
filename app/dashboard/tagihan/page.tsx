@@ -1,6 +1,5 @@
 "use client";
 import React, { useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
 import { usePesanan } from "@/lib/pesanan-store";
 import { useCrm, normalizeName } from "@/lib/crm-store";
 import { waUrl } from "@/lib/wa";
@@ -8,16 +7,12 @@ import { usePaged, PageNav } from "@/components/layout/PageNav";
 import { useAuth } from "@/lib/auth";
 import { matchesPaymentFilter, type InvoicePaymentFilter } from "@/lib/invoice-payment-filter";
 import { usePaymentDataRefresh } from "@/lib/use-payment-data-refresh";
-import {
-    canDirectlyMarkLegacyPayment,
-    isLegacyDirectPaymentUser,
-    normalizeInvoiceNumber,
-} from "@/lib/payments/legacy-payment-policy";
+import { canMarkInvoicePaid, markInvoicePaid } from "@/lib/payments/direct-payment";
 
 /* ================================================================
    MENU TAGIHAN
    Tampilan piutang per customer per tahun.
-   Admin finance membuka rekonsiliasi dari invoice yang dipilih.
+   Admin menandai invoice lunas tanpa mencatat uang masuk dua kali.
 ================================================================ */
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
@@ -47,10 +42,10 @@ function parseIdNum(s: string | undefined): number {
 }
 
 export default function TagihanPage() {
-    const router = useRouter();
     const { user } = useAuth();
-    const { rows, updateRowsDirect, fetchFilter } = usePesanan();
+    const { rows, fetchFilter } = usePesanan();
     const { customers } = useCrm();
+    const [paying, setPaying] = useState(false);
     const now = new Date();
     const [year, setYear] = useState(now.getFullYear());
     const [month, setMonth] = useState<number | "all">("all");
@@ -133,36 +128,17 @@ export default function TagihanPage() {
         return { totalAll, totalLunas, totalBelum: totalAll - totalLunas, countAll, countLunas, countBelum: countAll - countLunas };
     }, [invoiceMap]);
 
-    /* ── Buka rekonsiliasi dengan invoice sudah terpilih ─── */
-    const openReconciliation = (noInv: string) => {
-        const inv = invoiceMap.get(noInv);
-        if (!inv) return;
-        const params = new URLSearchParams({ invoice: noInv, customer: inv.customer });
-        router.push(`/dashboard/keuangan/rekonsiliasi?${params.toString()}`);
-    };
-
-    const handleInvoicePayment = async (inv: { no_inv: string; tanggal: string; is_paid: boolean }) => {
-        if (!canDirectlyMarkLegacyPayment(user?.username, inv.tanggal)) {
-            openReconciliation(inv.no_inv);
-            return;
-        }
-
-        if (inv.is_paid) return;
-
-        const invoice = normalizeInvoiceNumber(inv.no_inv);
-        const targets = rows.filter((row) => normalizeInvoiceNumber(row.no_inv) === invoice);
-        if (targets.length === 0) {
-            alert("Baris invoice tidak ditemukan.");
-            return;
-        }
-
-        if (!window.confirm(`Tandai invoice ${inv.no_inv} sebagai lunas langsung?\n\nTindakan ini tidak menambah saldo kas/bank dan hanya berlaku untuk data Januari–September 2026.`)) return;
-
+    const handleInvoicePayment = async (inv: { no_inv: string; tanggal: string; customer: string; is_paid: boolean }) => {
+        if (paying || inv.is_paid || !canMarkInvoicePaid(user?.role, user?.username)) return;
+        if (!window.confirm(`Tandai invoice ${inv.no_inv} sebagai lunas?\n\nPastikan pembayaran sudah diterima. Tindakan ini hanya mengubah status tagihan, tidak menambah saldo kas/bank. Catat uang masuk secara terpisah di Keuangan.`)) return;
+        setPaying(true);
         try {
-            await updateRowsDirect(targets.map((row) => row.id), { is_paid: true });
+            await markInvoicePaid(inv.no_inv, inv.customer);
+            await fetchFilter(year, month);
         } catch (error) {
-            const message = error instanceof Error ? error.message : "Gagal memperbarui status pembayaran.";
-            alert(message);
+            alert(error instanceof Error ? error.message : "Gagal memperbarui status pembayaran.");
+        } finally {
+            setPaying(false);
         }
     };
 
@@ -214,11 +190,9 @@ export default function TagihanPage() {
                     style={{ border: "1px solid #D1BFA3", borderRadius: 6, padding: "4px 10px", fontSize: 12, width: 220, color: "#5C4033", background: "#FFFBF7", height: 30 }} />
             </div>
 
-            {isLegacyDirectPaymentUser(user?.username) && (
-                <div style={{ padding: "7px 18px", background: "#FFF7E6", color: "#8A5A18", borderBottom: "1px solid #F1D39A", fontSize: 11, fontWeight: 600, flexShrink: 0 }}>
-                    Jan–Sep 2026 dapat ditandai lunas langsung. Invoice mulai Oktober 2026 wajib melalui Rekonsiliasi Pembayaran.
-                </div>
-            )}
+            <div style={{ padding: "7px 18px", background: "#FFF7E6", color: "#8A5A18", fontSize: 11 }}>
+                Tandai Lunas setelah pembayaran diterima. Pencatatan uang masuk dan keterangannya dilakukan di Keuangan.
+            </div>
 
             <div style={{ flex: 1, overflow: "auto", padding: "16px 18px" }}>
 
@@ -327,9 +301,9 @@ export default function TagihanPage() {
                                                                     {inv.is_paid ? (
                                                                         <span style={{ color: "#15803D", fontSize: 10, fontWeight: 700, whiteSpace: "nowrap" }}>✓ Lunas</span>
                                                                     ) : (
-                                                                        <button onClick={() => handleInvoicePayment(inv)}
+                                                                        <button disabled={paying || !canMarkInvoicePaid(user?.role, user?.username)} onClick={() => handleInvoicePayment({ ...inv, customer })}
                                                                             style={{ padding: "4px 10px", borderRadius: 5, border: "1px solid #A67B5B", background: "#FFF8F1", cursor: "pointer", fontSize: 10, fontWeight: 700, color: "#7C5136", whiteSpace: "nowrap" }}>
-                                                                            {canDirectlyMarkLegacyPayment(user?.username, inv.tanggal) ? "Tandai Lunas" : "Cari Pembayaran →"}
+                                                                            {paying ? "Menyimpan..." : "Lunas"}
                                                                         </button>
                                                                     )}
                                                                 </td>

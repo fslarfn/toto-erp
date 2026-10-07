@@ -56,7 +56,7 @@ export type OpenCustomerInvoiceRow = {
 const POSTGREST_PAGE_SIZE = 1000;
 
 export async function createCustomerPaymentCashFlow(input: {
-  type: "income";
+  type: "income" | "expense";
   category: string;
   amount: number;
   description: string;

@@ -29,7 +29,7 @@ interface AppStore {
     deleteMaterial: (id: string) => void;
     /** Mengembalikan record yang dibuat (id dipakai penaut, mis. gaji.cash_flow_id). */
     addCashFlow: (c: CashFlowInput) => CashFlow;
-    updateCashFlow: (id: string, updates: Partial<CashFlow>) => void;
+    updateCashFlow: (id: string, updates: Partial<CashFlow>) => Promise<void>;
     deleteCashFlow: (id: string) => void;
     /** Mutasi antar-kas: catat sebagai pasangan expense(sumber)+income(tujuan). */
     addTransfer: (p: { fromAccountId: string; toAccountId: string; amount: number; date: string; description?: string; createdBy?: string }) => void;
@@ -460,29 +460,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         });
     }, [bankAccounts]);
 
-    const updateCashFlow = useCallback((id: string, updates: Partial<CashFlow>) => {
+    const updateCashFlow = useCallback(async (id: string, updates: Partial<CashFlow>) => {
         const oldRecord = cashFlow.find(c => c.id === id);
-        if (!oldRecord) return;
-
-        const newRecord = { ...oldRecord, ...updates };
-
-        // Optimistic local update
-        setCashFlow(prev => prev.map(c => c.id === id ? newRecord : c));
-
-        // Jika kas berubah, sinkronkan account_id (FK) mengikuti nama kas baru.
-        if (updates.bankAccount !== undefined && updates.accountId === undefined) {
-            const resolved = resolveAccountId(newRecord.bankAccount, bankAccounts);
-            newRecord.accountId = resolved;
-            setCashFlow(prev => prev.map(c => c.id === id ? newRecord : c));
-            runWrite("Mengubah transaksi keuangan", supabase.from("cash_flow").update(cashFlowToDb({ ...updates, accountId: resolved })).eq("id", id), () => {
-                setCashFlow((prev) => prev.map((row) => row.id === id ? oldRecord : row));
-            });
-        } else {
-            runWrite("Mengubah transaksi keuangan", supabase.from("cash_flow").update(cashFlowToDb(updates)).eq("id", id), () => {
-                setCashFlow((prev) => prev.map((row) => row.id === id ? oldRecord : row));
-            });
+        if (!oldRecord) throw new Error("Transaksi tidak ditemukan. Muat ulang halaman.");
+        const patch = { ...updates };
+        if (patch.bankAccount !== undefined && patch.accountId === undefined) {
+            patch.accountId = resolveAccountId(patch.bankAccount, bankAccounts);
         }
-        // Saldo = TERHITUNG dari cash_flow → tidak ada mutasi balance manual lagi.
+        pendingStoreWrites++;
+        storeWriteRevision++;
+        try {
+            const { data, error } = await supabase.from("cash_flow")
+                .update(cashFlowToDb(patch)).eq("id", id).select("id").single();
+            if (error) throw new Error(error.message);
+            if (!data) throw new Error("Transaksi tidak berhasil diperbarui.");
+            setCashFlow(prev => prev.map(c => c.id === id ? { ...c, ...patch } : c));
+        } finally {
+            pendingStoreWrites--;
+        }
     }, [cashFlow, bankAccounts]);
 
     const deleteCashFlow = useCallback((id: string) => {
