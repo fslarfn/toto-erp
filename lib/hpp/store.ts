@@ -153,10 +153,25 @@ export async function saveProductHpp(row: HppProductRow) {
 }
 
 export async function loadSalesHppRecognitions() {
-  const { data, error } = await supabase.from("sales_hpp_recognitions").select("*")
-    .eq("workspace", "toto").order("recognition_date", { ascending: false });
-  if (error) throw error;
-  return (data ?? []) as SalesHppRecognitionRow[];
+  const rows: SalesHppRecognitionRow[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase.from("sales_hpp_recognitions").select("*")
+      .eq("workspace", "toto").order("recognition_date", { ascending: false }).order("id").range(from, from + 999);
+    if (error) throw error;
+    rows.push(...(data ?? []) as SalesHppRecognitionRow[]);
+    if (!data || data.length < 1000) return rows;
+  }
+}
+
+export async function loadHppAliases() {
+  const aliases: Record<string, string> = {};
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase.from("hpp_product_aliases")
+      .select("id,alias_name,product_hpp_id").eq("workspace", "toto").order("id").range(from, from + 999);
+    if (error) throw error;
+    for (const row of data ?? []) aliases[String(row.alias_name).trim().toLowerCase()] = String(row.product_hpp_id);
+    if (!data || data.length < 1000) return aliases;
+  }
 }
 
 export async function mapAndProcessSalesHpp(recognitionId: string, productId: string, alias: string, username: string) {
