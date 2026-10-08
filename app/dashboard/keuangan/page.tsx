@@ -16,6 +16,7 @@ import {
     registerCustomerReceipt,
 } from "@/lib/payments/store";
 import { calculateInvoicePayment } from "@/lib/payments/matching";
+import { sortFinanceHistory } from "@/lib/finance-history";
 
 const BANK_ACCOUNTS = ["Bank BCA Toto", "Bank BCA Yanto", "Cash"];
 // Paginasi riwayat transaksi — meniru pola Input Pesanan (100 baris/halaman).
@@ -62,7 +63,9 @@ type FormState = {
 
 export default function KeuanganPage() {
     const { user } = useAuth();
-    const { cashFlow, bankAccounts, updateCashFlow, deleteCashFlow, addTransfer, getComputedBalance, addAdjustment, syncAllBalances } = useStore();
+    const { cashFlow, bankAccounts, updateCashFlow, deleteCashFlow, addTransfer, getComputedBalance, addAdjustment, syncAllBalances, acceptCashFlow, refreshFinance, financeError } = useStore();
+    const [recentCashFlowId, setRecentCashFlowId] = useState<string>();
+    const [refreshingHistory, setRefreshingHistory] = useState(false);
 
     const now = new Date();
     const thisMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -156,10 +159,10 @@ export default function KeuanganPage() {
 
     const months = [...new Set([...cashFlow.map((c) => c.date.substring(0, 7)), thisMonthStr])].sort().reverse();
 
-    const filtered = cashFlow
+    const filtered = sortFinanceHistory(cashFlow
         .filter((c) => showTest || !c.isTest)
         .filter((c) => filterMonth === "semua" || c.date.startsWith(filterMonth))
-        .filter((c) => !searchKeterangan.trim() || c.description.toLowerCase().includes(searchKeterangan.toLowerCase().trim()));
+        .filter((c) => !searchKeterangan.trim() || c.description.toLowerCase().includes(searchKeterangan.toLowerCase().trim())), recentCashFlowId);
 
     // Masuk/Keluar: KECUALIKAN mutasi antar-kas (transfer internal bukan omzet/biaya).
     // `filtered` sudah menerapkan toggle test → pakai includeTest:true di sini.
@@ -214,6 +217,12 @@ export default function KeuanganPage() {
                 ...cashFlowInput,
                 accountId: bankAccounts.find((account) => account.name === form.kas)?.id ?? null,
             });
+            // Use the confirmed DB row immediately, even if realtime is disconnected.
+            acceptCashFlow(savedCashFlow);
+            setRecentCashFlowId(String(savedCashFlow.id));
+            setFilterMonth(String(savedCashFlow.date).slice(0, 7));
+            setSearchKeterangan("");
+            setPage(1);
 
             if (isInvoiceIncome && selectedInvoice) {
                 try {
@@ -620,9 +629,15 @@ export default function KeuanganPage() {
 
             {/* Riwayat Transaksi */}
             <div className="card">
+                {financeError && <div role="alert" style={{ padding: 12, color: "#B91C1C", background: "#FEF2F2" }}>{financeError}</div>}
                 <div className="card-header" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
                         <span>Riwayat Transaksi</span>
+                        <button className="btn btn-secondary" disabled={refreshingHistory} onClick={async () => {
+                            setRefreshingHistory(true);
+                            try { await refreshFinance(); } catch { /* Store displays the read error. */ }
+                            finally { setRefreshingHistory(false); }
+                        }}>{refreshingHistory ? "Memuat..." : "Muat ulang riwayat & saldo"}</button>
                         <div style={{ display: "flex", gap: "1rem", alignItems: "center", fontSize: 13, flexWrap: "wrap" }}>
                             <span style={{ color: "#B89678" }}>
                                 Masuk: <strong style={{ color: "#10b981" }}>{formatCurrency(totalIn)}</strong> |

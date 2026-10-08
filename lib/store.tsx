@@ -6,6 +6,7 @@ import { generateNumbers } from "@/lib/utils";
 import { computeBalance, resolveAccountId, reconcileAccounts, buildTransferPair } from "@/lib/balance";
 import { startAutoRefresh } from "@/lib/auto-refresh";
 import { mergeLiveSnapshot } from "@/lib/merge-live-snapshot";
+import { acceptSavedCashFlow } from "@/lib/finance-history";
 
 // Input transaksi: kolom turunan (accountId/flags/transferGroup) opsional —
 // store akan mengisinya (resolusi account_id dari nama kas, default flag false).
@@ -20,6 +21,9 @@ interface AppStore {
     payments: Payment[];
     bankAccounts: BankAccount[];
     loading: boolean;
+    financeError: string;
+    refreshFinance: () => Promise<void>;
+    acceptCashFlow: (row: Record<string, unknown>) => void;
 
     addOrder: (o: Omit<Order, "id" | "poNumber" | "invoiceNumber" | "sjNumber" | "createdAt" | "productionStatus" | "deliveryStatus" | "paymentStatus" | "paidAmount" | "rowColor">) => Order;
     updateOrder: (id: string, updates: Partial<Order>) => void;
@@ -219,6 +223,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const [payments] = useState<Payment[]>([]);
     const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
     const [loading, setLoading] = useState(true);
+    const [financeError, setFinanceError] = useState("");
+    const acceptCashFlow = useCallback((row: Record<string, unknown>) => {
+        storeWriteRevision++;
+        setCashFlow(current => acceptSavedCashFlow(current, dbToCashFlow(row)));
+    }, []);
     const financeState = useRef({ cashFlow, bankAccounts });
     financeState.current = { cashFlow, bankAccounts };
     const financeRefreshing = useRef(false);
@@ -250,6 +259,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             if (cancelledRef.current || revision !== storeWriteRevision || pendingStoreWrites > 0) return;
             setCashFlow(current => mergeLiveSnapshot(baseline.cashFlow, current, cf.map(dbToCashFlow)));
             setBankAccounts(current => mergeLiveSnapshot(baseline.bankAccounts, current, ba.map(dbToBankAccount)));
+            setFinanceError("");
+        } catch (error) {
+            setFinanceError("Data keuangan belum berhasil diperbarui. Riwayat dan saldo mungkin belum terbaru.");
+            throw error;
         } finally { financeRefreshing.current = false; }
     }, []);
 
@@ -600,6 +613,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return (
         <StoreContext.Provider value={{
             orders, materials, cashFlow, payments, bankAccounts, loading,
+            financeError, refreshFinance, acceptCashFlow,
             addOrder, updateOrder, deleteOrder,
             addMaterial, updateMaterial, deleteMaterial,
             addCashFlow, updateCashFlow, deleteCashFlow, addTransfer, addPayment, updateBankBalance,

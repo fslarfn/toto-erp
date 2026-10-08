@@ -66,7 +66,7 @@ export async function createCustomerPaymentCashFlow(input: {
   createdBy: string;
 }) {
   const id = crypto.randomUUID();
-  const { error } = await supabase.from("cash_flow").insert({
+  const { data, error } = await supabase.from("cash_flow").insert({
     id,
     type: input.type,
     category: input.category,
@@ -79,9 +79,10 @@ export async function createCustomerPaymentCashFlow(input: {
     is_test: false,
     is_adjustment: false,
     transfer_group: null,
-  });
+  }).select("id,type,category,amount,description,date,bank_account,account_id,created_by,is_test,is_adjustment,transfer_group").single();
   if (error) throw error;
-  return { id };
+  if (!data) throw new Error("Konfirmasi transaksi belum diterima. Periksa riwayat sebelum menginput ulang.");
+  return data;
 }
 
 export async function loadOpenCustomerInvoices() {
