@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import useSWR from "swr";
 import { supabase } from "@/lib/supabase-client";
 import { PesananRow } from "@/lib/pesanan-store";
+import { createStatusBarangRefresh } from "@/lib/status-barang-refresh";
 
 // Pilih hanya kolom yang dipakai halaman ini agar payload Supabase tidak membengkak.
 const STATUS_BARANG_COLS =
@@ -48,66 +49,47 @@ export function useStatusBarangRows(year: number, month: number | "all") {
             } else {
                 hasMore = false;
             }
-
-            // Safety limit to avoid infinite loops, set to 20k rows per month
-            if (from >= 20000) break;
         }
 
         return allData;
     };
 
-    const { data, error, mutate, isLoading } = useSWR<PesananRow[]>(key, fetcher, {
+    const { data, error, mutate, isLoading, isValidating } = useSWR<PesananRow[]>(key, fetcher, {
         revalidateOnFocus: true,
+        revalidateOnReconnect: true,
+        refreshInterval: 60_000,
+        refreshWhenHidden: false,
+        refreshWhenOffline: false,
         dedupingInterval: 2000, // Reduced to 2s for better reactivity
         revalidateIfStale: true,
     });
 
     // Realtime Listener: Trigger mutate on any change to pesanan_rows
     useEffect(() => {
+        // Read the authoritative period instead of patching an incomplete cache.
+        // This handles moved dates, missing rows, deletes and reconnect gaps alike.
+        const refresh = createStatusBarangRefresh(() => mutate());
         const channel = supabase
             .channel(`status-barang-realtime-${year}-${month}`)
             .on(
                 "postgres_changes",
                 { event: "*", schema: "public", table: "pesanan_rows" },
-                (payload) => {
-                    // Tambal dari payload (TANPA refetch seluruh tabel) → hemat egress.
-                    const { eventType, new: n, old: o } = payload;
-                    const newRow = n as unknown as PesananRow;
-                    const oldId = (o as { id?: number })?.id;
-                    mutate((current?: PesananRow[]) => {
-                        const list = current ? [...current] : [];
-                        if (eventType === "DELETE") {
-                            return oldId != null ? list.filter((r) => r.id !== oldId) : list;
-                        }
-                        if (eventType === "UPDATE") {
-                            return list.map((r) => (r.id === newRow.id ? { ...r, ...newRow } : r));
-                        }
-                        if (eventType === "INSERT") {
-                            if (newRow.id == null || list.some((r) => r.id === newRow.id)) return list;
-                            const d = newRow.tanggal || "";
-                            const inScope = month === "all"
-                                ? d.startsWith(String(year))
-                                : d.startsWith(`${year}-${String(month).padStart(2, "0")}`);
-                            return inScope ? [...list, newRow] : list;
-                        }
-                        return list;
-                    }, false);
-                }
+                () => refresh.schedule()
             )
-            .subscribe();
+            .subscribe((status) => {
+                if (status === "SUBSCRIBED") refresh.schedule();
+            });
 
         return () => {
-            supabase.removeChannel(channel);
+            refresh.stop();
+            void supabase.removeChannel(channel);
         };
     }, [year, month, mutate]);
 
     // Helper untuk update satu baris di cache lokal & DB
     const updateLocalRow = async (id: number, patch: Partial<PesananRow>) => {
         // 1. Optimistic Update
-        if (data) {
-            const newData = data.map(r => r.id === id ? { ...r, ...patch } : r);
-            mutate(newData, false);
-        }
+        void mutate((current) => current?.map(r => r.id === id ? { ...r, ...patch } : r), false);
 
         // 2. Persist to DB
         const { error: dbErr } = await supabase.from("pesanan_rows").update(patch).eq("id", id);
@@ -145,6 +127,7 @@ export function useStatusBarangRows(year: number, month: number | "all") {
     return {
         rows: data || [],
         isLoading,
+        isValidating,
         isError: !!error,
         updateLocalRow,
         updateLocalRows,

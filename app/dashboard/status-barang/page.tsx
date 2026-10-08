@@ -42,7 +42,7 @@ export default function StatusBarangPage() {
     }, []);
 
     // Optimized specialized hook: Server-side filtered & Deduped
-    const { rows, isLoading, updateLocalRow, updateLocalRows, mutate } = useStatusBarangRows(year, month);
+    const { rows, isLoading, isError, isValidating, updateLocalRow, updateLocalRows, mutate } = useStatusBarangRows(year, month);
 
     const flashSaved = () => { setSavedFlash(true); setTimeout(() => setSavedFlash(false), 2000); };
 
@@ -173,10 +173,19 @@ export default function StatusBarangPage() {
                 <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="🔍 Cari customer..." style={{ border: "1px solid #D1BFA3", borderRadius: 5, padding: "3px 8px", fontSize: 11, width: 180, height: 28, background: "#FFFBF7" }} />
 
                 <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                    <button disabled={isValidating} onClick={() => { void mutate().catch(() => {}); }} style={{ border: "1px solid #D1BFA3", borderRadius: 5, padding: "4px 12px", fontSize: 11, background: "#FFFBF7", cursor: "pointer" }}>
+                        {isValidating ? "Memperbarui..." : "Muat ulang"}
+                    </button>
                     <LocalImportExcel onImport={handleImport} />
                     <button onClick={exportExcel} style={{ border: "1px solid #D1BFA3", borderRadius: 5, padding: "4px 12px", fontSize: 11, background: "#F5EBDD", cursor: "pointer", fontWeight: 600 }}>⬇ Excel</button>
                 </div>
             </div>
+
+            {isError && (
+                <div role="alert" style={{ padding: "8px 12px", background: "#FEF2F2", color: "#B91C1C", fontSize: 12, flexShrink: 0 }}>
+                    Gagal memperbarui Status Barang. Data yang tampil mungkin belum terbaru. Periksa koneksi lalu klik Muat ulang.
+                </div>
+            )}
 
             {/* Status counters */}
             <div style={{ display: "flex", gap: 6, padding: "6px 12px", background: "#FAF7F3", borderBottom: "1px solid #E6D5BE", flexShrink: 0, overflowX: "auto" }}>
@@ -205,7 +214,7 @@ export default function StatusBarangPage() {
             {/* Virtualized Table Container */}
             <div style={{ flex: 1, position: "relative", overflow: "hidden", display: "flex", flexDirection: "column", minHeight: 0 }}>
                 {filtered.length === 0 && !isLoading ? (
-                    <div style={{ textAlign: "center", marginTop: 40, color: "#C5A882" }}>Tidak ada data.</div>
+                    <div style={{ textAlign: "center", marginTop: 40, color: "#C5A882" }}>{isError ? "Data belum berhasil dimuat." : "Tidak ada data."}</div>
                 ) : viewMode === "order" ? (
                     <OrderView key={`${statusFilter}-${month}-${year}-${deferredSearch}`} rows={filtered} onUpdate={handleUpdate} onReconcilePayment={handlePaymentAction} />
                 ) : (
