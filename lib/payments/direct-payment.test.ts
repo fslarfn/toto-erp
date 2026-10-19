@@ -13,7 +13,7 @@ describe("direct invoice settlement", () => {
         expect(canMarkInvoicePaid()).toBe(false);
     });
     it("uses one atomic invoice RPC, not a cash insert", async () => {
-        rpc.mockResolvedValueOnce({ error: null });
+        rpc.mockResolvedValueOnce({ data: 8, error: null });
         await markInvoicePaid(" inv-10 ", "Customer");
         expect(rpc).toHaveBeenLastCalledWith("mark_customer_invoice_paid", {
             p_invoice: "INV-10", p_customer: "Customer",
@@ -25,5 +25,11 @@ describe("direct invoice settlement", () => {
     });
     it("rejects an empty invoice", async () => {
         await expect(markInvoicePaid(" ", "Customer")).rejects.toThrow("Nomor invoice");
+    });
+    it("accepts an already-settled invoice and rejects missing confirmation", async () => {
+        rpc.mockResolvedValueOnce({ data: 0, error: null });
+        await expect(markInvoicePaid("14503", "SEWELAS")).resolves.toBeUndefined();
+        rpc.mockResolvedValueOnce({ data: null, error: null });
+        await expect(markInvoicePaid("14503", "SEWELAS")).rejects.toThrow("Konfirmasi");
     });
 });

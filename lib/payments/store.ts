@@ -164,6 +164,7 @@ export async function allocateCustomerReceipt(input: {
     p_username: input.username,
   });
   if (error) throw error;
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("erp:payment-changed"));
   return data as string;
 }
 
@@ -173,4 +174,5 @@ export async function removeCustomerReceiptAllocation(allocationId: string, user
     p_username: username,
   });
   if (error) throw error;
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("erp:payment-changed"));
 }

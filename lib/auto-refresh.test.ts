@@ -3,6 +3,24 @@ import { startAutoRefresh } from "./auto-refresh";
 
 describe("payment data auto refresh", () => {
     afterEach(() => vi.useRealTimers());
+    it("replays a payment change received during an old read without throttling", async () => {
+        vi.useFakeTimers();
+        let finish!: () => void;
+        const refresh = vi.fn().mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }))
+            .mockResolvedValue(undefined);
+        const win = new EventTarget();
+        const stop = startAutoRefresh(refresh, win, new EventTarget(), () => true);
+        win.dispatchEvent(new Event("erp:payment-changed"));
+        expect(refresh).toHaveBeenCalledTimes(1);
+        finish();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(refresh).toHaveBeenCalledTimes(2);
+        win.dispatchEvent(new Event("erp:payment-changed"));
+        expect(refresh).toHaveBeenCalledTimes(3);
+        stop();
+        win.dispatchEvent(new Event("erp:payment-changed"));
+        expect(refresh).toHaveBeenCalledTimes(3);
+    });
     it("refreshes on mount, periodically and on return; stops after cleanup", async () => {
         vi.useFakeTimers();
         const refresh = vi.fn().mockResolvedValue(undefined);

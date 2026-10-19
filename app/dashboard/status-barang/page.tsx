@@ -1,6 +1,5 @@
 "use client";
-import { useState, useMemo, useDeferredValue, useCallback, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useMemo, useDeferredValue, useCallback, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
 import { useAuth } from "@/lib/auth";
 import { PesananRow, isRowFilled } from "@/lib/pesanan-store";
@@ -8,16 +7,13 @@ import { useStatusBarangRows } from "./hooks/useStatusBarangRows";
 import { VirtualTable } from "./components/VirtualTable";
 import { OrderView } from "./components/OrderView";
 import { LocalImportExcel } from "./components/LocalImportExcel";
-import {
-    canDirectlyMarkLegacyPayment,
-    isLegacyDirectPaymentUser,
-    normalizeInvoiceNumber,
-} from "@/lib/payments/legacy-payment-policy";
+import { normalizeInvoiceNumber } from "@/lib/payments/legacy-payment-policy";
+import { canMarkInvoicePaid, markInvoicePaid } from "@/lib/payments/direct-payment";
 
 const MONTH_NAMES = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
 
 export default function StatusBarangPage() {
-    const router = useRouter();
+    const paymentInFlight = useRef(false);
     const { user } = useAuth();
     const now = new Date();
     const [month, setMonth] = useState(now.getMonth() + 1);
@@ -42,41 +38,33 @@ export default function StatusBarangPage() {
     }, []);
 
     // Optimized specialized hook: Server-side filtered & Deduped
-    const { rows, isLoading, isError, isValidating, updateLocalRow, updateLocalRows, mutate } = useStatusBarangRows(year, month);
+    const { rows, isLoading, isError, isValidating, updateLocalRow, mutate } = useStatusBarangRows(year, month);
 
     const flashSaved = () => { setSavedFlash(true); setTimeout(() => setSavedFlash(false), 2000); };
 
     const handlePaymentAction = useCallback(async (row: PesananRow) => {
-        if (canDirectlyMarkLegacyPayment(user?.username, row.tanggal)) {
-            const invoice = normalizeInvoiceNumber(row.no_inv);
-            const targets = invoice
-                ? rows.filter((candidate) => normalizeInvoiceNumber(candidate.no_inv) === invoice)
-                : [row];
-
-            if (targets.every((candidate) => candidate.is_paid)) {
-                alert("Status lunas tidak dapat dibatalkan langsung. Hubungi admin finance untuk koreksi pembayaran.");
-                return;
-            }
-
-            const label = invoice || `baris ${row.id}`;
-            if (!window.confirm(`Tandai invoice ${label} sebagai lunas langsung?\n\nTindakan ini tidak menambah saldo kas/bank dan hanya berlaku untuk data Januari–September 2026.`)) return;
-
-            try {
-                await updateLocalRows(targets.map((candidate) => candidate.id), { is_paid: true });
-                flashSaved();
-            } catch (error) {
-                const message = error instanceof Error ? error.message : "Gagal memperbarui status pembayaran.";
-                alert(message);
-            }
-            return;
-        }
-
-        if (user?.role !== "owner" && user?.role !== "finance") {
+        if (paymentInFlight.current) return;
+        if (!canMarkInvoicePaid(user?.role, user?.username)) {
             alert("Status pembayaran dikelola oleh admin finance di menu Tagihan.");
             return;
         }
-        router.push("/dashboard/tagihan");
-    }, [router, rows, updateLocalRows, user?.role, user?.username]);
+        const invoice = normalizeInvoiceNumber(row.no_inv);
+        if (!invoice) {
+            alert("Isi nomor invoice sebelum menandai pembayaran lunas.");
+            return;
+        }
+        if (!window.confirm(`Tandai SELURUH invoice ${invoice} sebagai lunas?\n\nSemua baris invoice ikut lunas, termasuk di bulan lain. Tidak menambah saldo kas/bank. Pembatalan harus melalui koreksi pembayaran.`)) return;
+        paymentInFlight.current = true;
+        try {
+            await markInvoicePaid(invoice, row.customer);
+            await mutate();
+            flashSaved();
+        } catch (error) {
+            alert(error instanceof Error ? error.message : "Gagal memperbarui status pembayaran.");
+        } finally {
+            paymentInFlight.current = false;
+        }
+    }, [mutate, user?.role, user?.username]);
 
     const handleUpdate = async (id: number, patch: Partial<PesananRow>) => {
         try {
@@ -205,9 +193,9 @@ export default function StatusBarangPage() {
                 </div>
             </div>
 
-            {isLegacyDirectPaymentUser(user?.username) && (
+            {canMarkInvoicePaid(user?.role, user?.username) && (
                 <div style={{ padding: "5px 12px", background: "#FFF7E6", color: "#8A5A18", borderBottom: "1px solid #F1D39A", fontSize: 10.5, fontWeight: 600, flexShrink: 0 }}>
-                    Jan–Sep 2026: pembayaran boleh ditandai lunas langsung. Mulai Oktober 2026 tandai lunas di menu Tagihan.
+                    Centang Bayar melunasi seluruh invoice dan menyinkronkan Tagihan. Pencatatan uang masuk tetap melalui Keuangan.
                 </div>
             )}
 

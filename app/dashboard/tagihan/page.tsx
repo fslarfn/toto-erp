@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { matchesPaymentFilter, type InvoicePaymentFilter } from "@/lib/invoice-payment-filter";
 import { usePaymentDataRefresh } from "@/lib/use-payment-data-refresh";
 import { canMarkInvoicePaid, markInvoicePaid } from "@/lib/payments/direct-payment";
+import { normalizeInvoiceNumber } from "@/lib/payments/legacy-payment-policy";
 
 /* ================================================================
    MENU TAGIHAN
@@ -79,7 +80,7 @@ export default function TagihanPage() {
             descs: string[];
         }>();
         baseRows.forEach((r) => {
-            const key = r.no_inv.trim();
+            const key = normalizeInvoiceNumber(r.no_inv);
             const rowTotal = parseIdNum(r.ukuran) * parseIdNum(r.qty) * parseIdNum(r.harga);
             if (!map.has(key)) {
                 map.set(key, { no_inv: key, customer: r.customer, tanggal: r.tanggal, total: 0, is_paid: r.is_paid, descs: [] });

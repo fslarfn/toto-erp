@@ -17,6 +17,8 @@ import {
 } from "@/lib/payments/store";
 import { calculateInvoicePayment } from "@/lib/payments/matching";
 import { sortFinanceHistory } from "@/lib/finance-history";
+import { startAutoRefresh } from "@/lib/auto-refresh";
+import { supabase } from "@/lib/supabase-client";
 
 const BANK_ACCOUNTS = ["Bank BCA Toto", "Bank BCA Yanto", "Cash"];
 // Paginasi riwayat transaksi — meniru pola Input Pesanan (100 baris/halaman).
@@ -126,22 +128,30 @@ export default function KeuanganPage() {
     useEffect(() => {
         if (!isInvoiceIncome) return;
         let cancelled = false;
-        setLoadingInvoices(true);
-        setInvoiceLoadError("");
-        loadOpenCustomerInvoices()
-            .then((rows) => {
-                if (!cancelled) setOpenInvoices(rows);
-            })
-            .catch((error: unknown) => {
+        const refresh = async () => {
+            setLoadingInvoices(true);
+            try {
+                const rows = await loadOpenCustomerInvoices();
+                if (!cancelled) {
+                    setOpenInvoices(rows);
+                    setInvoiceLoadError("");
+                }
+            } catch (error: unknown) {
                 if (!cancelled) {
                     const message = error instanceof Error ? error.message : "Daftar invoice gagal dimuat";
                     setInvoiceLoadError(message);
                 }
-            })
-            .finally(() => {
+            } finally {
                 if (!cancelled) setLoadingInvoices(false);
-            });
-        return () => { cancelled = true; };
+            }
+        };
+        const stop = startAutoRefresh(refresh, window, document,
+            () => document.visibilityState === "visible" && navigator.onLine);
+        const channel = supabase.channel("finance-open-invoice-status")
+            .on("postgres_changes", { event: "*", schema: "public", table: "pesanan_rows" },
+                () => window.dispatchEvent(new Event("erp:payment-changed")))
+            .subscribe();
+        return () => { cancelled = true; stop(); void supabase.removeChannel(channel); };
     }, [isInvoiceIncome]);
 
     const chooseInvoice = (invoice: OpenCustomerInvoiceRow) => {

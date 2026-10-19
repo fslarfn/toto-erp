@@ -69,6 +69,7 @@ export function useStatusBarangRows(year: number, month: number | "all") {
         // Read the authoritative period instead of patching an incomplete cache.
         // This handles moved dates, missing rows, deletes and reconnect gaps alike.
         const refresh = createStatusBarangRefresh(() => mutate());
+        window.addEventListener("erp:payment-changed", refresh.schedule);
         const channel = supabase
             .channel(`status-barang-realtime-${year}-${month}`)
             .on(
@@ -81,6 +82,7 @@ export function useStatusBarangRows(year: number, month: number | "all") {
             });
 
         return () => {
+            window.removeEventListener("erp:payment-changed", refresh.schedule);
             refresh.stop();
             void supabase.removeChannel(channel);
         };
