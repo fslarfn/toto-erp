@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAlucurvTable } from "@/lib/alucurv/useAlucurvTable";
 import { supabase } from "@/lib/supabase-client";
 import AlucurvCrudTable, { type CrudField } from "@/components/layout/AlucurvCrudTable";
@@ -48,6 +48,15 @@ interface AluCashbonPayment {
     cashbon_id: string;
     date: string;
     amount: number;
+}
+interface AlucurvAttendance {
+    id: number;
+    alu_employee_id: string;
+    tanggal: string;
+    jam_masuk: string;
+    jam_keluar: string;
+    overtime_hours: number;
+    is_telat: boolean;
 }
 
 const rupiah = (n: number) => `Rp ${Math.round(n).toLocaleString("id-ID")}`;
@@ -114,6 +123,8 @@ function GajiTab({ employees, salaries, cashbons, payments }: {
     const [saving, setSaving] = useState(false);
     const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
     const [slip, setSlip] = useState<AluSalary | null>(null);
+    const [attendanceRows, setAttendanceRows] = useState<AlucurvAttendance[]>([]);
+    const [attendanceLoading, setAttendanceLoading] = useState(false);
 
     const empById = new Map(employees.rows.map((e) => [e.id, e]));
     const paidMap = buildPaidMap(payments.rows);
@@ -136,6 +147,40 @@ function GajiTab({ employees, salaries, cashbons, payments }: {
     const potongan = n(form.jht) + n(form.bpjs) + n(form.bon_deduction);
     const takeHome = pendapatan - potongan;
     const sisaBonKaryawan = form.employee_id ? sisaBonOf(form.employee_id, editId ?? undefined) : 0;
+
+    // Penggajian Alucurv membaca sumber absensi yang sama dengan Toto.
+    // Nominal gaji mingguan tetap dikendalikan admin sampai tarif harian/lembur
+    // Alucurv ditetapkan, sehingga sistem tidak membuat asumsi potongan sendiri.
+    // Memuat rekap dari database saat periode penggajian dipilih.
+    useEffect(() => {
+        if (!form.employee_id || !form.period_start || !form.period_end || form.period_end < form.period_start) {
+            queueMicrotask(() => setAttendanceRows([]));
+            return;
+        }
+        let cancelled = false;
+        queueMicrotask(() => setAttendanceLoading(true));
+        supabase.from("absensi")
+            .select("id,alu_employee_id,tanggal,jam_masuk,jam_keluar,overtime_hours,is_telat")
+            .eq("workspace", "alucurv")
+            .eq("alu_employee_id", form.employee_id)
+            .gte("tanggal", form.period_start)
+            .lte("tanggal", form.period_end)
+            .order("tanggal", { ascending: true })
+            .then(({ data }) => {
+                if (!cancelled) {
+                    setAttendanceRows((data ?? []) as AlucurvAttendance[]);
+                    setAttendanceLoading(false);
+                }
+            });
+        return () => { cancelled = true; };
+    }, [form.employee_id, form.period_start, form.period_end]);
+
+    const attendanceSummary = useMemo(() => ({
+        hadir: attendanceRows.length,
+        lengkap: attendanceRows.filter((row) => !!row.jam_keluar).length,
+        telat: attendanceRows.filter((row) => row.is_telat).length,
+        lembur: attendanceRows.reduce((sum, row) => sum + Number(row.overtime_hours || 0), 0),
+    }), [attendanceRows]);
 
     const pilihKaryawan = (id: string) => {
         const emp = empById.get(id);
@@ -275,6 +320,15 @@ function GajiTab({ employees, salaries, cashbons, payments }: {
                 {form.employee_id && sisaBonKaryawan > 0 && (
                     <div style={{ marginTop: 8, fontSize: 11, color: "#A16207", background: "#FEF9C3", border: "1px solid #FDE68A", borderRadius: 6, padding: "5px 10px", display: "inline-block" }}>
                         📋 Sisa bon {empById.get(form.employee_id)?.name}: <strong>{rupiah(sisaBonKaryawan)}</strong> — isi &quot;Pot. Bon&quot; untuk memotong dari gaji ini.
+                    </div>
+                )}
+                {form.employee_id && form.period_start && form.period_end && (
+                    <div style={{ marginTop: 10, padding: "9px 11px", borderRadius: 7, background: "#F0FDFA", border: "1px solid #99F6E4", fontSize: 11.5, color: "#115E59" }}>
+                        <b>📋 Rekap absensi periode ini</b>{" "}
+                        {attendanceLoading ? "memuat…" : <>
+                            hadir <b>{attendanceSummary.hadir} hari</b> · lengkap pulang <b>{attendanceSummary.lengkap} hari</b> · telat <b>{attendanceSummary.telat} hari</b> · lembur <b>{attendanceSummary.lembur} jam</b>.
+                            <span style={{ display: "block", marginTop: 3, color: "#0F766E" }}>Rekap ini memakai data selfie Alucurv dari jalur absensi bersama Toto. Nominal tetap dapat disesuaikan sebelum disimpan.</span>
+                        </>}
                     </div>
                 )}
                 <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12, flexWrap: "wrap" }}>

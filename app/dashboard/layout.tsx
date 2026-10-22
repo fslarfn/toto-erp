@@ -100,6 +100,7 @@ const ALUCURV_NAV_ITEMS = [
         section: "SDM",
         items: [
             { href: "/dashboard/alucurv/karyawan", label: "Karyawan", icon: KaryawanIcon },
+            { href: "/dashboard/alucurv/absensi", label: "Absensi", icon: AbsensiIcon },
         ],
     },
     {

@@ -2,27 +2,27 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { verifySession } from "@/lib/session";
 
-// Path yang boleh diakses tanpa login
 const PUBLIC_PREFIXES = [
   "/login",
   "/absen",
+  "/alucurv-absen",
   "/invoice",
-  "/api/auth/login",   // login boleh publik
-  "/api/auth/logout",  // logout juga (hanya hapus cookie)
+  "/api/auth/login",
+  "/api/auth/logout",
   "/api/push/vapid-key",
   "/api/cron/",
-  "/api/kuesioner/isi/", // form kuesioner publik — autentikasi via token unik
+  "/api/kuesioner/isi/",
+  "/api/alucurv/absensi/",
 ];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) {
+  if (PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
     return NextResponse.next();
   }
 
   const token = request.cookies.get("erp_session")?.value;
-
   if (!token) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -32,13 +32,10 @@ export async function middleware(request: NextRequest) {
 
   try {
     const session = await verifySession(token);
-
-    // Teruskan identitas user ke API routes via header (tidak terekspos ke client)
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set("x-user-id", session.userId);
     requestHeaders.set("x-user-role", session.role);
     requestHeaders.set("x-username", session.username);
-
     return NextResponse.next({ request: { headers: requestHeaders } });
   } catch {
     if (pathname.startsWith("/api/")) {
