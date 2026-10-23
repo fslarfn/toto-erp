@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAlucurvTable } from "@/lib/alucurv/useAlucurvTable";
 import { supabase } from "@/lib/supabase-client";
+import { bulanPeriode, hitungKehadiran, mingguPeriode, type AbsensiLike } from "@/lib/gaji-absensi";
 import AlucurvCrudTable, { type CrudField } from "@/components/layout/AlucurvCrudTable";
 import ExcelImportButton, { type ExcelColumn } from "@/components/layout/ExcelImportButton";
 
@@ -57,6 +58,7 @@ interface AlucurvAttendance {
     jam_keluar: string;
     overtime_hours: number;
     is_telat: boolean;
+    selisih_menit: number;
 }
 
 const rupiah = (n: number) => `Rp ${Math.round(n).toLocaleString("id-ID")}`;
@@ -125,6 +127,8 @@ function GajiTab({ employees, salaries, cashbons, payments }: {
     const [slip, setSlip] = useState<AluSalary | null>(null);
     const [attendanceRows, setAttendanceRows] = useState<AlucurvAttendance[]>([]);
     const [attendanceLoading, setAttendanceLoading] = useState(false);
+    const [payMode, setPayMode] = useState<"mingguan" | "bulanan">("mingguan");
+    const [periodAnchor, setPeriodAnchor] = useState(todayISO());
 
     const empById = new Map(employees.rows.map((e) => [e.id, e]));
     const paidMap = buildPaidMap(payments.rows);
@@ -148,6 +152,18 @@ function GajiTab({ employees, salaries, cashbons, payments }: {
     const takeHome = pendapatan - potongan;
     const sisaBonKaryawan = form.employee_id ? sisaBonOf(form.employee_id, editId ?? undefined) : 0;
 
+    const currentPeriod = useMemo(() => {
+        const anchor = periodAnchor || todayISO();
+        if (payMode === "mingguan") return mingguPeriode(anchor);
+        const [year, month] = anchor.slice(0, 7).split("-").map(Number);
+        return bulanPeriode(year, month);
+    }, [payMode, periodAnchor]);
+
+    // Mengikuti periode Toto: Mingguan Senin-Sabtu, Bulanan tanggal 1 sampai akhir bulan.
+    useEffect(() => {
+        if (!editId) setForm((p) => ({ ...p, period_start: currentPeriod.mulai, period_end: currentPeriod.selesai }));
+    }, [currentPeriod.mulai, currentPeriod.selesai, editId]);
+
     // Penggajian Alucurv membaca sumber absensi yang sama dengan Toto.
     // Nominal gaji mingguan tetap dikendalikan admin sampai tarif harian/lembur
     // Alucurv ditetapkan, sehingga sistem tidak membuat asumsi potongan sendiri.
@@ -160,7 +176,7 @@ function GajiTab({ employees, salaries, cashbons, payments }: {
         let cancelled = false;
         queueMicrotask(() => setAttendanceLoading(true));
         supabase.from("absensi")
-            .select("id,alu_employee_id,tanggal,jam_masuk,jam_keluar,overtime_hours,is_telat")
+            .select("id,alu_employee_id,tanggal,jam_masuk,jam_keluar,overtime_hours,is_telat,selisih_menit")
             .eq("workspace", "alucurv")
             .eq("alu_employee_id", form.employee_id)
             .gte("tanggal", form.period_start)
@@ -182,10 +198,32 @@ function GajiTab({ employees, salaries, cashbons, payments }: {
         lembur: attendanceRows.reduce((sum, row) => sum + Number(row.overtime_hours || 0), 0),
     }), [attendanceRows]);
 
-    const pilihKaryawan = (id: string) => {
-        const emp = empById.get(id);
-        setForm((p) => ({ ...p, employee_id: id, base: p.base || String(emp?.weekly_base || "") }));
+    const attendanceCalculation = useMemo(() => hitungKehadiran(
+        attendanceRows.map((row) => ({ ...row, karyawan_id: 0 })) as AbsensiLike[],
+        { mulai: form.period_start, selesai: form.period_end },
+    ), [attendanceRows, form.period_end, form.period_start]);
+    const dailyRate = form.employee_id ? Math.round(Number(empById.get(form.employee_id)?.weekly_base || 0) / 6) : 0;
+    const applyAttendanceCalculation = () => {
+        setForm((p) => ({
+            ...p,
+            base: String(Math.round(dailyRate * attendanceCalculation.hariKerja)),
+            overtime: String(Math.round(dailyRate * attendanceCalculation.hariLembur)),
+        }));
     };
+
+    const pilihKaryawan = (id: string) => {
+        setForm((p) => ({ ...p, employee_id: id, base: "", overtime: "" }));
+    };
+
+    // Setelah baris absensi selesai dimuat, nominal awal langsung mengikuti Toto:
+    // Gaji mingguan karyawan dibagi 6 hari kerja; hari Minggu/lembur masuk kolom lembur.
+    useEffect(() => {
+        if (!form.employee_id || attendanceLoading || editId) return;
+        applyAttendanceCalculation();
+        // applyAttendanceCalculation bergantung pada data di atas dan sengaja dijalankan
+        // hanya saat rekap absensi periode selesai diperbarui.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [form.employee_id, form.period_start, form.period_end, attendanceLoading, attendanceRows]);
 
     /** Potongan bon slip -> baris cicilan di alu_cashbon_payments (bon tertua dulu).
         Id diberi prefix salpay-<salaryId>- supaya bisa dihapus/dialokasi ulang saat
@@ -290,6 +328,14 @@ function GajiTab({ employees, salaries, cashbons, payments }: {
                 <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-dark)", marginBottom: 10 }}>
                     {editId ? "✏️ Ubah Gaji" : "💰 Catat Gaji"}
                 </div>
+                {!editId && <div style={{ display: "flex", alignItems: "end", flexWrap: "wrap", gap: 10, marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid var(--border-light)" }}>
+                    <div style={{ display: "flex", gap: 3, padding: 3, borderRadius: 7, background: "var(--bg-secondary)" }}>
+                        {(["mingguan", "bulanan"] as const).map((mode) => <button key={mode} onClick={() => setPayMode(mode)} style={{ border: 0, borderRadius: 5, padding: "7px 11px", cursor: "pointer", fontWeight: 700, fontSize: 11, background: payMode === mode ? "var(--primary)" : "transparent", color: payMode === mode ? "white" : "var(--text-med)" }}>{mode === "mingguan" ? "Mingguan" : "Bulanan"}</button>)}
+                    </div>
+                    <div style={col}><label style={lbl}>{payMode === "mingguan" ? "Tanggal dalam minggu" : "Bulan gajian"}</label>
+                        <input type={payMode === "mingguan" ? "date" : "month"} value={payMode === "mingguan" ? periodAnchor : periodAnchor.slice(0, 7)} onChange={(e) => setPeriodAnchor(payMode === "mingguan" ? e.target.value : `${e.target.value}-01`)} style={inp} /></div>
+                    <div style={{ fontSize: 11, color: "var(--text-med)", paddingBottom: 9 }}>Periode otomatis: <b>{fmtDate(currentPeriod.mulai)} – {fmtDate(currentPeriod.selesai)}</b></div>
+                </div>}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
                     <div style={col}>
                         <label style={lbl}>Karyawan</label>
@@ -327,7 +373,8 @@ function GajiTab({ employees, salaries, cashbons, payments }: {
                         <b>📋 Rekap absensi periode ini</b>{" "}
                         {attendanceLoading ? "memuat…" : <>
                             hadir <b>{attendanceSummary.hadir} hari</b> · lengkap pulang <b>{attendanceSummary.lengkap} hari</b> · telat <b>{attendanceSummary.telat} hari</b> · lembur <b>{attendanceSummary.lembur} jam</b>.
-                            <span style={{ display: "block", marginTop: 3, color: "#0F766E" }}>Rekap ini memakai data selfie Alucurv dari jalur absensi bersama Toto. Nominal tetap dapat disesuaikan sebelum disimpan.</span>
+                            <span style={{ display: "block", marginTop: 3, color: "#0F766E" }}>Hitungan gaji: <b>{attendanceCalculation.hariKerja} hari kerja</b> + <b>{attendanceCalculation.hariLembur} hari lembur</b> × tarif harian {rupiah(dailyRate)} (Gaji Mingguan ÷ 6).</span>
+                            {!editId && <button type="button" onClick={applyAttendanceCalculation} style={{ ...btnGhost, marginTop: 7 }}>↻ Gunakan hitungan absensi</button>}
                         </>}
                     </div>
                 )}
