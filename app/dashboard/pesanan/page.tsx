@@ -3,6 +3,7 @@ import DesktopOnly from "@/components/layout/DesktopOnly";
 import { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
 import { usePesanan, PAGE_SIZE, EMPTY_BUFFER, PesananRow, isRowFilled } from "@/lib/pesanan-store";
 import * as XLSX from "xlsx";
+import { belongsToInputPeriod, pesananToday } from "@/lib/pesanan-input";
 
 type ColKey = "tanggal" | "customer" | "deskripsi" | "ukuran" | "qty";
 const COL_KEYS: ColKey[] = ["tanggal", "customer", "deskripsi", "ukuran", "qty"];
@@ -198,7 +199,7 @@ const TableRow = memo(function TableRow({
    MAIN PAGE
 ================================================================ */
 function PesananPage() {
-    const { rows, loading, failedRowIds, updateRow, addRows, flushAllRows, flushRow, fetchFilter } = usePesanan();
+    const { rows, loading, failedRowIds, unsavedRowIds, updateRow, addRows, flushAllRows, flushRow, fetchFilter } = usePesanan();
     const [savedFlash, setSavedFlash] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [active, setActive] = useState<Pos | null>(null);
@@ -221,7 +222,7 @@ function PesananPage() {
         const commitAll = () => {
             const el = document.activeElement as HTMLElement | null;
             if (el && typeof el.blur === "function") el.blur();
-            flushAllRows();
+            void flushAllRows().catch(() => setSavedFlash(false));
         };
         const onVis = () => { if (document.visibilityState === "hidden") commitAll(); };
         document.addEventListener("visibilitychange", onVis);
@@ -241,17 +242,7 @@ function PesananPage() {
 
     /* ── Computed data ─────────────────────────────────────── */
     const filteredRows = useMemo(() => {
-        return rows.filter(r => {
-            if (!isRowFilled(r)) return true;
-            if (!r.tanggal) return true;
-            const y = parseInt(r.tanggal.slice(0, 4));
-            if (y !== year) return false;
-            if (month !== "all") {
-                const m = parseInt(r.tanggal.slice(5, 7));
-                if (m !== month) return false;
-            }
-            return true;
-        });
+        return rows.filter(r => belongsToInputPeriod(r, year, month));
     }, [rows, year, month]);
 
     const lastFilledIdx = useMemo(() => {
@@ -300,11 +291,11 @@ function PesananPage() {
     // Ensure enough empty rows exist
     useEffect(() => {
         if (loading) return;
-        const emptyAfterData = rows.length - (lastFilledIdx + 1);
+        const emptyAfterData = rows.filter(r => r.id >= 1000000000 && !isRowFilled(r)).length;
         if (emptyAfterData < EMPTY_BUFFER) {
             addRows(EMPTY_BUFFER - emptyAfterData);
         }
-    }, [loading, lastFilledIdx, rows.length, addRows]);
+    }, [loading, rows, addRows]);
 
     /* ── Display rows based on view mode ───────────────────── */
     const displayRows = useMemo(() => {
@@ -317,14 +308,13 @@ function PesananPage() {
         }
     }, [viewMode, inputStartIdx, browsePage, filteredRows]);
 
-    // Hanya hitung baris yang sudah tersimpan ke DB (id < 1000000000).
-    // Baris temp yang sedang diketik tidak ikut dihitung agar counter tidak berubah saat mengetik.
+    // An existing ID alone does not confirm the latest edits were saved.
     const displaySavedCount = useMemo(() =>
-        displayRows.filter(r => isRowFilled(r) && r.id < 1000000000).length, [displayRows]);
+        displayRows.filter(r => isRowFilled(r) && r.id < 1000000000 && !unsavedRowIds.has(r.id) && !failedRowIds.has(r.id)).length, [displayRows, unsavedRowIds, failedRowIds]);
 
-    // Baris yang sudah diisi user tapi belum tersimpan (masih temp)
+    // Include pending/failed edits to existing records, not just new rows.
     const displayUnsavedCount = useMemo(() =>
-        displayRows.filter(r => isRowFilled(r) && r.id >= 1000000000).length, [displayRows]);
+        displayRows.filter(r => isRowFilled(r) && (r.id >= 1000000000 || unsavedRowIds.has(r.id) || failedRowIds.has(r.id))).length, [displayRows, unsavedRowIds, failedRowIds]);
 
     /* ── Navigation helpers ─────────────────────────────────── */
     const goToInput = useCallback(() => {
@@ -448,9 +438,11 @@ function PesananPage() {
                 filledIds.push(displayRows[ri].id);
             }
             // Auto-save semua baris yang terkena fill-down
-            filledIds.forEach(id => flushRow(id));
-            setSavedFlash(true);
-            setTimeout(() => setSavedFlash(false), 2000);
+            setSavedFlash(false);
+            void Promise.all(filledIds.map(id => flushRow(id))).then(results => {
+                setSavedFlash(results.every(Boolean));
+                setTimeout(() => setSavedFlash(false), 2000);
+            });
             setSel((old) => old ? { start: old.start, end: { r: fillEndRow, c: sel ? normSel(sel).c2 : 0 } } : null);
             setFillEndRow(null);
         }
@@ -493,10 +485,12 @@ function PesananPage() {
             });
         });
         // Auto-save semua baris yang terkena paste
-        affectedIds.forEach(id => flushRow(id));
         if (affectedIds.size > 0) {
-            setSavedFlash(true);
-            setTimeout(() => setSavedFlash(false), 2000);
+            setSavedFlash(false);
+            void Promise.all([...affectedIds].map(id => flushRow(id))).then(results => {
+                setSavedFlash(results.every(Boolean));
+                setTimeout(() => setSavedFlash(false), 2000);
+            });
         }
     }, [updateRow, flushRow]);
 
@@ -510,7 +504,7 @@ function PesananPage() {
         if (key !== "tanggal" && id >= 1000000000) {
             const currentRow = rowsRef.current.find(r => r.id === id);
             if (currentRow && !currentRow.tanggal) {
-                patch.tanggal = new Date().toISOString().split("T")[0];
+                patch.tanggal = pesananToday();
             }
         }
 
@@ -519,9 +513,11 @@ function PesananPage() {
 
     const handleFlushRow = useCallback((id: number) => {
         // Dipanggil saat blur (pindah cell) — save LANGSUNG tanpa tunggu debounce
-        flushRow(id);
-        setSavedFlash(true);
-        setTimeout(() => setSavedFlash(false), 2000);
+        setSavedFlash(false);
+        void flushRow(id).then(ok => {
+            setSavedFlash(ok);
+            setTimeout(() => setSavedFlash(false), 2000);
+        });
     }, [flushRow]);
 
     /* ── Validasi tipe data saat blur ──────────────────────── */
@@ -614,7 +610,7 @@ function PesananPage() {
                 <span style={{ fontSize: 10, color: "#C5A882", marginLeft: 4 }}>↑↓←→ navigasi · Shift+drag seleksi · Ctrl+C salin · Ctrl+V tempel · drag 🟦 fill bawah</span>
                 <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
                     {/* Indikator auto-save */}
-                    {savedFlash && (
+                    {savedFlash && unsavedRowIds.size === 0 && failedRowIds.size === 0 && (
                         <span style={{
                             fontSize: 11, color: "#15803D", fontWeight: 600,
                             background: "#DCFCE7", padding: "3px 10px", borderRadius: 99,
@@ -623,6 +619,8 @@ function PesananPage() {
                     )}
                     {/* Tombol simpan semua sebagai fallback darurat */}
                     <button onClick={async () => {
+                        (document.activeElement as HTMLElement | null)?.blur();
+                        setSavedFlash(false);
                         setIsSaving(true);
                         try {
                             await flushAllRows();

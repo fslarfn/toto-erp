@@ -393,33 +393,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             createdAt: new Date().toISOString(),
         };
         // We rely on Real-time to update the UI
-        supabase.from("orders").insert(orderToDb(newOrder)).then();
+        runWrite("Menambah order", supabase.from("orders").insert(orderToDb(newOrder)));
         return newOrder;
     }, [orders.length]);
 
     const updateOrder = useCallback((id: string, updates: Partial<Order>) => {
         setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, ...updates } : o)));
-        supabase.from("orders").update(orderToDb(updates)).eq("id", id).then();
+        runWrite("Mengubah order", supabase.from("orders").update(orderToDb(updates)).eq("id", id));
     }, []);
 
     const deleteOrder = useCallback((id: string) => {
         setOrders((prev) => prev.filter((o) => o.id !== id));
-        supabase.from("orders").delete().eq("id", id).then();
+        runWrite("Menghapus order", supabase.from("orders").delete().eq("id", id));
     }, []);
 
     const addMaterial = useCallback((m: Omit<Material, "id">) => {
         const newMat = { ...m, id: crypto.randomUUID() };
-        supabase.from("materials").insert(materialToDb(newMat)).then();
+        runWrite("Menambah material", supabase.from("materials").insert(materialToDb(newMat)));
     }, []);
 
     const updateMaterial = useCallback((id: string, updates: Partial<Material>) => {
         setMaterials((prev) => prev.map((m) => (m.id === id ? { ...m, ...updates } : m)));
-        supabase.from("materials").update(materialToDb(updates)).eq("id", id).then();
+        runWrite("Mengubah material", supabase.from("materials").update(materialToDb(updates)).eq("id", id));
     }, []);
 
     const deleteMaterial = useCallback((id: string) => {
         setMaterials((prev) => prev.filter((m) => m.id !== id));
-        supabase.from("materials").delete().eq("id", id).then();
+        runWrite("Menghapus material", supabase.from("materials").delete().eq("id", id));
     }, []);
 
     const updateBankBalance = useCallback((id: string, delta: number) => {
@@ -508,15 +508,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const newPayment = { ...payment, id: crypto.randomUUID() };
         
         // Update Order status in DB (Real-time will update the local state)
-        supabase.from("orders").select("paid_amount, total_price").eq("id", payment.orderId).single().then(({ data }) => {
+        supabase.from("orders").select("paid_amount, total_price").eq("id", payment.orderId).single().then(({ data, error }) => {
+            if (error) {
+                reportWriteError("Membaca status pembayaran", error);
+                return;
+            }
             if (data) {
                 const newPaid = Number(data.paid_amount) + payment.amountPaid;
                 const newStatus = newPaid >= Number(data.total_price) ? "lunas" : newPaid > 0 ? "bayar_sebagian" : "belum_bayar";
-                supabase.from("orders").update({ paid_amount: newPaid, payment_status: newStatus }).eq("id", payment.orderId).then();
+                runWrite("Memperbarui status pembayaran", supabase.from("orders").update({ paid_amount: newPaid, payment_status: newStatus }).eq("id", payment.orderId));
             }
         });
 
-        supabase.from("payments").insert(paymentToDb(newPayment)).then();
+        runWrite("Mencatat pembayaran", supabase.from("payments").insert(paymentToDb(newPayment)));
 
         // Update Bank Balance
         const bank = bankAccounts.find(b => b.name === payment.bankAccount);

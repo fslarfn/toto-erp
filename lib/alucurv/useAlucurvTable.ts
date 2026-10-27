@@ -10,13 +10,26 @@ export function useAlucurvTable<T extends { id: string }>(table: string, orderBy
 
     const refresh = useCallback(async () => {
         setLoading(true);
-        let query = supabase.from(table).select("*");
-        if (orderBy) query = query.order(orderBy, { ascending });
-        const { data, error: err } = await query;
+        const all: T[] = [];
+        let err: { message: string } | null = null;
+        let from = 0;
+        while (from < 50000) {
+            let query = supabase.from(table).select("*");
+            if (orderBy) query = query.order(orderBy, { ascending });
+            const result = await query.range(from, from + 999);
+            if (result.error) {
+                err = result.error;
+                break;
+            }
+            const page = (result.data ?? []) as T[];
+            all.push(...page);
+            if (page.length < 1000) break;
+            from += 1000;
+        }
         if (err) setError(err.message);
         else {
             setError(null);
-            setRows((data ?? []) as T[]);
+            setRows(all);
         }
         setLoading(false);
     }, [table, orderBy, ascending]);

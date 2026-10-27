@@ -126,6 +126,7 @@ export default function AlucurvCrudTable<T extends { id: string }>({
     const [editForm, setEditForm] = useState<Record<string, unknown>>({});
     const [editSaving, setEditSaving] = useState(false);
     const [search, setSearch] = useState("");
+    const [page, setPage] = useState(1);
     const [formError, setFormError] = useState<string | null>(null);
     const [editError, setEditError] = useState<string | null>(null);
 
@@ -154,6 +155,10 @@ export default function AlucurvCrudTable<T extends { id: string }>({
             return fields.some((f) => displayValue(f, r[f.key]).toLowerCase().includes(query));
           })
         : rows;
+    const pageSize = 50;
+    const totalPages = Math.max(1, Math.ceil(visibleRows.length / pageSize));
+    const currentPage = Math.min(page, totalPages);
+    const pageRows = visibleRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
     const submit = async (e: FormEvent) => {
         e.preventDefault();
@@ -219,7 +224,7 @@ export default function AlucurvCrudTable<T extends { id: string }>({
             <div style={{ marginBottom: 10, position: "relative", maxWidth: 320 }}>
                 <input
                     value={search}
-                    onChange={(e) => setSearch(e.target.value)}
+                    onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                     placeholder="Cari..."
                     style={{ ...inputStyle, width: "100%", minWidth: 0 }}
                 />
@@ -243,11 +248,11 @@ export default function AlucurvCrudTable<T extends { id: string }>({
                         ) : visibleRows.length === 0 ? (
                             <tr><td colSpan={fields.length + extraColumns.length + (showRowNumber ? 2 : 1)} style={tdEmptyStyle}>{query ? "Tidak ada hasil untuk pencarian ini." : "Belum ada data."}</td></tr>
                         ) : (
-                            visibleRows.map((row, index) => {
+                            pageRows.map((row, index) => {
                                 const r = row as unknown as Record<string, unknown>;
                                 return (
                                 <tr key={row.id}>
-                                    {showRowNumber && <td style={{ ...tdStyle, textAlign: "center", color: "var(--text-med)" }}>{index + 1}</td>}
+                                    {showRowNumber && <td style={{ ...tdStyle, textAlign: "center", color: "var(--text-med)" }}>{(currentPage - 1) * pageSize + index + 1}</td>}
                                     {fields.map((f) => {
                                         const rowVal = r[f.key];
                                         return (
@@ -280,6 +285,19 @@ export default function AlucurvCrudTable<T extends { id: string }>({
                     </tbody>
                 </table>
             </div>
+
+            {visibleRows.length > pageSize && (
+                <div style={paginationStyle}>
+                    <span style={{ fontSize: 11, color: "var(--text-med)" }}>
+                        Menampilkan {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, visibleRows.length)} dari {visibleRows.length} data
+                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <button type="button" disabled={currentPage === 1} onClick={() => setPage((p) => Math.max(1, p - 1))} style={pageBtnStyle}>Sebelumnya</button>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-dark)" }}>{currentPage} / {totalPages}</span>
+                        <button type="button" disabled={currentPage === totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} style={pageBtnStyle}>Berikutnya</button>
+                    </div>
+                </div>
+            )}
 
             {editId && (
                 <div style={overlayStyle} onClick={() => setEditId(null)}>
@@ -322,3 +340,5 @@ const errorTextStyle: CSSProperties = { fontSize: 11.5, color: "#DC2626", fontWe
 const editBtnStyle: CSSProperties = { color: "var(--primary-dark)", background: "none", border: "none", cursor: "pointer", fontSize: 11, fontWeight: 600, marginRight: 12 };
 const overlayStyle: CSSProperties = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 };
 const modalStyle: CSSProperties = { background: "white", borderRadius: 16, padding: 24, width: "100%", maxWidth: 640, maxHeight: "90vh", overflowY: "auto" };
+const paginationStyle: CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 10 };
+const pageBtnStyle: CSSProperties = { fontSize: 11, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "white", color: "var(--text-dark)", cursor: "pointer" };
