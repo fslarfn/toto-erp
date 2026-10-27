@@ -11,6 +11,7 @@ type Props = {
     isEditing: boolean;
     onEdit: () => void;
     onBlur: () => void;
+    readOnly?: boolean;
 };
 
 /**
@@ -19,7 +20,7 @@ type Props = {
  */
 export const StatusCell = memo(function StatusCell({
     value, onSave, width, align = "left", mono = false, type = "text",
-    isEditing, onEdit, onBlur
+    isEditing, onEdit, onBlur, readOnly = false
 }: Props) {
     let displayValue = value == null ? "" : String(value);
 
@@ -87,13 +88,13 @@ export const StatusCell = memo(function StatusCell({
 
     return (
         <td
-            onClick={onEdit}
+            onClick={readOnly ? undefined : onEdit}
             style={{
                 height: 26, width, minWidth: width, padding: "2px 5px", boxSizing: "border-box",
                 borderRight: "1px solid #E6D5BE", borderBottom: "1px solid #E6D5BE",
                 fontSize: 11, textAlign: align, color: "#3C2F2F",
                 whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                cursor: "text", userSelect: "none",
+                cursor: readOnly ? "default" : "text", userSelect: "none",
                 fontFamily: mono ? "monospace" : "inherit",
             }}
         >

@@ -1,7 +1,9 @@
 "use client";
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from "react";
 import { supabase } from "@/lib/supabase-client";
+import { useAuth } from "@/lib/auth";
 import { pushNotify } from "@/lib/notify";
+import { PesananSaveQueue, pesananToday } from "@/lib/pesanan-input";
 
 /* ================================================================
    PESANAN STORE — Supabase-backed with pagination support
@@ -82,9 +84,10 @@ type Ctx = {
     loading: boolean;
     /** Id baris yang gagal tersimpan (jaringan/DB) — ditampilkan badge merah di grid. */
     failedRowIds: Set<number>;
+    unsavedRowIds: Set<number>;
     updateRow: (id: number, patch: Partial<PesananRow>, autoFlush?: boolean) => void;
     updateRowsDirect: (ids: number[], patch: Partial<PesananRow>) => Promise<void>;
-    flushRow: (id: number) => Promise<void>;
+    flushRow: (id: number) => Promise<boolean>;
     flushAllRows: () => Promise<void>;
     addRows: (count?: number) => void;
     addRow: (data: Partial<PesananRow>) => Promise<void>;
@@ -97,6 +100,8 @@ type Ctx = {
 const PesananCtx = createContext<Ctx | null>(null);
 
 export function PesananProvider({ children }: { children: ReactNode }) {
+    const { user, loading: authLoading } = useAuth();
+    const isFinishing = user?.role === "finishing";
     const [rows, setRows] = useState<PesananRow[]>(() =>
         Array.from({ length: EMPTY_BUFFER }, (_, i) => makeEmptyRow(i + 1))
     );
@@ -104,6 +109,8 @@ export function PesananProvider({ children }: { children: ReactNode }) {
     const timers = useRef<Record<number, NodeJS.Timeout>>({});
     const pendingPatches = useRef<Record<number, Partial<PesananRow>>>({});
     const savingRef = useRef<Record<number, boolean>>({});
+    const saveQueue = useRef(new PesananSaveQueue());
+    const [unsavedRowIds, setUnsavedRowIds] = useState<Set<number>>(new Set());
     // Menyimpan field mana yang sedang dalam proses save (dalam penerbangan ke DB)
     // Melindungi field tersebut dari overwrite oleh Realtime
     const savingKeys = useRef<Record<number, Set<string>>>({});
@@ -142,6 +149,17 @@ export function PesananProvider({ children }: { children: ReactNode }) {
 
     // Helper to fetch data with range or filter
     const fetchRange = async (from: number, to: number, year?: number, month?: number | "all") => {
+        // Operator Finishing tidak mendapat SELECT langsung ke pesanan_rows karena
+        // tabel tersebut memuat nominal. RPC ini hanya mengembalikan kolom kerja
+        // yang dibutuhkan oleh Alur Pesanan (tanpa harga/invoice/pembayaran).
+        if (isFinishing) {
+            const { data, error } = await supabase
+                .rpc("get_finishing_alur_pesanan")
+                .range(from, to);
+            if (error) throw error;
+            return data || [];
+        }
+
         // Kolom eksplisit = persis yang dipakai mapRows. select("*") ikut menyeret
         // created_at + last_status_change yang TIDAK pernah dipakai store —
         // dua kolom itu justru yang terberat (±16% dari ±9 MB total unduhan).
@@ -235,7 +253,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
         } finally {
             setLoading(false);
         }
-    }, [protectRow]);
+    }, [protectRow, isFinishing]);
 
     // Lazy-load: fetch SEMUA baris baru dimulai saat ada halaman yang benar-benar
     // memakai store ini (dipicu usePesanan), BUKAN saat provider mount. Provider ini
@@ -252,6 +270,10 @@ export function PesananProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const ensureLoaded = useCallback(() => {
+        // Jangan mulai query sebelum sesi dipulihkan. Tanpa ini operator
+        // Finishing bisa telanjur menjalankan query tabel biasa saat user masih
+        // null, lalu data Alur Pesanan terlanjur kosong untuk sesi tersebut.
+        if (authLoading) return;
         if (startedRef.current) return;
         startedRef.current = true;
         setStarted(true);
@@ -303,12 +325,15 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                 if (!cancelled()) setLoading(false);
             }
         })();
-    }, [protectRow]);
+    }, [protectRow, isFinishing, authLoading]);
 
     // Realtime Subscription — ikut lazy: baru connect setelah data mulai dimuat,
     // supaya halaman yang tidak memakai pesanan tidak membuka channel sia-sia.
     useEffect(() => {
-        if (!started) return;
+        // Realtime tabel sumber juga sengaja tidak dibuka untuk Finishing karena
+        // payload mentahnya mengandung harga. Aksi Finishing sudah optimistis dan
+        // hasil berikutnya akan dimuat ulang melalui RPC yang aman.
+        if (!started || isFinishing) return;
         const channel = supabase
             .channel("realtime_pesanan")
             .on(
@@ -376,16 +401,10 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                         // Cek apakah ini data yang barusan kita input (mencocokkan sync_id)
                         let placeholderIdx = prev.findIndex(r => r.id >= 1000000000 && r.sync_id === mapped.sync_id);
 
-                        if (placeholderIdx === -1 && !mapped.sync_id) {
-                            placeholderIdx = prev.findIndex(r =>
-                                r.id >= 1000000000 &&
-                                (r.customer === mapped.customer && r.deskripsi === mapped.deskripsi)
-                            );
-                        }
-
                         if (placeholderIdx !== -1) {
-                            newList = [...prev];
-                            newList[placeholderIdx] = { ...makeEmptyRow(0), ...mapped } as PesananRow;
+                            // The insert response owns ID migration. An early realtime echo
+                            // must not replace the local row or discard edits made in flight.
+                            return prev;
                         } else {
                             const newFullRow = { ...makeEmptyRow(0), ...mapped } as PesananRow;
                             newList = [...prev, newFullRow];
@@ -416,13 +435,13 @@ export function PesananProvider({ children }: { children: ReactNode }) {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [started]);
+    }, [started, isFinishing]);
 
     // Safety Lock: Mencegah penutupan tab jika ada data belum tersimpan
     useEffect(() => {
         const handleBeforeUnload = (e: BeforeUnloadEvent) => {
             const hasPending = Object.values(pendingPatches.current).some(p => Object.keys(p).length > 0);
-            if (hasPending) {
+            if (hasPending || Object.values(savingRef.current).some(Boolean)) {
                 e.preventDefault();
                 e.returnValue = "Ada data yang belum disimpan. Yakin ingin keluar?";
             }
@@ -432,19 +451,9 @@ export function PesananProvider({ children }: { children: ReactNode }) {
     }, []);
 
 
-    const flushRow = useCallback(async (id: number) => {
-        // Jika sedang dalam proses save, jadwalkan retry
-        if (savingRef.current[id]) {
-            if (timers.current[id]) clearTimeout(timers.current[id]);
-            timers.current[id] = setTimeout(() => {
-                delete timers.current[id];
-                flushRow(id);
-            }, 500);
-            return;
-        }
-
+    const flushRow = useCallback((requestedId: number): Promise<boolean> => saveQueue.current.run(requestedId, async (id) => {
         const patch = pendingPatches.current[id];
-        if (!patch || Object.keys(patch).length === 0) return;
+        if (!patch || Object.keys(patch).length === 0) return !failedRef.current.has(id);
 
         // Snapshot key mana saja yang akan disimpan
         const finalPatch = { ...patch };
@@ -474,6 +483,37 @@ export function PesananProvider({ children }: { children: ReactNode }) {
         let resolvedId = id;
         let flushFailed = false;
         try {
+            if (isFinishing) {
+                if (id >= 1000000000) {
+                    throw new Error("Operator Finishing tidak dapat membuat pesanan baru.");
+                }
+
+                // Tab Finishing hanya boleh mengubah tiga status kerja. Jangan
+                // meneruskan seluruh patch ke tabel agar kolom bisnis lain tetap
+                // tidak dapat diubah melalui browser operator.
+                const field = "is_repair" in finalPatch
+                    ? "repair"
+                    : "di_warna" in finalPatch
+                        ? "warna"
+                        : "di_produksi" in finalPatch
+                            ? "produksi"
+                            : null;
+                if (!field) {
+                    throw new Error("Perubahan ini tidak diizinkan untuk Operator Finishing.");
+                }
+
+                const checked = field === "repair"
+                    ? !!finalPatch.is_repair
+                    : field === "warna"
+                        ? !!finalPatch.di_warna
+                        : !!finalPatch.di_produksi;
+                const { error } = await supabase.rpc("update_finishing_status", {
+                    p_id: id,
+                    p_field: field,
+                    p_checked: checked,
+                });
+                if (error) throw error;
+            } else {
             const cleanPatch: any = { ...finalPatch };
             // Konversi empty string ke null HANYA untuk field yang MEMANG ADA di patch
             // Jangan tambahkan field baru dengan nilai null (itu akan menimpa data DB yang sudah ada!)
@@ -487,10 +527,8 @@ export function PesananProvider({ children }: { children: ReactNode }) {
             const isTempId = id >= 1000000000;
 
             if (!isTempId) {
-                const { error } = await supabase.from("pesanan_rows").update(cleanPatch).eq("id", id);
+                const { error } = await supabase.from("pesanan_rows").update(cleanPatch).eq("id", id).select("id").single();
                 if (error) {
-                    // Kembalikan patch ke pending jika gagal
-                    pendingPatches.current[id] = { ...(pendingPatches.current[id] || {}), ...finalPatch };
                     throw error;
                 }
             } else {
@@ -509,19 +547,27 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                     // Fallback: pastikan tanggal selalu terisi sebelum disimpan ke DB.
                     // Normalnya sudah diisi oleh handleChange di page.tsx, ini sebagai safety net.
                     if (!rowToInsert.tanggal) {
-                        rowToInsert.tanggal = new Date().toISOString().split("T")[0];
+                        rowToInsert.tanggal = pesananToday();
                     }
                     const rowWithSync = { ...rowToInsert, sync_id: String(id) };
-                    const { data, error } = await supabase.from("pesanan_rows").insert(rowWithSync).select("id").single();
+                    // A lost insert response is ambiguous: resolve our sync_id before
+                    // retrying, so a successful prior insert is not duplicated.
+                    const existing = await supabase.from("pesanan_rows").select("id").eq("sync_id", String(id)).maybeSingle();
+                    if (existing.error) throw existing.error;
+                    const { data, error } = existing.data
+                        ? await supabase.from("pesanan_rows").update(cleanPatch).eq("id", existing.data.id).select("id").single()
+                        : await supabase.from("pesanan_rows").insert(rowWithSync).select("id").single();
                     if (error) {
-                        pendingPatches.current[id] = { ...(pendingPatches.current[id] || {}), ...finalPatch };
                         throw error;
                     }
 
                     if (data?.id) {
                         const newRealId = data.id;
                         resolvedId = newRealId;
-                        setRows(prev => prev.map(r => r.id === id ? { ...r, id: newRealId } : r));
+                        saveQueue.current.identify(id, newRealId);
+                        setRows(prev => prev.map(r => r.id === id ? {
+                            ...r, id: newRealId, tanggal: r.tanggal || rowToInsert.tanggal,
+                        } : r));
                         pushNotify({
                             notificationType: "pesanan_baru",
                             title: "Pesanan Baru Masuk",
@@ -551,6 +597,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                     }
                 }
             }
+            }
             // BERHASIL: catat nilai yang baru tersimpan (grace 8 dtk) supaya echo
             // realtime yang telat / chunk load tidak menimpa balik dengan nilai lama.
             const until = Date.now() + 8000;
@@ -566,6 +613,8 @@ export function PesananProvider({ children }: { children: ReactNode }) {
         } catch (err: any) {
             console.error("Flush Row Error:", err);
             flushFailed = true;
+            // Newer edits always win when restoring a failed request.
+            pendingPatches.current[resolvedId] = { ...finalPatch, ...(pendingPatches.current[resolvedId] || {}) };
             // Alert hanya saat baris PERTAMA KALI gagal (bukan tiap percobaan ulang)
             // dan bukan karena jaringan putus (itu di-retry diam-diam + badge merah).
             const firstFailure = !failedRef.current.has(id);
@@ -582,6 +631,14 @@ export function PesananProvider({ children }: { children: ReactNode }) {
             delete inFlightPatches.current[id];
 
             savingRef.current[resolvedId] = false;
+            savingRef.current[id] = false;
+            setUnsavedRowIds(prev => {
+                const next = new Set(prev);
+                next.delete(id);
+                next.delete(resolvedId);
+                if (flushFailed || Object.keys(pendingPatches.current[resolvedId] || {}).length) next.add(resolvedId);
+                return next;
+            });
             // Jika masih ada patch (baru masuk saat save, atau dikembalikan karena
             // gagal), flush ulang — dengan jeda lebih panjang bila barusan gagal
             // supaya tidak menghujani jaringan/DB tiap 100ms.
@@ -589,92 +646,28 @@ export function PesananProvider({ children }: { children: ReactNode }) {
                 setTimeout(() => flushRow(resolvedId), flushFailed ? 2500 : 100);
             }
         }
-    }, [setRows]);
+        return !flushFailed;
+    }), [setRows, isFinishing]);
 
 
     const flushAllRows = useCallback(async () => {
-        const idsToFlush = Object.keys(pendingPatches.current).map(Number).filter(id => !isNaN(id));
-        if (idsToFlush.length === 0) return;
-        
-        console.log(`Flushing all rows: ${idsToFlush.length} items`);
-        
-        const updates: any[] = [];
-        const inserts: any[] = [];
-        const originalTempIds: number[] = [];
-
-        for (const id of idsToFlush) {
-            const patch = { ...pendingPatches.current[id] };
-            if (Object.keys(patch).length === 0) continue;
-
-            const cleanPatch: any = { ...patch };
-            // HANYA konversi field yang ada di patch, jangan tambahkan null untuk field lain
-            const fieldsToClean = ["qty", "ukuran", "harga", "tanggal", "printed_at", "shipped_at"];
-            fieldsToClean.forEach(f => {
-                if (f in cleanPatch && (cleanPatch[f] === "" || cleanPatch[f] === undefined)) {
-                    cleanPatch[f] = null;
-                }
-            });
-
-            if (id < 1000000000) {
-                updates.push({ id, ...cleanPatch });
-            } else {
-                const rowToInsert = { ...makeEmptyRow(0), ...cleanPatch };
-                delete (rowToInsert as any).id;
-                // Bersihkan field timestamp dari makeEmptyRow default ("") → null
-                ["printed_at", "shipped_at"].forEach(f => {
-                    if ((rowToInsert as any)[f] === "") (rowToInsert as any)[f] = null;
-                });
-                const hasData = rowToInsert.tanggal || rowToInsert.customer || rowToInsert.deskripsi || rowToInsert.ukuran || rowToInsert.qty;
-                if (hasData) {
-                    inserts.push(rowToInsert);
-                    originalTempIds.push(id);
-                }
-            }
+        // Share the autosave queue: never run a second insert/update for the
+        // same row while autosave is still in flight.
+        for (let pass = 0; pass < 10; pass++) {
+            const ids = [...new Set([
+                ...Object.keys(pendingPatches.current),
+                ...Object.keys(inFlightPatches.current),
+            ])].map(Number);
+            if (!ids.length) return;
+            const results = await Promise.all(ids.map(id => flushRow(id)));
+            if (results.some(ok => !ok)) throw new Error("Sebagian pesanan belum tersimpan.");
         }
-
-        // 1. Update PER BARIS — bukan satu upsert batch. Batch upsert Supabase
-        //    menuntut semua objek punya kolom yang SAMA; padahal tiap baris pending
-        //    kolom berubahnya beda-beda, jadi batch justru gagal total tepat saat
-        //    tombol darurat ini paling dibutuhkan. Per baris juga membuat kegagalan
-        //    terisolasi: satu baris error, baris lain tetap tersimpan.
-        let failedCount = 0;
-        for (const u of updates) {
-            const { id, ...patch } = u;
-            const { error } = await supabase.from("pesanan_rows").update(patch).eq("id", id);
-            if (error) {
-                console.error("Flush All (update) gagal utk baris", id, error);
-                failedCount++;
-                failedRef.current.add(id);
-            } else {
-                delete pendingPatches.current[id];
-                failedRef.current.delete(id);
-            }
-        }
-
-        // 2. Insert baris baru satu per satu (untuk pemulihan ID via sync_id)
-        for (let i = 0; i < inserts.length; i++) {
-            const tempId = originalTempIds[i];
-            const rowPayload = { ...inserts[i], sync_id: String(tempId) };
-            const { data, error } = await supabase.from("pesanan_rows").insert(rowPayload).select("id").single();
-            if (error) {
-                console.error("Flush All (insert) gagal utk baris", tempId, error);
-                failedCount++;
-                failedRef.current.add(tempId);
-            } else if (data?.id) {
-                const newRealId = data.id;
-                setRows(prev => prev.map(r => r.id === tempId ? { ...r, id: newRealId } : r));
-                delete pendingPatches.current[tempId];
-                failedRef.current.delete(tempId);
-            }
-        }
-
-        setFailedRowIds(new Set(failedRef.current));
-        if (failedCount > 0) {
-            alert(`${failedCount} baris gagal tersimpan (ditandai merah). Periksa koneksi lalu klik Simpan Semua lagi.`);
-        }
-    }, [setRows]);
+        throw new Error("Masih ada perubahan yang belum tersimpan. Klik Simpan Data lagi.");
+    }, [flushRow]);
 
     const updateRow = useCallback((id: number, patch: Partial<PesananRow>, autoFlush = false) => {
+        id = saveQueue.current.resolve(id);
+        setUnsavedRowIds(prev => new Set(prev).add(id));
         setRows((prev) =>
             prev.map((r) => (r.id === id ? { ...r, ...patch } : r))
         );
@@ -758,7 +751,7 @@ export function PesananProvider({ children }: { children: ReactNode }) {
     }, []);
 
     return (
-        <PesananCtx.Provider value={{ rows, loading, failedRowIds, updateRow, updateRowsDirect, flushRow, flushAllRows, addRows, addRow, importRows, fetchFilter, ensureLoaded }}>
+        <PesananCtx.Provider value={{ rows, loading, failedRowIds, unsavedRowIds, updateRow, updateRowsDirect, flushRow, flushAllRows, addRows, addRow, importRows, fetchFilter, ensureLoaded }}>
             {children}
         </PesananCtx.Provider>
     );

@@ -11,6 +11,7 @@ type Props = {
     setActiveCell: (cell: { id: number; key: string } | null) => void;
     onUpdate: (id: number, patch: Partial<PesananRow>) => void;
     onReconcilePayment: (row: PesananRow) => void;
+    readOnly?: boolean;
     colorRowId: number | null;
     setColorRowId: (id: number | null) => void;
 };
@@ -49,7 +50,7 @@ function auditInfo(row: PesananRow) {
  * Memoized Individual Row with scoped editing logic (SCOPE LOCK)
  */
 export const StatusRow = memo(function StatusRow({
-    row, idx, viewMode, activeCell, setActiveCell, onUpdate, onReconcilePayment, colorRowId, setColorRowId
+    row, idx, viewMode, activeCell, setActiveCell, onUpdate, onReconcilePayment, readOnly = false, colorRowId, setColorRowId
 }: Props) {
     const rowBg = row.color_marker || "white";
     const audit = auditInfo(row);
@@ -72,6 +73,7 @@ export const StatusRow = memo(function StatusRow({
             onEdit={() => setActiveCell({ id: row.id, key })}
             onBlur={() => setActiveCell(null)}
             onSave={(v) => onUpdate(row.id, { [key]: v })}
+            readOnly={readOnly}
             {...options}
         />
     );
@@ -142,9 +144,10 @@ export const StatusRow = memo(function StatusRow({
                 <input
                     type="checkbox"
                     checked={!!row[key]}
+                    disabled={readOnly}
                     onChange={(e) => handleCheckUpdate(e.target.checked)}
                     title={key === "is_paid" ? "Kelola status pembayaran" : undefined}
-                    style={{ accentColor: "#A67B5B", width: 14, height: 14, cursor: "pointer" }}
+                    style={{ accentColor: "#A67B5B", width: 14, height: 14, cursor: readOnly ? "default" : "pointer" }}
                 />
             </td>
         );
@@ -158,7 +161,7 @@ export const StatusRow = memo(function StatusRow({
             </td>
 
             {/* 🎨 Color picker */}
-            <td style={{ height: 26, width: 30, textAlign: "center", verticalAlign: "middle", borderRight: "1px solid #E6D5BE", borderBottom: "1px solid #E6D5BE", position: "relative" }}>
+            {!readOnly && <td style={{ height: 26, width: 30, textAlign: "center", verticalAlign: "middle", borderRight: "1px solid #E6D5BE", borderBottom: "1px solid #E6D5BE", position: "relative" }}>
                 <div onClick={() => setColorRowId(colorRowId === row.id ? null : row.id)}
                     style={{ width: 14, height: 14, borderRadius: 3, margin: "0 auto", background: row.color_marker || "#fff", border: "1px solid #C5A882", cursor: "pointer" }} />
                 {colorRowId === row.id && (
@@ -170,10 +173,10 @@ export const StatusRow = memo(function StatusRow({
                         ))}
                     </div>
                 )}
-            </td>
+            </td>}
 
             {/* Pengguna terakhir yang membuat/mengedit */}
-            <td
+            {!readOnly && <td
                 title={audit.title}
                 style={{ height: 26, width: 100, minWidth: 100, padding: "2px 6px", boxSizing: "border-box", borderRight: "1px solid #E6D5BE", borderBottom: "1px solid #E6D5BE", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
             >
@@ -181,7 +184,7 @@ export const StatusRow = memo(function StatusRow({
                     {audit.label}
                 </span>
                 <span style={{ color: "#5C4033", fontSize: 10, fontWeight: 600 }}>{audit.actor}</span>
-            </td>
+            </td>}
 
             {renderCell("tanggal", 70, { align: "center", type: "date" })}
             {renderCell("customer", 130)}
@@ -207,7 +210,7 @@ export const StatusRow = memo(function StatusRow({
             {renderCheck("di_warna", 52)}
             {renderCheck("siap_kirim", 48)}
             {renderCheck("di_kirim", 48)}
-            {renderCheck("is_paid", 54)}
+            {!readOnly && renderCheck("is_paid", 54)}
 
             {viewMode === "detail" && renderCell("ekspedisi", 110)}
 
@@ -225,6 +228,7 @@ export const StatusRow = memo(function StatusRow({
     return (
         prev.row === next.row &&
         prev.viewMode === next.viewMode &&
+        prev.readOnly === next.readOnly &&
         prev.onReconcilePayment === next.onReconcilePayment &&
         prev.colorRowId === next.colorRowId &&
         prev.activeCell?.id === next.activeCell?.id &&

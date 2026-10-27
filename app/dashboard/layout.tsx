@@ -149,7 +149,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     useEffect(() => {
         if (!user) router.replace("/login");
-        else if (isFinishing && pathname !== "/dashboard/produksi") {
+        else if (isFinishing && pathname !== "/dashboard/produksi" && pathname !== "/dashboard/status-barang") {
             router.replace("/dashboard/produksi");
         } else if (isAlucurvOnly && !pathname.startsWith("/dashboard/alucurv") && !pathname.startsWith("/dashboard/gabungan")) {
             router.replace("/dashboard/alucurv");
@@ -160,7 +160,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     if (!user) return null;
     // Tahan render sampai redirect selesai agar tidak crash di provider
-    if (isFinishing && pathname !== "/dashboard/produksi") return null;
+    if (isFinishing && pathname !== "/dashboard/produksi" && pathname !== "/dashboard/status-barang") return null;
 
     /* ── Layout khusus Operator Finishing: tanpa sidebar, tanpa header lengkap ── */
     if (isFinishing) {
@@ -188,19 +188,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                 <div style={{ fontSize: 11, color: "#B89678" }}>{user.name} · Operator Finishing</div>
                             </div>
                         </div>
-                        <button onClick={handleLogout} style={{
-                            display: "flex", alignItems: "center", gap: 6,
-                            padding: "6px 14px", borderRadius: 8,
-                            border: "1.5px solid #E8DDD0", background: "white",
-                            fontSize: 12, color: "#8A7B6E", fontWeight: 600, cursor: "pointer",
-                        }}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
-                                <polyline points="16 17 21 12 16 7" />
-                                <line x1="21" y1="12" x2="9" y2="12" />
-                            </svg>
-                            Logout
-                        </button>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <Link href="/dashboard/produksi" style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #E8DDD0", background: pathname === "/dashboard/produksi" ? "#6B4423" : "white", color: pathname === "/dashboard/produksi" ? "white" : "#5C4033", fontSize: 12, fontWeight: 700, textDecoration: "none" }}>
+                                Alur Pesanan
+                            </Link>
+                            <Link href="/dashboard/status-barang" style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #E8DDD0", background: pathname === "/dashboard/status-barang" ? "#6B4423" : "white", color: pathname === "/dashboard/status-barang" ? "white" : "#5C4033", fontSize: 12, fontWeight: 700, textDecoration: "none" }}>
+                                Status Barang
+                            </Link>
+                            <button onClick={handleLogout} style={{
+                                display: "flex", alignItems: "center", gap: 6,
+                                padding: "6px 14px", borderRadius: 8,
+                                border: "1.5px solid #E8DDD0", background: "white",
+                                fontSize: 12, color: "#8A7B6E", fontWeight: 600, cursor: "pointer",
+                            }}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+                                    <polyline points="16 17 21 12 16 7" />
+                                    <line x1="21" y1="12" x2="9" y2="12" />
+                                </svg>
+                                Logout
+                            </button>
+                        </div>
                     </div>
                     <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
                         {children}

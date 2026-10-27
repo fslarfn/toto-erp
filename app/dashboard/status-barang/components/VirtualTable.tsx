@@ -9,9 +9,10 @@ type Props = {
     viewMode: "detail" | "simple";
     onUpdate: (id: number, patch: Partial<PesananRow>) => void;
     onReconcilePayment: (row: PesananRow) => void;
+    readOnly?: boolean;
 };
 
-export function VirtualTable({ rows, viewMode, onUpdate, onReconcilePayment }: Props) {
+export function VirtualTable({ rows, viewMode, onUpdate, onReconcilePayment, readOnly = false }: Props) {
     const parentRef = useRef<HTMLDivElement>(null);
     const [activeCell, setActiveCell] = useState<{ id: number; key: string } | null>(null);
     const [colorRowId, setColorRowId] = useState<number | null>(null);
@@ -66,6 +67,7 @@ export function VirtualTable({ rows, viewMode, onUpdate, onReconcilePayment }: P
                     setActiveCell={setActiveCell}
                     onUpdate={onUpdate}
                     onReconcilePayment={onReconcilePayment}
+                    readOnly={readOnly}
                     colorRowId={colorRowId}
                     setColorRowId={setColorRowId}
                 />
@@ -87,6 +89,7 @@ export function VirtualTable({ rows, viewMode, onUpdate, onReconcilePayment }: P
                 setActiveCell={setActiveCell}
                 onUpdate={onUpdate}
                 onReconcilePayment={onReconcilePayment}
+                readOnly={readOnly}
                 colorRowId={colorRowId}
                 setColorRowId={setColorRowId}
             />
@@ -109,8 +112,8 @@ export function VirtualTable({ rows, viewMode, onUpdate, onReconcilePayment }: P
                 <thead style={{ position: "sticky", top: 0, zIndex: 30 }}>
                     <tr>
                         <th style={{ ...th(36), position: "sticky", left: 0, zIndex: 40, borderRight: "2px solid #C5A882" }}>#</th>
-                        <th style={{ ...th(30) }}>🎨</th>
-                        <th style={{ ...th(100), textAlign: "left" }}>Dibuat/Edit oleh</th>
+                        {!readOnly && <th style={{ ...th(30) }}>🎨</th>}
+                        {!readOnly && <th style={{ ...th(100), textAlign: "left" }}>Dibuat/Edit oleh</th>}
                         <th style={{ ...th(70) }}>Tgl</th>
                         <th style={{ ...th(130), textAlign: "left" }}>Customer</th>
                         <th style={{ ...th(200), textAlign: "left" }}>Deskripsi</th>
@@ -127,7 +130,7 @@ export function VirtualTable({ rows, viewMode, onUpdate, onReconcilePayment }: P
                         <th style={{ ...th(52) }}>Warna</th>
                         <th style={{ ...th(48) }}>Siap</th>
                         <th style={{ ...th(48) }}>Kirim</th>
-                        <th style={{ ...th(54) }}>💰 Bayar</th>
+                        {!readOnly && <th style={{ ...th(54) }}>💰 Bayar</th>}
                         {viewMode === "detail" && <th style={{ ...th(110), textAlign: "left" }}>Ekspedisi</th>}
                         <th style={{ ...th(80) }}>Status</th>
                     </tr>

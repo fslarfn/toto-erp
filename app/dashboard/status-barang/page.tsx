@@ -15,6 +15,7 @@ const MONTH_NAMES = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Ju
 export default function StatusBarangPage() {
     const paymentInFlight = useRef(false);
     const { user } = useAuth();
+    const isFinishingReadOnly = user?.role === "finishing";
     const now = new Date();
     const [month, setMonth] = useState(now.getMonth() + 1);
     const [year, setYear] = useState(now.getFullYear());
@@ -24,6 +25,10 @@ export default function StatusBarangPage() {
     const [viewMode, setViewMode] = useState<"detail" | "simple" | "order">("detail");
     const [statusFilter, setStatusFilter] = useState<string | null>(null);
     const [savedFlash, setSavedFlash] = useState(false);
+
+    useEffect(() => {
+        if (isFinishingReadOnly) setViewMode("simple");
+    }, [isFinishingReadOnly]);
 
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
@@ -38,7 +43,7 @@ export default function StatusBarangPage() {
     }, []);
 
     // Optimized specialized hook: Server-side filtered & Deduped
-    const { rows, isLoading, isError, isValidating, updateLocalRow, mutate } = useStatusBarangRows(year, month);
+    const { rows, isLoading, isError, isValidating, updateLocalRow, mutate } = useStatusBarangRows(year, month, isFinishingReadOnly);
 
     const flashSaved = () => { setSavedFlash(true); setTimeout(() => setSavedFlash(false), 2000); };
 
@@ -140,14 +145,18 @@ export default function StatusBarangPage() {
                     </div>
                 </div>
 
-                <div style={{ background: "#F3F4F6", borderRadius: 7, padding: 2, display: "flex", fontSize: 11, marginLeft: 4 }}>
+                {isFinishingReadOnly ? (
+                    <span style={{ background: "#EEF2FF", color: "#4338CA", borderRadius: 7, padding: "5px 10px", fontSize: 11, fontWeight: 700, marginLeft: 4 }}>
+                        Tampilan Simple · Hanya lihat
+                    </span>
+                ) : <div style={{ background: "#F3F4F6", borderRadius: 7, padding: 2, display: "flex", fontSize: 11, marginLeft: 4 }}>
                     {(["detail", "simple", "order"] as const).map((m) => (
                         <button key={m} onClick={() => setViewMode(m)}
                             style={{ padding: "3px 12px", borderRadius: 5, border: "none", cursor: "pointer", fontWeight: 600, background: viewMode === m ? "#A67B5B" : "transparent", color: viewMode === m ? "white" : "#5C4033" }}>
                             {m === "detail" ? "Full" : m === "simple" ? "Simple" : "Per Order"}
                         </button>
                     ))}
-                </div>
+                </div>}
 
                 <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                     <select value={month} onChange={(e) => setMonth(+e.target.value)} style={{ border: "1px solid #D1BFA3", borderRadius: 5, padding: "3px 7px", fontSize: 11, background: "#FFFBF7", height: 28 }}>
@@ -164,8 +173,10 @@ export default function StatusBarangPage() {
                     <button disabled={isValidating} onClick={() => { void mutate().catch(() => {}); }} style={{ border: "1px solid #D1BFA3", borderRadius: 5, padding: "4px 12px", fontSize: 11, background: "#FFFBF7", cursor: "pointer" }}>
                         {isValidating ? "Memperbarui..." : "Muat ulang"}
                     </button>
-                    <LocalImportExcel onImport={handleImport} />
-                    <button onClick={exportExcel} style={{ border: "1px solid #D1BFA3", borderRadius: 5, padding: "4px 12px", fontSize: 11, background: "#F5EBDD", cursor: "pointer", fontWeight: 600 }}>⬇ Excel</button>
+                    {!isFinishingReadOnly && <>
+                        <LocalImportExcel onImport={handleImport} />
+                        <button onClick={exportExcel} style={{ border: "1px solid #D1BFA3", borderRadius: 5, padding: "4px 12px", fontSize: 11, background: "#F5EBDD", cursor: "pointer", fontWeight: 600 }}>⬇ Excel</button>
+                    </>}
                 </div>
             </div>
 
@@ -193,7 +204,7 @@ export default function StatusBarangPage() {
                 </div>
             </div>
 
-            {canMarkInvoicePaid(user?.role, user?.username) && (
+            {canMarkInvoicePaid(user?.role, user?.username) && !isFinishingReadOnly && (
                 <div style={{ padding: "5px 12px", background: "#FFF7E6", color: "#8A5A18", borderBottom: "1px solid #F1D39A", fontSize: 10.5, fontWeight: 600, flexShrink: 0 }}>
                     Centang Bayar melunasi seluruh invoice dan menyinkronkan Tagihan. Pencatatan uang masuk tetap melalui Keuangan.
                 </div>
@@ -212,6 +223,7 @@ export default function StatusBarangPage() {
                         viewMode={viewMode}
                         onUpdate={handleUpdate}
                         onReconcilePayment={handlePaymentAction}
+                        readOnly={isFinishingReadOnly}
                     />
                 )}
             </div>

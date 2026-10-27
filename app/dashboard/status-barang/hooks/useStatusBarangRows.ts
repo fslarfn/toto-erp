@@ -17,10 +17,22 @@ const STATUS_BARANG_COLS =
  * Menggunakan SWR untuk deduplikasi fetch, caching, dan performance.
  * Ditambah fitur Realtime agar sinkron dengan modul Input Pesanan.
  */
-export function useStatusBarangRows(year: number, month: number | "all") {
-    const key = `status-barang-rows-${year}-${month}`;
+export function useStatusBarangRows(year: number, month: number | "all", readOnly = false) {
+    const key = `status-barang-rows-${readOnly ? "finishing" : "internal"}-${year}-${month}`;
 
     const fetcher = async () => {
+        // Operator finishing menerima hasil RPC yang hanya berisi data
+        // operasional. Kolom harga, invoice, pembayaran, dan audit tidak
+        // pernah dikirim ke browser mereka.
+        if (readOnly) {
+            const { data, error } = await supabase.rpc("get_finishing_status_barang", {
+                p_year: year,
+                p_month: month === "all" ? null : month,
+            });
+            if (error) throw error;
+            return (data ?? []) as PesananRow[];
+        }
+
         let allData: PesananRow[] = [];
         let from = 0;
         let hasMore = true;
@@ -66,6 +78,10 @@ export function useStatusBarangRows(year: number, month: number | "all") {
 
     // Realtime Listener: Trigger mutate on any change to pesanan_rows
     useEffect(() => {
+        // Role finishing tidak boleh subscribe ke tabel sumber yang berisi
+        // nominal. Mereka melakukan refresh RPC aman melalui tombol/interval.
+        if (readOnly) return;
+
         // Read the authoritative period instead of patching an incomplete cache.
         // This handles moved dates, missing rows, deletes and reconnect gaps alike.
         const refresh = createStatusBarangRefresh(() => mutate());
@@ -86,10 +102,11 @@ export function useStatusBarangRows(year: number, month: number | "all") {
             refresh.stop();
             void supabase.removeChannel(channel);
         };
-    }, [year, month, mutate]);
+    }, [year, month, mutate, readOnly]);
 
     // Helper untuk update satu baris di cache lokal & DB
     const updateLocalRow = async (id: number, patch: Partial<PesananRow>) => {
+        if (readOnly) throw new Error("Akun Finishing hanya dapat melihat Status Barang.");
         // 1. Optimistic Update
         void mutate((current) => current?.map(r => r.id === id ? { ...r, ...patch } : r), false);
 
@@ -105,6 +122,7 @@ export function useStatusBarangRows(year: number, month: number | "all") {
     // Update satu invoice dalam satu request. Ini menghindari banyak request
     // Supabase ketika satu invoice terdiri dari beberapa baris barang.
     const updateLocalRows = async (ids: number[], patch: Partial<PesananRow>) => {
+        if (readOnly) throw new Error("Akun Finishing hanya dapat melihat Status Barang.");
         const uniqueIds = [...new Set(ids)].filter((id) => Number.isFinite(id));
         if (uniqueIds.length === 0) return;
 

@@ -24,7 +24,9 @@ const roleAccess: Record<UserRole, string[]> = {
     sales: ["pesanan", "status-barang", "crm"],
     produksi: ["dashboard", "pesanan", "status-barang", "stok-bahan", "produksi"],
     barang: ["dashboard", "pesanan", "status-barang", "stok-bahan", "produksi"],
-    finishing: ["produksi"],
+    // Operator Finishing tetap mengerjakan Alur Pesanan; Status Barang hanya
+    // untuk pengecekan (tanpa nominal dan tanpa perubahan status).
+    finishing: ["produksi", "status-barang"],
     // User khusus workspace Alucurv — tidak dapat modul Toto sama sekali.
     // Akses sesungguhnya ditegakkan lewat workspace guard di app/dashboard/layout.tsx.
     alucurv: [],

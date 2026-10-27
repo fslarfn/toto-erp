@@ -22,7 +22,8 @@ export default function LoginPage() {
         const ok = await login(username, password);
         setLoading(false);
         if (ok) {
-            // Redirect finishing role langsung ke alur pesanan
+            // Operator Finishing mulai dari alur kerja mereka, lalu dapat
+            // membuka Status Barang untuk mengecek tanggal/order.
             const stored = localStorage.getItem("totobaru_user");
             const role = stored ? JSON.parse(stored).role : null;
             if (role === "finishing") {

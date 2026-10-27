@@ -171,7 +171,9 @@ export default function TabFinishing() {
             showToast(cur ? "Produksi dibatalkan" : `Produksi ✓ ${item.customer}`, cur ? "#6B7280" : CB.produksi.color);
         } else if (field === 'repair') {
             if (!cur) {
-                updateRow(item.id, { is_repair: true, di_produksi: true, finishing_status: 'repair', ...ts }, true);
+                // Repair tetap tercatat sebagai tahap Produksi di Status Barang,
+                // tetapi tidak boleh ikut menandai tahap Warna.
+                updateRow(item.id, { is_repair: true, di_produksi: true, di_warna: false, finishing_status: 'repair', ...ts }, true);
                 pushNotify({ notificationType: "status_produksi", title: "Item Perlu Repair", body: `${item.customer} — ${item.deskripsi}`, url: "/dashboard/produksi" });
                 showToast(`Repair: ${item.customer}`, CB.repair.color);
             } else {
@@ -180,7 +182,9 @@ export default function TabFinishing() {
             }
         } else if (field === 'warna') {
             if (!cur) {
-                updateRow(item.id, { di_warna: true, finishing_status: 'warna', ...ts }, true);
+                // Sama seperti alur utama Status Barang: barang yang masuk Warna
+                // pasti sudah melewati Produksi.
+                updateRow(item.id, { di_produksi: true, di_warna: true, finishing_status: 'warna', ...ts }, true);
                 showToast(`Warna ✓ ${item.customer}`, CB.warna.color);
             } else {
                 updateRow(item.id, { di_warna: false, finishing_status: (item.is_repair ? 'repair' : 'belum') as FinishingStatus, finishing_operator: "", finishing_at: null }, true);
