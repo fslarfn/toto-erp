@@ -25,12 +25,29 @@ export function useStatusBarangRows(year: number, month: number | "all", readOnl
         // operasional. Kolom harga, invoice, pembayaran, dan audit tidak
         // pernah dikirim ke browser mereka.
         if (readOnly) {
-            const { data, error } = await supabase.rpc("get_finishing_status_barang", {
-                p_year: year,
-                p_month: month === "all" ? null : month,
-            });
-            if (error) throw error;
-            return (data ?? []) as PesananRow[];
+            // PostgREST membatasi respons fungsi pada maksimum 1.000 baris.
+            // Ambil semua halaman agar pencarian Finishing tidak kehilangan PO
+            // lama hanya karena berada di luar halaman pertama.
+            const allData: PesananRow[] = [];
+            let from = 0;
+            let hasMore = true;
+
+            while (hasMore) {
+                const { data, error } = await supabase
+                    .rpc("get_finishing_status_barang", {
+                        p_year: year,
+                        p_month: month === "all" ? null : month,
+                    })
+                    .range(from, from + 999);
+                if (error) throw error;
+
+                const page = (data ?? []) as PesananRow[];
+                allData.push(...page);
+                if (page.length < 1000) hasMore = false;
+                else from += 1000;
+            }
+
+            return allData;
         }
 
         let allData: PesananRow[] = [];
