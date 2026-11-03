@@ -1,7 +1,8 @@
 "use client";
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 import { PesananRow } from "@/lib/pesanan-store";
 import { StatusCell } from "./StatusCell";
+import { InvoiceAdjustment } from "@/lib/invoice-adjustments";
 
 type Props = {
     row: PesananRow;
@@ -11,10 +12,66 @@ type Props = {
     setActiveCell: (cell: { id: number; key: string } | null) => void;
     onUpdate: (id: number, patch: Partial<PesananRow>) => void;
     onReconcilePayment: (row: PesananRow) => void;
+    adjustment?: InvoiceAdjustment;
+    onSaveAdjustment: (invoiceNumber: string, patch: Pick<InvoiceAdjustment, "discount_amount">) => Promise<void>;
     readOnly?: boolean;
+    adjustmentsReadOnly?: boolean;
     colorRowId: number | null;
     setColorRowId: (id: number | null) => void;
 };
+
+function AdjustmentCell({
+    label, value, invoiceNumber, readOnly, onSave,
+}: {
+    label: string;
+    value: number;
+    invoiceNumber: string;
+    readOnly: boolean;
+    onSave?: (value: number) => Promise<void>;
+}) {
+    const [draft, setDraft] = useState(value ? String(value) : "");
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => setDraft(value ? String(value) : ""), [value, invoiceNumber]);
+
+    const commit = async () => {
+        const next = Math.max(0, Math.round(Number(draft.replace(/[^0-9]/g, "")) || 0));
+        if (next === value) return;
+        setSaving(true);
+        try {
+            await onSave?.(next);
+        } catch (error) {
+            setDraft(value ? String(value) : "");
+            alert(error instanceof Error ? error.message : `Gagal menyimpan ${label}.`);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <td style={{ height: 26, width: 92, minWidth: 92, padding: "2px 4px", boxSizing: "border-box", borderRight: "1px solid #E6D5BE", borderBottom: "1px solid #E6D5BE", background: "#FAF7F3" }}>
+            {!invoiceNumber ? (
+                <span style={{ color: "#C5A882", display: "block", textAlign: "center" }}>—</span>
+            ) : (
+                <input
+                    aria-label={`${label} invoice ${invoiceNumber}`}
+                    value={draft}
+                    inputMode="numeric"
+                    disabled={readOnly || saving}
+                    onChange={(event) => setDraft(event.target.value)}
+                    onBlur={() => { void commit(); }}
+                    onKeyDown={(event) => {
+                        if (event.key === "Enter") event.currentTarget.blur();
+                        if (event.key === "Escape") { setDraft(value ? String(value) : ""); event.currentTarget.blur(); }
+                    }}
+                    placeholder="0"
+                    title={`${label} untuk seluruh invoice ${invoiceNumber}`}
+                    style={{ width: "100%", border: "1px solid #DCC8AF", borderRadius: 3, padding: "2px 4px", boxSizing: "border-box", textAlign: "right", fontSize: 10, outline: "none", background: readOnly ? "transparent" : "white", color: saving ? "#B89678" : "#5C4033" }}
+                />
+            )}
+        </td>
+    );
+}
 
 const ROW_COLORS = [
     { label: "Bersih", value: "" },
@@ -50,7 +107,7 @@ function auditInfo(row: PesananRow) {
  * Memoized Individual Row with scoped editing logic (SCOPE LOCK)
  */
 export const StatusRow = memo(function StatusRow({
-    row, idx, viewMode, activeCell, setActiveCell, onUpdate, onReconcilePayment, readOnly = false, colorRowId, setColorRowId
+    row, idx, viewMode, activeCell, setActiveCell, onUpdate, onReconcilePayment, adjustment, onSaveAdjustment, readOnly = false, adjustmentsReadOnly = false, colorRowId, setColorRowId
 }: Props) {
     const rowBg = row.color_marker || "white";
     const audit = auditInfo(row);
@@ -204,6 +261,19 @@ export const StatusRow = memo(function StatusRow({
                         return total > 0 ? total.toLocaleString("id-ID") : "—";
                     })()}
                 </td>
+                <AdjustmentCell
+                    label="DP"
+                    value={adjustment?.dp_amount || 0}
+                    invoiceNumber={row.no_inv.trim()}
+                    readOnly
+                />
+                <AdjustmentCell
+                    label="Diskon"
+                    value={adjustment?.discount_amount || 0}
+                    invoiceNumber={row.no_inv.trim()}
+                    readOnly={readOnly || adjustmentsReadOnly}
+                    onSave={(discount_amount) => onSaveAdjustment(row.no_inv, { discount_amount })}
+                />
             </>}
 
             {renderCheck("di_produksi", 62)}
@@ -229,7 +299,10 @@ export const StatusRow = memo(function StatusRow({
         prev.row === next.row &&
         prev.viewMode === next.viewMode &&
         prev.readOnly === next.readOnly &&
+        prev.adjustmentsReadOnly === next.adjustmentsReadOnly &&
         prev.onReconcilePayment === next.onReconcilePayment &&
+        prev.adjustment === next.adjustment &&
+        prev.onSaveAdjustment === next.onSaveAdjustment &&
         prev.colorRowId === next.colorRowId &&
         prev.activeCell?.id === next.activeCell?.id &&
         prev.activeCell?.key === next.activeCell?.key

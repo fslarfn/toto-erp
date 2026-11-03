@@ -98,6 +98,15 @@ export async function loadOpenCustomerInvoices() {
   return rows;
 }
 
+/** Selalu mencari ke seluruh invoice terbuka di database, bukan cache browser. */
+export async function searchCustomerInvoices(query: string) {
+  const normalized = query.trim();
+  if (!normalized) return [] as OpenCustomerInvoiceRow[];
+  const { data, error } = await supabase.rpc("search_customer_invoices", { p_query: normalized });
+  if (error) throw error;
+  return (data ?? []) as OpenCustomerInvoiceRow[];
+}
+
 async function loadAllocations(receiptIds: string[]) {
   const rows: CustomerReceiptAllocationRow[] = [];
   for (let index = 0; index < receiptIds.length; index += 100) {
@@ -164,7 +173,10 @@ export async function allocateCustomerReceipt(input: {
     p_username: input.username,
   });
   if (error) throw error;
-  if (typeof window !== "undefined") window.dispatchEvent(new Event("erp:payment-changed"));
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("erp:payment-changed"));
+    window.dispatchEvent(new Event("erp:invoice-adjustments-changed"));
+  }
   return data as string;
 }
 
@@ -174,5 +186,8 @@ export async function removeCustomerReceiptAllocation(allocationId: string, user
     p_username: username,
   });
   if (error) throw error;
-  if (typeof window !== "undefined") window.dispatchEvent(new Event("erp:payment-changed"));
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("erp:payment-changed"));
+    window.dispatchEvent(new Event("erp:invoice-adjustments-changed"));
+  }
 }

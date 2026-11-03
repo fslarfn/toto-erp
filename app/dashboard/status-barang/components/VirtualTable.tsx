@@ -3,16 +3,20 @@ import { useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { PesananRow } from "@/lib/pesanan-store";
 import { StatusRow } from "./StatusRow";
+import { InvoiceAdjustment } from "@/lib/invoice-adjustments";
 
 type Props = {
     rows: PesananRow[];
     viewMode: "detail" | "simple";
     onUpdate: (id: number, patch: Partial<PesananRow>) => void;
     onReconcilePayment: (row: PesananRow) => void;
+    adjustments: Map<string, InvoiceAdjustment>;
+    onSaveAdjustment: (invoiceNumber: string, patch: Pick<InvoiceAdjustment, "discount_amount">) => Promise<void>;
     readOnly?: boolean;
+    adjustmentsReadOnly?: boolean;
 };
 
-export function VirtualTable({ rows, viewMode, onUpdate, onReconcilePayment, readOnly = false }: Props) {
+export function VirtualTable({ rows, viewMode, onUpdate, onReconcilePayment, adjustments, onSaveAdjustment, readOnly = false, adjustmentsReadOnly = false }: Props) {
     const parentRef = useRef<HTMLDivElement>(null);
     const [activeCell, setActiveCell] = useState<{ id: number; key: string } | null>(null);
     const [colorRowId, setColorRowId] = useState<number | null>(null);
@@ -54,7 +58,7 @@ export function VirtualTable({ rows, viewMode, onUpdate, onReconcilePayment, rea
         <>
             {vItems.length > 0 && (
                 <tr>
-                    <td style={{ height: `${vItems[0].start}px`, border: "none" }} colSpan={20} />
+                    <td style={{ height: `${vItems[0].start}px`, border: "none" }} colSpan={22} />
                 </tr>
             )}
             {vItems.map((rv) => (
@@ -67,14 +71,17 @@ export function VirtualTable({ rows, viewMode, onUpdate, onReconcilePayment, rea
                     setActiveCell={setActiveCell}
                     onUpdate={onUpdate}
                     onReconcilePayment={onReconcilePayment}
+                    adjustment={adjustments.get(rows[rv.index].no_inv.trim().toUpperCase())}
+                    onSaveAdjustment={onSaveAdjustment}
                     readOnly={readOnly}
+                    adjustmentsReadOnly={adjustmentsReadOnly}
                     colorRowId={colorRowId}
                     setColorRowId={setColorRowId}
                 />
             ))}
             {vItems.length > 0 && (
                 <tr>
-                    <td style={{ height: `${totalSize - vItems[vItems.length - 1].end}px`, border: "none" }} colSpan={20} />
+                    <td style={{ height: `${totalSize - vItems[vItems.length - 1].end}px`, border: "none" }} colSpan={22} />
                 </tr>
             )}
         </>
@@ -89,7 +96,10 @@ export function VirtualTable({ rows, viewMode, onUpdate, onReconcilePayment, rea
                 setActiveCell={setActiveCell}
                 onUpdate={onUpdate}
                 onReconcilePayment={onReconcilePayment}
+                adjustment={adjustments.get(row.no_inv.trim().toUpperCase())}
+                onSaveAdjustment={onSaveAdjustment}
                 readOnly={readOnly}
+                adjustmentsReadOnly={adjustmentsReadOnly}
                 colorRowId={colorRowId}
                 setColorRowId={setColorRowId}
             />
@@ -124,6 +134,8 @@ export function VirtualTable({ rows, viewMode, onUpdate, onReconcilePayment, rea
                                 <th style={{ ...th(90) }}>No Invoice</th>
                                 <th style={{ ...th(115), textAlign: "right" }}>Harga (Rp)</th>
                                 <th style={{ ...th(130), textAlign: "right" }}>Total Harga (Rp)</th>
+                                <th style={{ ...th(92), textAlign: "right" }}>DP (Rp)</th>
+                                <th style={{ ...th(92), textAlign: "right" }}>Diskon (Rp)</th>
                             </>
                         )}
                         <th style={{ ...th(62) }}>Produksi</th>

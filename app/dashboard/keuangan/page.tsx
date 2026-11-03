@@ -14,6 +14,7 @@ import {
     loadOpenCustomerInvoices,
     OpenCustomerInvoiceRow,
     registerCustomerReceipt,
+    searchCustomerInvoices,
 } from "@/lib/payments/store";
 import { calculateInvoicePayment } from "@/lib/payments/matching";
 import { sortFinanceHistory } from "@/lib/finance-history";
@@ -94,7 +95,9 @@ export default function KeuanganPage() {
     const [saving, setSaving] = useState(false);
     const [syncing, setSyncing] = useState(false);
     const [openInvoices, setOpenInvoices] = useState<OpenCustomerInvoiceRow[]>([]);
+    const [invoiceSearchResults, setInvoiceSearchResults] = useState<OpenCustomerInvoiceRow[]>([]);
     const [loadingInvoices, setLoadingInvoices] = useState(false);
+    const [searchingInvoices, setSearchingInvoices] = useState(false);
     const [invoiceLoadError, setInvoiceLoadError] = useState("");
     const [invoiceQuery, setInvoiceQuery] = useState("");
     const [selectedInvoiceKey, setSelectedInvoiceKey] = useState("");
@@ -120,10 +123,8 @@ export default function KeuanganPage() {
     const deferredInvoiceQuery = useDeferredValue(invoiceQuery.trim().toLowerCase());
     const invoiceSuggestions = useMemo(() => {
         if (!deferredInvoiceQuery) return openInvoices.slice(-20).reverse();
-        return openInvoices
-            .filter((invoice) => `${invoice.invoice_number} ${invoice.customer_name}`.toLowerCase().includes(deferredInvoiceQuery))
-            .slice(0, 20);
-    }, [deferredInvoiceQuery, openInvoices]);
+        return invoiceSearchResults;
+    }, [deferredInvoiceQuery, invoiceSearchResults, openInvoices]);
 
     useEffect(() => {
         if (!isInvoiceIncome) return;
@@ -153,6 +154,45 @@ export default function KeuanganPage() {
             .subscribe();
         return () => { cancelled = true; stop(); void supabase.removeChannel(channel); };
     }, [isInvoiceIncome]);
+
+    useEffect(() => {
+        if (!isInvoiceIncome || !deferredInvoiceQuery) {
+            setInvoiceSearchResults([]);
+            setSearchingInvoices(false);
+            return;
+        }
+        let cancelled = false;
+        setSearchingInvoices(true);
+        const timer = window.setTimeout(() => {
+            void searchCustomerInvoices(deferredInvoiceQuery)
+                .then((rows) => {
+                    if (!cancelled) {
+                        setInvoiceSearchResults(rows);
+                        setInvoiceLoadError("");
+                    }
+                })
+                .catch((error: unknown) => {
+                    if (cancelled) return;
+                    const message = error instanceof Error ? error.message : "Pencarian invoice gagal";
+                    // Migration belum dijalankan saat uji lokal: tetap cari
+                    // seluruh daftar invoice terbuka yang sudah dimuat, tanpa
+                    // membatasi hasil ke 20 baris.
+                    if (/search_customer_invoices|PGRST202|does not exist/i.test(message)) {
+                        setInvoiceSearchResults(openInvoices.filter((invoice) =>
+                            `${invoice.invoice_number} ${invoice.customer_name}`.toLowerCase().includes(deferredInvoiceQuery),
+                        ));
+                        setInvoiceLoadError("");
+                        return;
+                    }
+                    setInvoiceLoadError(message);
+                })
+                .finally(() => { if (!cancelled) setSearchingInvoices(false); });
+        }, 220);
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
+    }, [deferredInvoiceQuery, isInvoiceIncome, openInvoices]);
 
     const chooseInvoice = (invoice: OpenCustomerInvoiceRow) => {
         const generatedDescription = `Pembayaran invoice ${invoice.invoice_number || invoice.invoice_key} — ${invoice.customer_name}`;
@@ -541,7 +581,7 @@ export default function KeuanganPage() {
                                             }}
                                             onFocus={() => setShowInvoiceSuggestions(true)}
                                             onBlur={() => setShowInvoiceSuggestions(false)}
-                                            placeholder={loadingInvoices ? "Memuat invoice…" : "Cari nomor invoice atau customer…"}
+                                            placeholder={loadingInvoices ? "Memuat invoice…" : "Cari semua nomor invoice atau customer…"}
                                             className="form-input"
                                             disabled={loadingInvoices}
                                             autoComplete="off"
@@ -564,6 +604,9 @@ export default function KeuanganPage() {
                                                     </button>
                                                 ))}
                                             </div>
+                                        )}
+                                        {showInvoiceSuggestions && !loadingInvoices && !searchingInvoices && !!deferredInvoiceQuery && invoiceSuggestions.length === 0 && !invoiceLoadError && (
+                                            <div style={{ marginTop: 5, color: "#8A7B6E", fontSize: 11 }}>Tidak ada invoice terbuka yang cocok.</div>
                                         )}
                                         {invoiceLoadError && <div style={{ marginTop: 5, color: "#b91c1c", fontSize: 11 }}>Gagal memuat invoice: {invoiceLoadError}</div>}
                                     </div>

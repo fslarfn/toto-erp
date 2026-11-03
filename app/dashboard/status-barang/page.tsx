@@ -9,6 +9,7 @@ import { OrderView } from "./components/OrderView";
 import { LocalImportExcel } from "./components/LocalImportExcel";
 import { normalizeInvoiceNumber } from "@/lib/payments/legacy-payment-policy";
 import { canMarkInvoicePaid, markInvoicePaid } from "@/lib/payments/direct-payment";
+import { InvoiceAdjustment, useInvoiceAdjustments } from "@/lib/invoice-adjustments";
 
 const MONTH_NAMES = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
 
@@ -16,6 +17,7 @@ export default function StatusBarangPage() {
     const paymentInFlight = useRef(false);
     const { user } = useAuth();
     const isFinishingReadOnly = user?.role === "finishing";
+    const canManageAdjustments = user?.role === "owner" || user?.role === "finance";
     const now = new Date();
     const [month, setMonth] = useState(now.getMonth() + 1);
     const [year, setYear] = useState(now.getFullYear());
@@ -25,6 +27,7 @@ export default function StatusBarangPage() {
     const [viewMode, setViewMode] = useState<"detail" | "simple" | "order">("detail");
     const [statusFilter, setStatusFilter] = useState<string | null>(null);
     const [savedFlash, setSavedFlash] = useState(false);
+    const { adjustments, save: saveAdjustment, storage: adjustmentStorage } = useInvoiceAdjustments();
 
     useEffect(() => {
         if (isFinishingReadOnly) setViewMode("simple");
@@ -79,6 +82,14 @@ export default function StatusBarangPage() {
             alert("Gagal menyimpan perubahan.");
         }
     };
+
+    const handleSaveAdjustment = useCallback(async (
+        invoiceNumber: string,
+        patch: Pick<InvoiceAdjustment, "discount_amount">,
+    ) => {
+        await saveAdjustment(invoiceNumber, patch);
+        flashSaved();
+    }, [saveAdjustment]);
 
     const handleImport = async (newRows: Partial<PesananRow>[]) => {
         // Simple import implementation to avoid modifying global importRows logic
@@ -210,6 +221,18 @@ export default function StatusBarangPage() {
                 </div>
             )}
 
+            {adjustmentStorage === "local-preview" && !isFinishingReadOnly && (
+                <div style={{ padding: "5px 12px", background: "#EFF6FF", color: "#1D4ED8", borderBottom: "1px solid #BFDBFE", fontSize: 10.5, fontWeight: 600, flexShrink: 0 }}>
+                    Mode uji lokal: diskon tersimpan di browser ini saja. DP hanya berasal dari transaksi DP Invoice yang ditautkan di Keuangan; tidak mengubah jurnal atau database sampai migrasi diterapkan.
+                </div>
+            )}
+
+            {!isFinishingReadOnly && (
+                <div style={{ padding: "5px 12px", background: "#F0FDF4", color: "#166534", borderBottom: "1px solid #BBF7D0", fontSize: 10.5, fontWeight: 600, flexShrink: 0 }}>
+                    DP terisi otomatis dari Keuangan setelah transaksi kategori DP Invoice ditautkan ke nomor invoice. Diskon tetap dapat diisi oleh Owner/Finance di sini.
+                </div>
+            )}
+
             {/* Virtualized Table Container */}
             <div style={{ flex: 1, position: "relative", overflow: "hidden", display: "flex", flexDirection: "column", minHeight: 0 }}>
                 {filtered.length === 0 && !isLoading ? (
@@ -223,7 +246,10 @@ export default function StatusBarangPage() {
                         viewMode={viewMode}
                         onUpdate={handleUpdate}
                         onReconcilePayment={handlePaymentAction}
+                        adjustments={adjustments}
+                        onSaveAdjustment={handleSaveAdjustment}
                         readOnly={isFinishingReadOnly}
+                        adjustmentsReadOnly={!canManageAdjustments}
                     />
                 )}
             </div>

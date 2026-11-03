@@ -9,6 +9,7 @@ import { matchesPaymentFilter, type InvoicePaymentFilter } from "@/lib/invoice-p
 import { usePaymentDataRefresh } from "@/lib/use-payment-data-refresh";
 import { canMarkInvoicePaid, markInvoicePaid } from "@/lib/payments/direct-payment";
 import { normalizeInvoiceNumber } from "@/lib/payments/legacy-payment-policy";
+import { calculateInvoiceAmounts, useInvoiceAdjustments } from "@/lib/invoice-adjustments";
 
 /* ================================================================
    MENU TAGIHAN
@@ -54,6 +55,7 @@ export default function TagihanPage() {
     usePaymentDataRefresh(fetchFilter, year, month);
     const [search, setSearch] = useState("");
     const [expanded, setExpanded] = useState<string | null>(null);
+    const { adjustments, storage: adjustmentStorage } = useInvoiceAdjustments();
 
     const years: number[] = [];
     for (let y = 2023; y <= now.getFullYear() + 1; y++) years.push(y);
@@ -76,23 +78,33 @@ export default function TagihanPage() {
     const invoiceMap = useMemo(() => {
         const map = new Map<string, {
             no_inv: string; customer: string; tanggal: string;
-            total: number; is_paid: boolean;
+            subtotal: number; discount: number; dp: number; total: number; remaining: number; is_paid: boolean;
             descs: string[];
         }>();
         baseRows.forEach((r) => {
             const key = normalizeInvoiceNumber(r.no_inv);
             const rowTotal = parseIdNum(r.ukuran) * parseIdNum(r.qty) * parseIdNum(r.harga);
             if (!map.has(key)) {
-                map.set(key, { no_inv: key, customer: r.customer, tanggal: r.tanggal, total: 0, is_paid: r.is_paid, descs: [] });
+                map.set(key, { no_inv: key, customer: r.customer, tanggal: r.tanggal, subtotal: 0, discount: 0, dp: 0, total: 0, remaining: 0, is_paid: r.is_paid, descs: [] });
             }
             const inv = map.get(key)!;
-            inv.total += rowTotal;
+            inv.subtotal += rowTotal;
             if (r.deskripsi) inv.descs.push(r.deskripsi);
             // Invoice dianggap lunas jika SEMUA row is_paid=true
             inv.is_paid = inv.is_paid && r.is_paid;
         });
+        map.forEach((inv) => {
+            const amounts = calculateInvoiceAmounts(inv.subtotal, adjustments.get(inv.no_inv));
+            inv.discount = amounts.discount;
+            inv.dp = amounts.dp;
+            inv.total = amounts.invoiceTotal;
+            inv.remaining = amounts.remaining;
+            // Catatan DP tidak mengubah is_paid di database. Tetapi jika sisa
+            // nol, invoice tidak ditampilkan sebagai tunggakan di Tagihan.
+            inv.is_paid = inv.is_paid || inv.remaining === 0;
+        });
         return map;
-    }, [baseRows]);
+    }, [baseRows, adjustments]);
 
     /* ── Group by customer ───────────────────────────────── */
     const customerMap = useMemo(() => {
@@ -120,13 +132,14 @@ export default function TagihanPage() {
 
     /* ── Summary totals ──────────────────────────────────── */
     const { totalAll, totalLunas, totalBelum, countAll, countLunas, countBelum } = useMemo(() => {
-        let totalAll = 0, totalLunas = 0, countAll = 0, countLunas = 0;
+        let totalAll = 0, totalLunas = 0, totalBelum = 0, countAll = 0, countLunas = 0;
         invoiceMap.forEach((inv) => {
             totalAll += inv.total;
             countAll++;
             if (inv.is_paid) { totalLunas += inv.total; countLunas++; }
+            else totalBelum += inv.remaining;
         });
-        return { totalAll, totalLunas, totalBelum: totalAll - totalLunas, countAll, countLunas, countBelum: countAll - countLunas };
+        return { totalAll, totalLunas, totalBelum, countAll, countLunas, countBelum: countAll - countLunas };
     }, [invoiceMap]);
 
     const handleInvoicePayment = async (inv: { no_inv: string; tanggal: string; customer: string; is_paid: boolean }) => {
@@ -194,6 +207,11 @@ export default function TagihanPage() {
             <div style={{ padding: "7px 18px", background: "#FFF7E6", color: "#8A5A18", fontSize: 11 }}>
                 Tandai Lunas setelah pembayaran diterima. Pencatatan uang masuk dan keterangannya dilakukan di Keuangan.
             </div>
+            {adjustmentStorage === "local-preview" && (
+                <div style={{ padding: "6px 18px", background: "#EFF6FF", color: "#1D4ED8", borderBottom: "1px solid #BFDBFE", fontSize: 11 }}>
+                    Mode uji lokal: DP dan diskon berasal dari browser ini saja, tanpa mengubah Keuangan atau database.
+                </div>
+            )}
 
             <div style={{ flex: 1, overflow: "auto", padding: "16px 18px" }}>
 
@@ -208,7 +226,7 @@ export default function TagihanPage() {
                         <div style={{ fontSize: 18, fontWeight: 800, color: "#15803D" }}>{fmtRp(totalLunas)}</div>
                     </div>
                     <div style={cardSt("#B91C1C")}>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: "#B89678", letterSpacing: 1, textTransform: "uppercase", marginBottom: 4 }}>Belum Bayar ({countBelum} inv)</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "#B89678", letterSpacing: 1, textTransform: "uppercase", marginBottom: 4 }}>Sisa Tagihan ({countBelum} inv)</div>
                         <div style={{ fontSize: 18, fontWeight: 800, color: "#B91C1C" }}>{fmtRp(totalBelum)}</div>
                     </div>
                 </div>
@@ -227,8 +245,8 @@ export default function TagihanPage() {
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                         {pagedCustomers.map(([customer, invoices]) => {
                             const custTotal = (invoices as typeof Array.prototype).reduce((s: number, inv: { total: number }) => s + inv.total, 0);
-                            const custLunas = (invoices as typeof Array.prototype).filter((inv: { is_paid: boolean }) => inv.is_paid).reduce((s: number, inv: { total: number }) => s + inv.total, 0);
-                            const custBelum = custTotal - custLunas;
+                            const custLunas = (invoices as typeof Array.prototype).reduce((s: number, inv: { total: number; dp: number; is_paid: boolean }) => s + (inv.is_paid ? inv.total : inv.dp), 0);
+                            const custBelum = (invoices as typeof Array.prototype).reduce((s: number, inv: { remaining: number; is_paid: boolean }) => s + (inv.is_paid ? 0 : inv.remaining), 0);
                             const isExp = expanded === customer;
                             const allLunas = (invoices as typeof Array.prototype).every((inv: { is_paid: boolean }) => inv.is_paid);
 
@@ -249,7 +267,7 @@ export default function TagihanPage() {
                                             </div>
                                             <div style={{ display: "flex", gap: 16, fontSize: 12 }}>
                                                 <span style={{ color: "#5C4033" }}>Total: <strong>{fmtRp(custTotal)}</strong></span>
-                                                <span style={{ color: "#15803D" }}>Lunas: <strong>{fmtRp(custLunas)}</strong></span>
+                                                <span style={{ color: "#15803D" }}>Terbayar/DP: <strong>{fmtRp(custLunas)}</strong></span>
                                                 {custBelum > 0 && <span style={{ color: "#B91C1C" }}>Sisa: <strong>{fmtRp(custBelum)}</strong></span>}
                                             </div>
                                         </div>
@@ -275,22 +293,25 @@ export default function TagihanPage() {
                                             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                                                 <thead>
                                                     <tr>
-                                                        {["No Invoice", "Tanggal", "Deskripsi", "Total (Rp)", "Status", "Aksi"].map((h) => (
-                                                            <th key={h} style={{ background: "#F7F0E8", color: "#5C4033", padding: "7px 12px", fontWeight: 700, fontSize: 11, textAlign: h === "Total (Rp)" ? "right" : "left", borderBottom: "1px solid #E6D5BE" }}>{h}</th>
+                                                        {["No Invoice", "Tanggal", "Deskripsi", "Sisa (Rp)", "Status", "Aksi"].map((h) => (
+                                                            <th key={h} style={{ background: "#F7F0E8", color: "#5C4033", padding: "7px 12px", fontWeight: 700, fontSize: 11, textAlign: h === "Sisa (Rp)" ? "right" : "left", borderBottom: "1px solid #E6D5BE" }}>{h}</th>
                                                         ))}
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     {(invoices as typeof Array.prototype)
                                                         .sort((a: { tanggal: string }, b: { tanggal: string }) => b.tanggal.localeCompare(a.tanggal))
-                                                        .map((inv: { no_inv: string; tanggal: string; descs: string[]; total: number; is_paid: boolean }) => (
+                                                        .map((inv: { no_inv: string; tanggal: string; descs: string[]; total: number; remaining: number; discount: number; dp: number; is_paid: boolean }) => (
                                                             <tr key={inv.no_inv} style={{ background: inv.is_paid ? "#F0FDF4" : "white", borderBottom: "1px solid #F0E6D8" }}>
                                                                 <td style={{ padding: "8px 12px", fontWeight: 700, color: "#3C2F2F", fontFamily: "monospace" }}>{inv.no_inv}</td>
                                                                 <td style={{ padding: "8px 12px", color: "#6B5E55", whiteSpace: "nowrap" }}>{fmtDateShort(inv.tanggal)}</td>
                                                                 <td style={{ padding: "8px 12px", color: "#444", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                                                     {inv.descs.slice(0, 2).join(", ")}{inv.descs.length > 2 ? ` +${inv.descs.length - 2} lainnya` : ""}
                                                                 </td>
-                                                                <td style={{ padding: "8px 12px", textAlign: "right", fontWeight: 700, color: inv.total > 0 ? "#3C2F2F" : "#C5A882" }}>{fmtRp(inv.total)}</td>
+                                                                <td style={{ padding: "8px 12px", textAlign: "right", fontWeight: 700, color: inv.remaining > 0 ? "#3C2F2F" : "#15803D" }}>
+                                                                    {fmtRp(inv.is_paid ? 0 : inv.remaining)}
+                                                                    {(inv.dp > 0 || inv.discount > 0) && <div style={{ color: "#8B735E", fontSize: 9, fontWeight: 500, marginTop: 2 }}>Total {fmtRp(inv.total)}{inv.dp > 0 ? ` · DP ${fmtRp(inv.dp)}` : ""}{inv.discount > 0 ? ` · Diskon ${fmtRp(inv.discount)}` : ""}</div>}
+                                                                </td>
                                                                 <td style={{ padding: "8px 12px" }}>
                                                                     {inv.is_paid ? (
                                                                         <span style={{ background: "#DCFCE7", color: "#15803D", borderRadius: 99, padding: "2px 10px", fontSize: 10, fontWeight: 700 }}>✓ Lunas</span>
@@ -314,7 +335,7 @@ export default function TagihanPage() {
                                                 <tfoot>
                                                     <tr style={{ background: "#F7F0E8" }}>
                                                         <td colSpan={3} style={{ padding: "7px 12px", fontWeight: 700, fontSize: 11, color: "#5C4033" }}>TOTAL {customer.toUpperCase()}</td>
-                                                        <td style={{ padding: "7px 12px", textAlign: "right", fontWeight: 800, fontSize: 12, color: "#3C2F2F" }}>{fmtRp(custTotal)}</td>
+                                                        <td style={{ padding: "7px 12px", textAlign: "right", fontWeight: 800, fontSize: 12, color: "#3C2F2F" }}>{fmtRp(custBelum)}</td>
                                                         <td colSpan={2} style={{ padding: "7px 12px", fontSize: 11, color: custBelum > 0 ? "#B91C1C" : "#15803D", fontWeight: 700 }}>
                                                             {custBelum > 0 ? `Sisa: ${fmtRp(custBelum)}` : "✓ Semua Lunas"}
                                                         </td>

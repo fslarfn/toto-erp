@@ -5,6 +5,7 @@ import { TTD_YANTO } from "@/lib/ttd-yanto";
 import { STEMPEL_TOTO } from "@/lib/stempel-toto";
 import { filterInvoiceNumbers, isInvoicePaid, type InvoicePaymentFilter } from "@/lib/invoice-payment-filter";
 import { usePaymentDataRefresh } from "@/lib/use-payment-data-refresh";
+import { calculateInvoiceAmounts, useInvoiceAdjustments } from "@/lib/invoice-adjustments";
 
 /* ================================================================
    MENU INVOICE
@@ -73,11 +74,9 @@ export default function InvoicePage() {
     usePaymentDataRefresh(fetchFilter, year, month);
     const [noInvInput, setNoInvInput] = useState("");
     const [searchedInv, setSearchedInv] = useState<string | null>(null);
-    const [dp, setDp] = useState("");
-    const [diskonRp, setDiskonRp] = useState("");
-    const [diskonPct, setDiskonPct] = useState("");
     const [rekening, setRekening] = useState<RekeningKey>("yanto");
     const [tanggalOverride, setTanggalOverride] = useState(""); // kosong = pakai tanggal pesan
+    const { adjustments, storage: adjustmentStorage } = useInvoiceAdjustments();
 
     const years: number[] = [];
     for (let y = 2023; y <= now.getFullYear() + 1; y++) years.push(y);
@@ -129,16 +128,8 @@ export default function InvoicePage() {
             return acc + h * u * q;
         }, 0), [invoiceItems]);
 
-    const dpNum = parseIdNum(dp);
-    const diskonRpNum = parseIdNum(diskonRp);
-    const diskonPctNum = parseFloat(diskonPct.replace(/[^0-9.]/g, "") || "0") || 0;
-
-    // Jika keduanya diisi, prioritas persen
-    const effectiveDiskon = diskonPctNum > 0
-        ? Math.round(subtotal * diskonPctNum / 100)
-        : diskonRpNum;
-
-    const grandTotal = Math.max(0, subtotal - dpNum - effectiveDiskon);
+    const invoiceAdjustment = searchedInv ? adjustments.get(searchedInv.trim().toUpperCase()) : undefined;
+    const { discount: effectiveDiskon, invoiceTotal, dp: dpNum, remaining } = calculateInvoiceAmounts(subtotal, invoiceAdjustment);
 
     /* ── print ───────────────────────────────────────────────── */
     const cetakInvoice = () => {
@@ -163,7 +154,7 @@ export default function InvoicePage() {
 
         const diskonRow = effectiveDiskon > 0 ? `
             <tr><td colspan="5" style="text-align:right;padding:6px 10px;font-size:12px;color:#555">
-                Diskon${diskonPctNum > 0 ? ` (${diskonPctNum}%)` : ""}:</td>
+                Diskon:</td>
                 <td style="text-align:right;padding:6px 10px;color:#DC2626;font-weight:600">- ${fmtRp(effectiveDiskon)}</td>
             </tr>` : "";
         const dpRow = dpNum > 0 ? `
@@ -254,8 +245,12 @@ export default function InvoicePage() {
     ${diskonRow}
     ${dpRow}
     <tr class="grand">
-      <td colspan="5" style="text-align:right">Grand Total</td>
-      <td style="text-align:right">${fmtRp(grandTotal)}</td>
+      <td colspan="5" style="text-align:right">Total Invoice</td>
+      <td style="text-align:right">${fmtRp(invoiceTotal)}</td>
+    </tr>
+    <tr class="grand">
+      <td colspan="5" style="text-align:right">Sisa Tagihan</td>
+      <td style="text-align:right">${fmtRp(remaining)}</td>
     </tr>
   </table>
 
@@ -414,34 +409,11 @@ export default function InvoicePage() {
                                 </div>
                             </div>
 
-                            {/* DP & Diskon */}
-                            <div style={{ marginBottom: 10 }}>
-                                <label style={labelSt}>DP (Down Payment)</label>
-                                <input type="text" value={dp} onChange={(e) => setDp(e.target.value)}
-                                    placeholder="cth: 500000"
-                                    style={{ ...inputSt, borderColor: dpNum > 0 ? "#2563EB" : "#D1BFA3" }} />
-                                {dpNum > 0 && <div style={{ fontSize: 10, color: "#2563EB", marginTop: 3 }}>- {fmtRp(dpNum)}</div>}
+                            <div style={{ marginBottom: 10, padding: "9px 10px", background: "#F5EBDD", borderRadius: 7, fontSize: 11, color: "#6B5E55", lineHeight: 1.55 }}>
+                                <strong style={{ color: "#5C4033" }}>DP dari Keuangan · Diskon dari Status Barang</strong><br />
+                                DP tercatat setelah transaksi kategori DP Invoice ditautkan ke nomor invoice di Keuangan. Diskon dikelola per nomor invoice melalui Status Barang.
+                                {adjustmentStorage === "local-preview" && <><br /><span style={{ color: "#1D4ED8" }}>Mode uji lokal aktif.</span></>}
                             </div>
-
-                            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-                                <div style={{ flex: 1 }}>
-                                    <label style={{ ...labelSt, color: diskonRpNum > 0 ? "#DC2626" : "#B89678" }}>Diskon (Nominal)</label>
-                                    <input type="text" value={diskonRp} onChange={(e) => setDiskonRp(e.target.value)}
-                                        placeholder="cth: 50000"
-                                        style={{ ...inputSt, borderColor: diskonRpNum > 0 ? "#DC2626" : "#D1BFA3" }} />
-                                </div>
-                                <div style={{ flex: 1 }}>
-                                    <label style={{ ...labelSt, color: diskonPctNum > 0 ? "#DC2626" : "#B89678" }}>Diskon (%)</label>
-                                    <input type="text" value={diskonPct} onChange={(e) => setDiskonPct(e.target.value)}
-                                        placeholder="cth: 10"
-                                        style={{ ...inputSt, borderColor: diskonPctNum > 0 ? "#DC2626" : "#D1BFA3" }} />
-                                </div>
-                            </div>
-                            {diskonPctNum > 0 && (
-                                <div style={{ fontSize: 10, color: "#B89678", marginBottom: 4 }}>
-                                    ℹ️ Jika keduanya diisi, diskon <strong>persentase</strong> yang digunakan
-                                </div>
-                            )}
 
                             {/* Pilih Rekening Pembayaran (muncul di NOTE invoice) */}
                             <div style={{ marginTop: 10, marginBottom: 6 }}>
@@ -498,7 +470,10 @@ export default function InvoicePage() {
                                         </div>
                                     )}
                                     <div style={{ fontSize: 13, color: "#3C2F2F", display: "flex", justifyContent: "space-between", borderTop: "1px solid #D1BFA3", marginTop: 6, paddingTop: 6, fontWeight: 800 }}>
-                                        <span>Grand Total</span><span>{fmtRp(grandTotal)}</span>
+                                        <span>Total Invoice</span><span>{fmtRp(invoiceTotal)}</span>
+                                    </div>
+                                    <div style={{ fontSize: 13, color: "#1D4ED8", display: "flex", justifyContent: "space-between", marginTop: 4, fontWeight: 800 }}>
+                                        <span>Sisa Tagihan</span><span>{fmtRp(remaining)}</span>
                                     </div>
                                 </div>
                             )}
@@ -633,7 +608,7 @@ export default function InvoicePage() {
                                         {effectiveDiskon > 0 && (
                                             <tr>
                                                 <td colSpan={5} style={{ padding: "3px 10px", textAlign: "right", color: "#DC2626", fontSize: 12 }}>
-                                                    Diskon{diskonPctNum > 0 ? ` (${diskonPctNum}%)` : ""}:
+                                                    Diskon:
                                                 </td>
                                                 <td style={{ padding: "3px 10px", textAlign: "right", fontWeight: 700, color: "#DC2626", fontSize: 12 }}>- {fmtRp(effectiveDiskon)}</td>
                                             </tr>
@@ -644,9 +619,13 @@ export default function InvoicePage() {
                                                 <td style={{ padding: "3px 10px", textAlign: "right", fontWeight: 700, color: "#2563EB", fontSize: 12 }}>- {fmtRp(dpNum)}</td>
                                             </tr>
                                         )}
+                                        <tr>
+                                            <td colSpan={5} style={{ padding: "7px 10px", textAlign: "right", color: "#555", fontWeight: 700, fontSize: 12 }}>Total Invoice</td>
+                                            <td style={{ padding: "7px 10px", textAlign: "right", fontWeight: 800, color: "#1a1a1a", fontSize: 12 }}>{fmtRp(invoiceTotal)}</td>
+                                        </tr>
                                         <tr style={{ background: "#111" }}>
-                                            <td colSpan={5} style={{ padding: "11px 10px", textAlign: "right", color: "white", fontWeight: 800, fontSize: 14 }}>Grand Total</td>
-                                            <td style={{ padding: "11px 10px", textAlign: "right", fontWeight: 900, color: "white", fontSize: 14 }}>{fmtRp(grandTotal)}</td>
+                                            <td colSpan={5} style={{ padding: "11px 10px", textAlign: "right", color: "white", fontWeight: 800, fontSize: 14 }}>Sisa Tagihan</td>
+                                            <td style={{ padding: "11px 10px", textAlign: "right", fontWeight: 900, color: "white", fontSize: 14 }}>{fmtRp(remaining)}</td>
                                         </tr>
                                     </tbody>
                                 </table>
