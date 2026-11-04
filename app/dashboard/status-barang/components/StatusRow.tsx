@@ -13,7 +13,7 @@ type Props = {
     onUpdate: (id: number, patch: Partial<PesananRow>) => void;
     onReconcilePayment: (row: PesananRow) => void;
     adjustment?: InvoiceAdjustment;
-    onSaveAdjustment: (invoiceNumber: string, patch: Pick<InvoiceAdjustment, "discount_amount">) => Promise<void>;
+    onSaveAdjustment: (invoiceNumber: string, patch: Pick<InvoiceAdjustment, "manual_dp_amount"> | Pick<InvoiceAdjustment, "discount_amount">) => Promise<void>;
     readOnly?: boolean;
     adjustmentsReadOnly?: boolean;
     colorRowId: number | null;
@@ -262,10 +262,17 @@ export const StatusRow = memo(function StatusRow({
                     })()}
                 </td>
                 <AdjustmentCell
-                    label="DP"
+                    label="DP Keuangan"
                     value={adjustment?.dp_amount || 0}
                     invoiceNumber={row.no_inv.trim()}
                     readOnly
+                />
+                <AdjustmentCell
+                    label="DP Manual"
+                    value={adjustment?.manual_dp_amount || 0}
+                    invoiceNumber={row.no_inv.trim()}
+                    readOnly={readOnly || adjustmentsReadOnly}
+                    onSave={(manual_dp_amount) => onSaveAdjustment(row.no_inv, { manual_dp_amount })}
                 />
                 <AdjustmentCell
                     label="Diskon"

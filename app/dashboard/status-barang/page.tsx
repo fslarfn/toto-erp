@@ -85,7 +85,7 @@ export default function StatusBarangPage() {
 
     const handleSaveAdjustment = useCallback(async (
         invoiceNumber: string,
-        patch: Pick<InvoiceAdjustment, "discount_amount">,
+        patch: Pick<InvoiceAdjustment, "manual_dp_amount"> | Pick<InvoiceAdjustment, "discount_amount">,
     ) => {
         await saveAdjustment(invoiceNumber, patch);
         flashSaved();
@@ -223,13 +223,13 @@ export default function StatusBarangPage() {
 
             {adjustmentStorage === "local-preview" && !isFinishingReadOnly && (
                 <div style={{ padding: "5px 12px", background: "#EFF6FF", color: "#1D4ED8", borderBottom: "1px solid #BFDBFE", fontSize: 10.5, fontWeight: 600, flexShrink: 0 }}>
-                    Mode uji lokal: diskon tersimpan di browser ini saja. DP hanya berasal dari transaksi DP Invoice yang ditautkan di Keuangan; tidak mengubah jurnal atau database sampai migrasi diterapkan.
+                    Mode uji lokal: DP manual dan diskon tersimpan di browser ini saja. DP Keuangan berasal dari transaksi DP Invoice yang ditautkan di Keuangan; tidak mengubah jurnal atau database sampai migrasi diterapkan.
                 </div>
             )}
 
             {!isFinishingReadOnly && (
                 <div style={{ padding: "5px 12px", background: "#F0FDF4", color: "#166534", borderBottom: "1px solid #BBF7D0", fontSize: 10.5, fontWeight: 600, flexShrink: 0 }}>
-                    DP terisi otomatis dari Keuangan setelah transaksi kategori DP Invoice ditautkan ke nomor invoice. Diskon tetap dapat diisi oleh Owner/Finance di sini.
+                    DP Keuangan terisi otomatis dari Keuangan. DP Manual dipakai untuk DP lama yang belum dicatat di Keuangan; Invoice dan Tagihan menjumlahkan keduanya. Diskon tetap dapat diisi oleh Owner/Finance di sini.
                 </div>
             )}
 

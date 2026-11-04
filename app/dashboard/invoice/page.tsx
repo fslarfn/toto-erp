@@ -410,8 +410,8 @@ export default function InvoicePage() {
                             </div>
 
                             <div style={{ marginBottom: 10, padding: "9px 10px", background: "#F5EBDD", borderRadius: 7, fontSize: 11, color: "#6B5E55", lineHeight: 1.55 }}>
-                                <strong style={{ color: "#5C4033" }}>DP dari Keuangan · Diskon dari Status Barang</strong><br />
-                                DP tercatat setelah transaksi kategori DP Invoice ditautkan ke nomor invoice di Keuangan. Diskon dikelola per nomor invoice melalui Status Barang.
+                                <strong style={{ color: "#5C4033" }}>DP Keuangan + DP Manual · Diskon dari Status Barang</strong><br />
+                                DP Keuangan tercatat setelah transaksi kategori DP Invoice ditautkan ke nomor invoice. DP Manual untuk data lama dan diskon dikelola per nomor invoice melalui Status Barang.
                                 {adjustmentStorage === "local-preview" && <><br /><span style={{ color: "#1D4ED8" }}>Mode uji lokal aktif.</span></>}
                             </div>
 

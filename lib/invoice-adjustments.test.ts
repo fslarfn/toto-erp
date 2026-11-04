@@ -27,4 +27,17 @@ describe("calculateInvoiceAmounts", () => {
             remaining: 0,
         });
     });
+
+    it("menjumlahkan DP Keuangan dan DP Manual sebelum menghitung sisa", () => {
+        expect(calculateInvoiceAmounts(2_745_000, {
+            dp_amount: 745_000,
+            manual_dp_amount: 500_000,
+        })).toEqual({
+            subtotal: 2_745_000,
+            discount: 0,
+            invoiceTotal: 2_745_000,
+            dp: 1_245_000,
+            remaining: 1_500_000,
+        });
+    });
 });

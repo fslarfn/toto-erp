@@ -7,7 +7,10 @@ export { calculateInvoiceAmounts, type InvoiceAmounts } from "@/lib/invoice-adju
 
 export type InvoiceAdjustment = {
     invoice_number: string;
+    /** DP yang berasal dari transaksi DP Invoice di Keuangan. */
     dp_amount: number;
+    /** DP lama/manual yang belum tercatat sebagai transaksi Keuangan. */
+    manual_dp_amount: number;
     discount_amount: number;
     updated_at?: string;
 };
@@ -30,6 +33,7 @@ function readLocal(): InvoiceAdjustment[] {
             .map((item): InvoiceAdjustment => ({
                 invoice_number: normalizeInvoiceNumber(item?.invoice_number),
                 dp_amount: nonNegative(item?.dp_amount),
+                manual_dp_amount: nonNegative(item?.manual_dp_amount),
                 discount_amount: nonNegative(item?.discount_amount),
                 updated_at: typeof item?.updated_at === "string" ? item.updated_at : undefined,
             }))
@@ -63,13 +67,14 @@ export function useInvoiceAdjustments() {
     const reload = useCallback(async () => {
         const { data, error } = await supabase
             .from("invoice_adjustments")
-            .select("invoice_number,dp_amount,discount_amount,updated_at")
+            .select("invoice_number,dp_amount,manual_dp_amount,discount_amount,updated_at")
             .order("updated_at", { ascending: false });
 
         if (!error) {
             const next = (data || []).map((item): InvoiceAdjustment => ({
                 invoice_number: normalizeInvoiceNumber(item.invoice_number),
                 dp_amount: nonNegative(item.dp_amount),
+                manual_dp_amount: nonNegative(item.manual_dp_amount),
                 discount_amount: nonNegative(item.discount_amount),
                 updated_at: item.updated_at || undefined,
             }));
@@ -102,22 +107,29 @@ export function useInvoiceAdjustments() {
         };
     }, [reload]);
 
-    const save = useCallback(async (invoiceNumber: string, patch: Partial<Pick<InvoiceAdjustment, "dp_amount" | "discount_amount">>) => {
+    const save = useCallback(async (invoiceNumber: string, patch: Partial<Pick<InvoiceAdjustment, "manual_dp_amount" | "discount_amount">>) => {
         const invoice = normalizeInvoiceNumber(invoiceNumber);
         if (!invoice) throw new Error("Nomor invoice wajib diisi sebelum mencatat DP atau diskon.");
 
         const current = toMap(items).get(invoice);
         const next: InvoiceAdjustment = {
             invoice_number: invoice,
-            dp_amount: nonNegative(patch.dp_amount ?? current?.dp_amount),
+            dp_amount: nonNegative(current?.dp_amount),
+            manual_dp_amount: nonNegative(patch.manual_dp_amount ?? current?.manual_dp_amount),
             discount_amount: nonNegative(patch.discount_amount ?? current?.discount_amount),
             updated_at: new Date().toISOString(),
         };
 
         if (storage === "database") {
-            const { error } = await supabase
-                .from("invoice_adjustments")
-                .upsert(next, { onConflict: "invoice_number" });
+            // Jangan menulis ulang dp_amount di sini: nilainya dipelihara
+            // trigger dari transaksi Keuangan dan bisa berubah bersamaan.
+            const databasePatch = {
+                ...(patch.manual_dp_amount !== undefined ? { manual_dp_amount: next.manual_dp_amount } : {}),
+                ...(patch.discount_amount !== undefined ? { discount_amount: next.discount_amount } : {}),
+            };
+            const { error } = current
+                ? await supabase.from("invoice_adjustments").update(databasePatch).eq("invoice_number", invoice)
+                : await supabase.from("invoice_adjustments").insert({ invoice_number: invoice, ...databasePatch });
             if (error) throw error;
             setItems((previous) => [...previous.filter((item) => item.invoice_number !== invoice), next]);
             window.dispatchEvent(new Event(CHANGE_EVENT));

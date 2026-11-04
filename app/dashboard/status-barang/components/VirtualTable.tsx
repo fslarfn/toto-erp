@@ -11,7 +11,7 @@ type Props = {
     onUpdate: (id: number, patch: Partial<PesananRow>) => void;
     onReconcilePayment: (row: PesananRow) => void;
     adjustments: Map<string, InvoiceAdjustment>;
-    onSaveAdjustment: (invoiceNumber: string, patch: Pick<InvoiceAdjustment, "discount_amount">) => Promise<void>;
+    onSaveAdjustment: (invoiceNumber: string, patch: Pick<InvoiceAdjustment, "manual_dp_amount"> | Pick<InvoiceAdjustment, "discount_amount">) => Promise<void>;
     readOnly?: boolean;
     adjustmentsReadOnly?: boolean;
 };
@@ -58,7 +58,7 @@ export function VirtualTable({ rows, viewMode, onUpdate, onReconcilePayment, adj
         <>
             {vItems.length > 0 && (
                 <tr>
-                    <td style={{ height: `${vItems[0].start}px`, border: "none" }} colSpan={22} />
+                    <td style={{ height: `${vItems[0].start}px`, border: "none" }} colSpan={23} />
                 </tr>
             )}
             {vItems.map((rv) => (
@@ -81,7 +81,7 @@ export function VirtualTable({ rows, viewMode, onUpdate, onReconcilePayment, adj
             ))}
             {vItems.length > 0 && (
                 <tr>
-                    <td style={{ height: `${totalSize - vItems[vItems.length - 1].end}px`, border: "none" }} colSpan={22} />
+                    <td style={{ height: `${totalSize - vItems[vItems.length - 1].end}px`, border: "none" }} colSpan={23} />
                 </tr>
             )}
         </>
@@ -134,7 +134,8 @@ export function VirtualTable({ rows, viewMode, onUpdate, onReconcilePayment, adj
                                 <th style={{ ...th(90) }}>No Invoice</th>
                                 <th style={{ ...th(115), textAlign: "right" }}>Harga (Rp)</th>
                                 <th style={{ ...th(130), textAlign: "right" }}>Total Harga (Rp)</th>
-                                <th style={{ ...th(92), textAlign: "right" }}>DP (Rp)</th>
+                                <th style={{ ...th(92), textAlign: "right" }}>DP Keuangan (Rp)</th>
+                                <th style={{ ...th(92), textAlign: "right" }}>DP Manual (Rp)</th>
                                 <th style={{ ...th(92), textAlign: "right" }}>Diskon (Rp)</th>
                             </>
                         )}
