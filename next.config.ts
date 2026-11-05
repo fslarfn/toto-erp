@@ -9,6 +9,12 @@ const withPWA = withPWAInit({
   aggressiveFrontEndNavCaching: false,
   reloadOnOnline: true,
   workboxOptions: {
+    // Aktifkan bundle baru segera setelah deployment. Tanpa ini, browser PWA
+    // bisa tetap menjalankan JavaScript laporan versi lama walaupun data dan
+    // deployment produksi sudah diperbarui.
+    skipWaiting: true,
+    clientsClaim: true,
+    cleanupOutdatedCaches: true,
     runtimeCaching: [
       {
         urlPattern: ({ url }) => url.hostname.includes("supabase.co"),
