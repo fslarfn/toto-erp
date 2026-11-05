@@ -3,7 +3,10 @@ import withPWAInit from "@ducanh2912/next-pwa";
 
 const withPWA = withPWAInit({
   dest: "public",
-  disable: process.env.NODE_ENV === "development",
+  // Cache PWA lama pernah mempertahankan bundle laporan yang sudah tidak sesuai
+  // dengan deployment. Nonaktifkan generator sementara agar sw.js pembersih
+  // di public/ dapat mengambil alih dan melepas cache lama pada semua klien.
+  disable: true,
   // Konfigurasi untuk memastikan real-time (WebSockets/API) berjalan normal
   cacheOnFrontEndNav: true,
   aggressiveFrontEndNavCaching: false,
