@@ -113,11 +113,27 @@ export async function savePayrollTaxPeriods(rows: PayrollTaxPeriodRow[]) {
   return data as PayrollTaxPeriodRow[];
 }
 
+async function loadTaxTransactionsForRange(startPeriod: string, endPeriod: string) {
+  // PostgREST membatasi hasil satu request hingga 1.000 baris. Ledger pajak
+  // bisa melampaui batas ini, jadi semua halaman wajib digabung sebelum
+  // menghitung transaksi yang belum direview.
+  const rows: TaxTransactionRow[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase.from("tax_transactions").select("*")
+      .eq("workspace", "toto").gte("tax_period", startPeriod).lte("tax_period", endPeriod)
+      .order("transaction_date", { ascending: false }).order("id", { ascending: false })
+      .range(from, from + 999);
+    if (error) throw error;
+    const page = (data ?? []) as TaxTransactionRow[];
+    rows.push(...page);
+    if (page.length < 1000) return rows;
+    from += 1000;
+  }
+}
+
 export async function loadTaxTransactions(period: string) {
-  const { data, error } = await supabase.from("tax_transactions").select("*")
-    .eq("workspace", "toto").eq("tax_period", period).order("transaction_date", { ascending: false });
-  if (error) throw error;
-  return (data ?? []) as TaxTransactionRow[];
+  return loadTaxTransactionsForRange(period, period);
 }
 
 export async function saveTaxTransaction(row: TaxTransactionRow) {
@@ -130,14 +146,29 @@ export async function saveTaxTransaction(row: TaxTransactionRow) {
 }
 
 export async function loadAccountingWorkspace(startDate:string,endDate:string){
-  const [accountResult,journalResult,mappingResult]=await Promise.all([
+  const [accountResult,mappingResult]=await Promise.all([
     supabase.from("accounting_accounts").select("*").eq("workspace","toto").eq("is_active",true).order("code"),
-    supabase.from("journal_entries").select("*,journal_lines(*,accounting_accounts(code,name))").eq("workspace","toto")
-      .gte("entry_date",startDate).lte("entry_date",endDate).order("entry_date",{ascending:false}),
     supabase.from("accounting_mappings").select("*").eq("workspace","toto"),
   ]);
-  const error=accountResult.error||journalResult.error||mappingResult.error;if(error)throw error;
-  return {accounts:(accountResult.data??[]) as AccountingAccountRow[],journals:(journalResult.data??[]) as unknown as JournalEntryRow[],mappings:(mappingResult.data??[]) as AccountingMappingRow[]};
+  const baseError=accountResult.error||mappingResult.error;if(baseError)throw baseError;
+
+  // Jangan biarkan dashboard jurnal berhenti pada 1.000 entri. Nilai ini
+  // dipakai untuk status sinkronisasi dan tutup buku, sehingga harus memuat
+  // seluruh periode yang dipilih.
+  const journals: JournalEntryRow[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase.from("journal_entries")
+      .select("*,journal_lines(*,accounting_accounts(code,name))").eq("workspace","toto")
+      .gte("entry_date",startDate).lte("entry_date",endDate)
+      .order("entry_date",{ascending:false}).order("id",{ascending:false}).range(from,from+999);
+    if(error)throw error;
+    const page=(data??[]) as unknown as JournalEntryRow[];
+    journals.push(...page);
+    if(page.length<1000)break;
+    from+=1000;
+  }
+  return {accounts:(accountResult.data??[]) as AccountingAccountRow[],journals,mappings:(mappingResult.data??[]) as AccountingMappingRow[]};
 }
 
 export async function createJournalEntry(input:{entry_date:string;reference:string;description:string;created_by:string;lines:JournalLineInput[];lock:boolean;source_type?:JournalEntryRow["source_type"];source_id?:string|null}){
@@ -188,13 +219,13 @@ export async function loadTaxMonitoring(year:number,month:number){
  const period=`${year}-${String(month).padStart(2,"0")}`,end=monthEndDate(year,month);
  const [accounting,transactions,payroll,compliance,returns]=await Promise.all([
   loadAccountingWorkspace(`${period}-01`,end),
-  supabase.from("tax_transactions").select("*").eq("workspace","toto").eq("tax_period",period),
+  loadTaxTransactions(period),
   supabase.from("payroll_tax_periods").select("*").eq("tax_year",year).eq("tax_month",month),
   supabase.from("tax_compliance_items").select("*").eq("workspace","toto").eq("tax_period",period),
   supabase.from("corporate_tax_returns").select("*").eq("workspace","toto").eq("tax_year",year).maybeSingle(),
  ]);
- const error=transactions.error||payroll.error||compliance.error||returns.error;if(error)throw error;
- return{...accounting,transactions:(transactions.data??[]) as TaxTransactionRow[],payroll:(payroll.data??[]) as PayrollTaxPeriodRow[],compliance:(compliance.data??[]) as TaxComplianceRow[],taxReturn:returns.data as CorporateTaxReturnRow|null};
+ const error=payroll.error||compliance.error||returns.error;if(error)throw error;
+ return{...accounting,transactions,payroll:(payroll.data??[]) as PayrollTaxPeriodRow[],compliance:(compliance.data??[]) as TaxComplianceRow[],taxReturn:returns.data as CorporateTaxReturnRow|null};
 }
 
 export async function saveTaxCompliance(row:TaxComplianceRow){const{data,error}=await supabase.from("tax_compliance_items").upsert(row,{onConflict:"workspace,tax_period,tax_code"}).select().single();if(error)throw error;return data as TaxComplianceRow}
@@ -275,13 +306,13 @@ export async function loadTaxYearReports(year:number,month=12){
   supabase.from("fiscal_adjustments").select("*").eq("workspace","toto").eq("tax_year",year).order("created_at",{ascending:false}),
   supabase.from("corporate_tax_returns").select("*").eq("workspace","toto").eq("tax_year",year).maybeSingle(),
   supabase.from("payroll_tax_periods").select("*").eq("tax_year",year).order("tax_month"),
-  supabase.from("tax_transactions").select("*").eq("workspace","toto").gte("tax_period",`${year}-01`).lte("tax_period",period).order("transaction_date"),
+  loadTaxTransactionsForRange(`${year}-01`,period),
   supabase.from("tax_compliance_items").select("*").eq("workspace","toto").gte("tax_period",`${year}-01`).lte("tax_period",period).order("tax_period"),
   supabase.from("sales_hpp_recognitions").select("*").eq("workspace","toto").eq("status","posted").gte("recognition_date",`${year}-01-01`).lte("recognition_date",end).order("recognition_date"),
   loadOpenReceivables(),loadOpenSupplierBills(),
   supabase.from("bank_accounts").select("id,name,bank,balance,initial_balance").order("name"),
   loadAccountingPeriod(period).catch(error=>{if(isMissingTaxSchema(error))return null;throw error}),
  ]);
- const error=adjustments.error||returns.error||payroll.error||transactions.error||compliance.error||salesHpp.error||banks.error;if(error)throw error;
- return{...accounting,adjustments:(adjustments.data??[])as FiscalAdjustmentRow[],taxReturn:returns.data as CorporateTaxReturnRow|null,payroll:(payroll.data??[]) as PayrollTaxPeriodRow[],transactions:(transactions.data??[]) as TaxTransactionRow[],compliance:(compliance.data??[]) as TaxComplianceRow[],salesHpp:(salesHpp.data??[]) as SalesHppRecognitionRow[],receivables,payables,banks:(banks.data??[])as ReportBankAccountRow[],accountingPeriod};
+ const error=adjustments.error||returns.error||payroll.error||compliance.error||salesHpp.error||banks.error;if(error)throw error;
+ return{...accounting,adjustments:(adjustments.data??[])as FiscalAdjustmentRow[],taxReturn:returns.data as CorporateTaxReturnRow|null,payroll:(payroll.data??[]) as PayrollTaxPeriodRow[],transactions,compliance:(compliance.data??[]) as TaxComplianceRow[],salesHpp:(salesHpp.data??[]) as SalesHppRecognitionRow[],receivables,payables,banks:(banks.data??[])as ReportBankAccountRow[],accountingPeriod};
 }
