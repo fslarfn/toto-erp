@@ -293,7 +293,10 @@ async function loadAccountingReportWorkspace(endDate:string){
  if(accountResult.error)throw accountResult.error;
  const journals:JournalEntryRow[]=[];let from=0;
  while(true){
-  const{data,error}=await supabase.from("journal_entries").select("*,journal_lines(*,accounting_accounts(code,name))").eq("workspace","toto").lte("entry_date",endDate).order("entry_date").range(from,from+999);
+  // Pagination harus memakai urutan unik yang stabil. Banyak jurnal memiliki
+  // entry_date yang sama; tanpa tie-breaker `id`, halaman berikutnya dapat
+  // mengulang atau melewatkan jurnal dan membuat laporan laba-rugi salah.
+  const{data,error}=await supabase.from("journal_entries").select("*,journal_lines(*,accounting_accounts(code,name))").eq("workspace","toto").lte("entry_date",endDate).order("entry_date").order("id").range(from,from+999);
   if(error)throw error;const page=(data??[])as unknown as JournalEntryRow[];journals.push(...page);if(page.length<1000)break;from+=1000;
  }
  return{accounts:(accountResult.data??[])as AccountingAccountRow[],journals,mappings:[]as AccountingMappingRow[]};
