@@ -35,6 +35,19 @@ const nextConfig: NextConfig = {
   // turbopack config kept for dev (next dev uses Turbopack by default in v16)
   // production build uses --webpack flag so next-pwa can generate the SW
   turbopack: {},
+  async headers() {
+    return [
+      {
+        // Endpoint khusus untuk melepaskan cache PWA lama. Hanya cache yang
+        // dihapus—cookie login, localStorage, dan data aplikasi tetap aman.
+        source: "/cache-reset",
+        headers: [
+          { key: "Clear-Site-Data", value: '"cache"' },
+          { key: "Cache-Control", value: "no-store, max-age=0" },
+        ],
+      },
+    ];
+  },
 };
 
 export default withPWA(nextConfig);
