@@ -118,7 +118,12 @@ export default function KeuanganPage() {
     };
 
     const isInvoiceIncome = form.type === "income" && ["Pembayaran Invoice", "DP Invoice"].includes(form.category);
-    const selectedInvoice = openInvoices.find((invoice) => invoice.invoice_key === selectedInvoiceKey) ?? null;
+    // Hasil pencarian server dapat berasal dari invoice lama yang belum masuk
+    // ke cache awal browser. Gunakan keduanya agar invoice yang ditemukan
+    // tetap bisa dipilih dan dialokasikan.
+    const selectedInvoice = openInvoices.find((invoice) => invoice.invoice_key === selectedInvoiceKey)
+        ?? invoiceSearchResults.find((invoice) => invoice.invoice_key === selectedInvoiceKey)
+        ?? null;
     const formAmount = parseFloat(form.amount.replace(/[^0-9.]/g, "")) || 0;
     const deferredInvoiceQuery = useDeferredValue(invoiceQuery.trim().toLowerCase());
     const invoiceSuggestions = useMemo(() => {
