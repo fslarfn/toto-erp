@@ -111,6 +111,19 @@ const ALUCURV_NAV_ITEMS = [
     },
 ];
 
+// Menu Cabang Sidoarjo sengaja memiliki URL sendiri. Pada tahap fondasi ini
+// hanya Dashboard Cabang yang dibuka; menu berikutnya ditambahkan setelah
+// tiap modul telah memakai filter unit data, supaya data Toto Pusat tidak
+// pernah tercampur atau terlihat dari cabang.
+const SIDOARJO_NAV_ITEMS = [
+    {
+        section: "Menu Utama",
+        items: [
+            { href: "/dashboard/sidoarjo", label: "Dashboard Cabang", icon: HomeIcon },
+        ],
+    },
+];
+
 const GABUNGAN_NAV_ITEMS = [
     {
         section: "Gabungan",
@@ -131,6 +144,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     // <title> browser mengikuti brand aktif (Toto coklat / Alucurv tosca / Gabungan).
     useEffect(() => {
         if (activeWorkspace === "alucurv") document.title = "Alucurv — ERP";
+        else if (activeWorkspace === "sidoarjo") document.title = "Toto Sidoarjo — ERP";
         else if (activeWorkspace === "gabungan") document.title = "Gabungan — Toto & Alucurv ERP";
         else document.title = "CV TOTO ALUMINIUM MANUFACTURE - Sistem Informasi Manufaktur";
     }, [activeWorkspace]);
@@ -145,18 +159,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     // Fail-open: hanya blokir kalau memberships sudah pasti ke-fetch (>0 baris) dan
     // memang tidak ada baris 'toto' — kalau tabel belum ada/query gagal, memberships
     // tetap [] dan user TIDAK diblokir (perilaku lama tetap jalan, lihat workspace-store.tsx).
-    const isAlucurvOnly = memberships.length > 0 && !hasWorkspace("toto");
+    // User cabang/alucurv tidak boleh jatuh ke halaman Toto Pusat hanya karena
+    // membuka URL /dashboard. Fallback diturunkan dari membership yang benar.
+    const hasTotoPusat = hasWorkspace("toto");
+    const restrictedToNonPusat = memberships.length > 0 && !hasTotoPusat;
+    const nonPusatHome = hasWorkspace("sidoarjo") ? "/dashboard/sidoarjo" : "/dashboard/alucurv";
 
     useEffect(() => {
         if (!user) router.replace("/login");
         else if (isFinishing && pathname !== "/dashboard/produksi" && pathname !== "/dashboard/status-barang") {
             router.replace("/dashboard/produksi");
-        } else if (isAlucurvOnly && !pathname.startsWith("/dashboard/alucurv") && !pathname.startsWith("/dashboard/gabungan")) {
-            router.replace("/dashboard/alucurv");
-        } else if (!isFinishing && !isAlucurvOnly && license && !license.is_setup_completed) {
+        } else if (restrictedToNonPusat && !pathname.startsWith("/dashboard/alucurv") && !pathname.startsWith("/dashboard/sidoarjo") && !pathname.startsWith("/dashboard/gabungan")) {
+            router.replace(nonPusatHome);
+        } else if (!isFinishing && !restrictedToNonPusat && license && !license.is_setup_completed) {
             setShowTrialModal(true);
         }
-    }, [user, router, license, isFinishing, isAlucurvOnly, pathname]);
+    }, [user, router, license, isFinishing, restrictedToNonPusat, nonPusatHome, pathname]);
 
     if (!user) return null;
     // Tahan render sampai redirect selesai agar tidak crash di provider
@@ -241,7 +259,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const searchableMenuItems: GlobalSearchMenuItem[] = (
         activeWorkspace === "toto"
             ? NAV_ITEMS.flatMap((group) => group.items.filter(canShowTotoItem).map((item) => ({ href: item.href, label: item.label, section: group.section })))
-            : (activeWorkspace === "alucurv" ? ALUCURV_NAV_ITEMS : GABUNGAN_NAV_ITEMS)
+            : (activeWorkspace === "alucurv" ? ALUCURV_NAV_ITEMS : activeWorkspace === "sidoarjo" ? SIDOARJO_NAV_ITEMS : GABUNGAN_NAV_ITEMS)
                 .flatMap((group) => group.items.map((item) => ({ href: item.href, label: item.label, section: group.section })))
     );
 
@@ -266,7 +284,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                 </svg>
                             </div>
                             <span className="brand-text" style={{ fontSize: "0.95rem" }}>
-                                {activeWorkspace === "alucurv" ? "ERP ALUCURV" : "ERP TOTO"}
+                                {activeWorkspace === "alucurv" ? "ERP ALUCURV" : activeWorkspace === "sidoarjo" ? "ERP TOTO SIDOARJO" : "ERP TOTO"}
                             </span>
                         </div>
                         <div className="sidebar-text" style={{ padding: "0 12px" }}>
@@ -293,7 +311,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                     </div>
                                 );
                             })}
-                            {activeWorkspace !== "toto" && (activeWorkspace === "alucurv" ? ALUCURV_NAV_ITEMS : GABUNGAN_NAV_ITEMS).map((group) => (
+                            {activeWorkspace !== "toto" && (activeWorkspace === "alucurv" ? ALUCURV_NAV_ITEMS : activeWorkspace === "sidoarjo" ? SIDOARJO_NAV_ITEMS : GABUNGAN_NAV_ITEMS).map((group) => (
                                 <div key={group.section}>
                                     <div className="section-label">{group.section}</div>
                                     {group.items.map((item) => {
@@ -354,7 +372,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                             </svg>
                                         </button>
                                         <span className="page-title">
-                                            {(activeWorkspace === "toto" ? NAV_ITEMS : activeWorkspace === "alucurv" ? ALUCURV_NAV_ITEMS : GABUNGAN_NAV_ITEMS)
+                                            {(activeWorkspace === "toto" ? NAV_ITEMS : activeWorkspace === "alucurv" ? ALUCURV_NAV_ITEMS : activeWorkspace === "sidoarjo" ? SIDOARJO_NAV_ITEMS : GABUNGAN_NAV_ITEMS)
                                                 .flatMap((g) => g.items)
                                                 .find((it) => pathname === it.href || (it.href !== "/dashboard" && it.href !== "/dashboard/alucurv" && it.href !== "/dashboard/gabungan" && pathname.startsWith(it.href)))
                                                 ?.label ?? "Dashboard"}
@@ -407,7 +425,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         {/* Page content */}
                         <main style={{ flex: 1, display: "flex", flexDirection: "column", overflowX: "hidden", background: isCockpit ? "#F5EBDD" : "var(--bg)" }}>
                             {/* Trial Banner */}
-                            {!isAlucurvOnly && license && !license.is_setup_completed && !isCockpit && (
+                            {!restrictedToNonPusat && license && !license.is_setup_completed && !isCockpit && (
                                 <div style={{ background: "linear-gradient(90deg, #FFFBEB 0%, #FEF3C7 100%)", borderBottom: "1px solid #FDE68A", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", fontSize: "13px", color: "#92400E", fontWeight: 500 }}>
                                     <span style={{ fontSize: "16px" }}>✨</span><span>Aplikasi dalam masa <strong>Free Trial</strong> sampai <strong>25 April 2026</strong>. Silakan lakukan aktivasi untuk akses penuh.</span>
                                     <Link href="/dashboard/admin/billing" style={{ marginLeft: "10px", padding: "4px 12px", background: "#B45309", color: "white", borderRadius: "6px", textDecoration: "none", fontSize: "11px", fontWeight: 700 }}>AKTIVASI</Link>

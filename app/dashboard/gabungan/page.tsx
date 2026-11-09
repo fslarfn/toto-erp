@@ -4,7 +4,7 @@ export default function DashboardGabunganPage() {
     return (
         <ModulePlaceholder
             title="Dashboard Gabungan"
-            description="Khusus Owner & Manager yang punya akses ke Toto dan Alucurv. Ringkasan KPI lintas bisnis (kas gabungan, piutang, order) akan tampil di sini setelah data operasional Alucurv aktif di Supabase."
+            description="Khusus Owner & Manager. Ringkasan Toto Pusat, Toto Sidoarjo, dan Alucurv akan ditampilkan lintas unit tanpa mencampur data transaksi tiap unit."
         />
     );
 }

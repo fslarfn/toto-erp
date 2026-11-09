@@ -3,13 +3,15 @@ import { useRouter, usePathname } from "next/navigation";
 import { useWorkspace, getWorkspaceFromPath, type ActiveWorkspace } from "@/lib/workspace-store";
 
 const LABELS: Record<ActiveWorkspace, string> = {
-    toto: "Toto",
+    toto: "Toto Pusat",
+    sidoarjo: "Toto Sidoarjo",
     alucurv: "Alucurv",
     gabungan: "Gabungan",
 };
 
 const HOME_ROUTE: Record<ActiveWorkspace, string> = {
     toto: "/dashboard",
+    sidoarjo: "/dashboard/sidoarjo",
     alucurv: "/dashboard/alucurv",
     gabungan: "/dashboard/gabungan",
 };

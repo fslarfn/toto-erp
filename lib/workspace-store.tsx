@@ -3,7 +3,12 @@ import { createContext, useContext, useState, useEffect, ReactNode } from "react
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase-client";
 
-export type Workspace = "toto" | "alucurv";
+/**
+ * Unit operasional yang benar-benar memiliki data sendiri.
+ * `toto` dipertahankan sebagai kode historis untuk Toto Pusat agar seluruh
+ * data berjalan tidak perlu dipindahkan atau diubah.
+ */
+export type Workspace = "toto" | "sidoarjo" | "alucurv";
 export type ActiveWorkspace = Workspace | "gabungan";
 export type WorkspaceRole = "owner" | "manager" | "finance" | "sales" | "produksi" | "barang";
 
@@ -29,6 +34,7 @@ const WorkspaceContext = createContext<WorkspaceCtx | null>(null);
  */
 export function getWorkspaceFromPath(pathname: string): ActiveWorkspace {
     if (pathname.startsWith("/dashboard/alucurv")) return "alucurv";
+    if (pathname.startsWith("/dashboard/sidoarjo")) return "sidoarjo";
     if (pathname.startsWith("/dashboard/gabungan")) return "gabungan";
     return "toto";
 }
@@ -65,7 +71,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }, [user]);
 
     const hasWorkspace = (w: Workspace) => memberships.some((m) => m.workspace === w);
-    const canViewGabungan = hasWorkspace("toto") && hasWorkspace("alucurv");
+    // Gabungan hanya untuk pengguna yang memiliki sedikitnya dua unit bisnis.
+    // Ini membuat owner/manager dapat mengontrol Pusat + Sidoarjo, tanpa
+    // memberikan halaman gabungan kepada user cabang biasa.
+    const canViewGabungan = memberships.length >= 2;
 
     return (
         <WorkspaceContext.Provider value={{ memberships, loading, hasWorkspace, canViewGabungan }}>

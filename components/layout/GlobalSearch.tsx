@@ -13,7 +13,7 @@ export type GlobalSearchMenuItem = {
 
 type Props = {
     menuItems: GlobalSearchMenuItem[];
-    workspace: "toto" | "alucurv" | "gabungan";
+    workspace: "toto" | "sidoarjo" | "alucurv" | "gabungan";
 };
 
 type SearchResult = {
