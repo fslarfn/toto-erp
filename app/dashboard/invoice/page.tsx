@@ -202,7 +202,7 @@ export default function InvoicePage() {
 <body>
   <div class="kop">
     <div>
-      <div class="company-name">CV. TOTO ALUMINIUM MANUFACTURE</div>
+      <div class="company-name">CV TOTO ALUMUNIUM MANUFCATURE</div>
       <div class="company-info">
         Jl. Rawa Mulya, Kota Bekasi<br/>
         Telp: 0813 1191 2002
@@ -518,7 +518,7 @@ export default function InvoicePage() {
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24, paddingBottom: 18, borderBottom: "2px solid #1a1a1a" }}>
                             <div>
                                 <div style={{ fontSize: 18, fontWeight: 900, color: "#1a1a1a", letterSpacing: 0.3, marginBottom: 4 }}>
-                                    CV. TOTO ALUMINIUM MANUFACTURE
+                                    CV TOTO ALUMUNIUM MANUFCATURE
                                 </div>
                                 <div style={{ fontSize: 11, color: "#666", lineHeight: 1.7 }}>
                                     Jl. Rawa Mulya, Kota Bekasi<br />
