@@ -81,7 +81,7 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ id: st
                     <div className="space-y-2">
                         <div className="flex gap-4">
                             <span className="text-slate-400 font-bold uppercase text-[9px] w-16">Penerima</span>
-                            <span className="font-bold text-slate-800 uppercase tracking-tight">CV TOTO ALUMINIUM</span>
+                            <span className="font-bold text-slate-800 uppercase tracking-tight">CV TOTO ALUMUNIUM MANUFCATURE</span>
                         </div>
                         <div className="flex gap-4">
                             <span className="text-slate-400 font-bold uppercase text-[9px] w-16">Metode</span>
@@ -162,7 +162,7 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ id: st
 
             {/* Branding Footer */}
             <div className="mt-12 text-center text-slate-400 text-[10px] font-medium print:hidden">
-                <p>&copy; 2026 CV TOTO ALUMINIUM MANUFACTURE. Powered by Toto ERP Environment.</p>
+                <p>&copy; 2026 CV TOTO ALUMUNIUM MANUFCATURE. Powered by Toto ERP Environment.</p>
             </div>
         </div>
     );
