@@ -105,6 +105,10 @@ export async function POST(req: Request, context: { params: Promise<{ token: str
       const late = minute > JAM_MASUK_BATAS;
       const payload = {
         workspace: "alucurv",
+        // Absensi memakai tabel bersama. Tetapkan unit secara eksplisit agar
+        // baris baru tetap dapat dibaca oleh workspace Alucurv setelah RLS
+        // unit operasional diterapkan (jangan mengandalkan default Toto Pusat).
+        operating_unit: "alucurv",
         alu_employee_id: employee.id,
         karyawan_id: null,
         nama_karyawan: employee.name,
