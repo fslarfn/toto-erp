@@ -1,5 +1,37 @@
--- Tahap 2: penanda unit pada sumber data Toto. Semua data historis otomatis
--- tetap `toto_pusat`; tidak ada transaksi, nominal, atau status yang diubah.
+-- ============================================================
+-- Fondasi Unit Operasional Toto Sidoarjo
+-- Semua data historis tetap Toto Pusat; tidak ada transaksi dipindahkan.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS public.operating_units (
+  code text PRIMARY KEY CHECK (code IN ('toto_pusat', 'toto_sidoarjo', 'alucurv')),
+  name text NOT NULL,
+  is_active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+INSERT INTO public.operating_units (code, name) VALUES
+  ('toto_pusat', 'Toto Pusat'),
+  ('toto_sidoarjo', 'Toto Sidoarjo'),
+  ('alucurv', 'Alucurv')
+ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name;
+
+ALTER TABLE public.operating_units ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "operating_units select authenticated" ON public.operating_units;
+CREATE POLICY "operating_units select authenticated"
+  ON public.operating_units FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.user_workspaces
+  DROP CONSTRAINT IF EXISTS user_workspaces_workspace_check;
+ALTER TABLE public.user_workspaces
+  ADD CONSTRAINT user_workspaces_workspace_check
+  CHECK (workspace = ANY (ARRAY['toto'::text, 'sidoarjo'::text, 'alucurv'::text]));
+
+INSERT INTO public.user_workspaces (user_id, workspace, role)
+SELECT id, 'sidoarjo', 'owner'
+FROM public.app_users
+WHERE role = 'owner'
+ON CONFLICT (user_id, workspace) DO NOTHING;
 
 ALTER TABLE public.pesanan_rows ADD COLUMN IF NOT EXISTS operating_unit text NOT NULL DEFAULT 'toto_pusat'
   REFERENCES public.operating_units(code);
@@ -32,6 +64,3 @@ CREATE INDEX IF NOT EXISTS idx_bank_accounts_operating_unit ON public.bank_accou
 CREATE INDEX IF NOT EXISTS idx_materials_operating_unit ON public.materials (operating_unit);
 CREATE INDEX IF NOT EXISTS idx_karyawan_operating_unit ON public.karyawan (operating_unit);
 CREATE INDEX IF NOT EXISTS idx_absensi_operating_unit_tanggal ON public.absensi (operating_unit, tanggal);
-
-COMMENT ON COLUMN public.pesanan_rows.operating_unit IS 'Penanda unit operasional. Semua data historis Toto Pusat tetap toto_pusat.';
-COMMENT ON COLUMN public.cash_flow.operating_unit IS 'Penanda unit kas/bank. Dipakai saat modul Keuangan Sidoarjo dirilis.';

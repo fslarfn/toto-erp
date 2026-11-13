@@ -122,6 +122,12 @@ const SIDOARJO_NAV_ITEMS = [
             { href: "/dashboard/sidoarjo", label: "Dashboard Cabang", icon: HomeIcon },
         ],
     },
+    {
+        section: "SDM",
+        items: [
+            { href: "/dashboard/sidoarjo/karyawan", label: "Karyawan", icon: KaryawanIcon },
+        ],
+    },
 ];
 
 const GABUNGAN_NAV_ITEMS = [
@@ -136,7 +142,7 @@ const GABUNGAN_NAV_ITEMS = [
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
     const { user, logout, hasAccess } = useAuth();
     const { license } = useLicense();
-    const { hasWorkspace, memberships } = useWorkspace();
+    const { hasWorkspace, memberships, loading: workspaceLoading, canViewGabungan } = useWorkspace();
     const router = useRouter();
     const pathname = usePathname();
     const activeWorkspace = getWorkspaceFromPath(pathname);
@@ -164,17 +170,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const hasTotoPusat = hasWorkspace("toto");
     const restrictedToNonPusat = memberships.length > 0 && !hasTotoPusat;
     const nonPusatHome = hasWorkspace("sidoarjo") ? "/dashboard/sidoarjo" : "/dashboard/alucurv";
+    const hasActiveWorkspace = activeWorkspace === "gabungan"
+        ? canViewGabungan
+        : hasWorkspace(activeWorkspace);
 
     useEffect(() => {
         if (!user) router.replace("/login");
         else if (isFinishing && pathname !== "/dashboard/produksi" && pathname !== "/dashboard/status-barang") {
             router.replace("/dashboard/produksi");
+        } else if (!workspaceLoading && memberships.length > 0 && !hasActiveWorkspace) {
+            // URL tidak boleh dipakai untuk berpindah ke data unit lain.
+            // Pengaman ini melengkapi RLS; apabila membership belum tersedia
+            // (mis. saat migrasi awal), perilaku lama tetap tidak terputus.
+            router.replace(nonPusatHome);
         } else if (restrictedToNonPusat && !pathname.startsWith("/dashboard/alucurv") && !pathname.startsWith("/dashboard/sidoarjo") && !pathname.startsWith("/dashboard/gabungan")) {
             router.replace(nonPusatHome);
         } else if (!isFinishing && !restrictedToNonPusat && license && !license.is_setup_completed) {
             setShowTrialModal(true);
         }
-    }, [user, router, license, isFinishing, restrictedToNonPusat, nonPusatHome, pathname]);
+    }, [user, router, license, isFinishing, restrictedToNonPusat, nonPusatHome, pathname, workspaceLoading, memberships.length, hasActiveWorkspace]);
 
     if (!user) return null;
     // Tahan render sampai redirect selesai agar tidak crash di provider
