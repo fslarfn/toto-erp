@@ -6,11 +6,14 @@ const MODULES = [
     ["Data Karyawan", "Karyawan Sidoarjo sudah siap diisi dan tidak bercampur dengan HR pusat.", "/dashboard/sidoarjo/karyawan", "Siap digunakan"],
     ["Input Pesanan", "Masukkan pesanan cabang secara manual; setiap baris otomatis disimpan sebagai data Sidoarjo.", "/dashboard/sidoarjo/pesanan", "Siap digunakan"],
     ["Status Barang", "Progres produksi cabang tanpa menampilkan PO Toto Pusat.", "/dashboard/sidoarjo/status-barang", "Siap digunakan"],
+    ["Invoice", "Invoice cabang dibuat dari nomor invoice pada pesanan Sidoarjo.", "/dashboard/sidoarjo/invoice", "Siap digunakan"],
+    ["Tagihan", "Pantau pembayaran cabang dan tandai lunas setelah penerimaan diterima.", "/dashboard/sidoarjo/tagihan", "Siap digunakan"],
+    ["Surat Jalan", "Catat dan pantau pengiriman barang khusus Sidoarjo.", "/dashboard/sidoarjo/surat-jalan", "Siap digunakan"],
     ["Keuangan", "Rekening, kas, dan transaksi khusus Sidoarjo.", "/dashboard/sidoarjo/keuangan", "Siap digunakan"],
     ["Stok Bahan", "Persediaan Sidoarjo berdiri sendiri dari gudang pusat.", "/dashboard/sidoarjo/stok-bahan", "Siap digunakan"],
     ["Karyawan & Absensi", "Rekap selfie masuk/pulang cabang. Karyawan dan absensi selalu terpisah dari pusat.", "/dashboard/sidoarjo/absensi", "Siap digunakan"],
     ["Gaji & Slip", "Hitung gaji cabang dari absensi, dengan aturan khusus gaji pokok tetap.", "/dashboard/sidoarjo/gaji", "Siap digunakan"],
-    ["Laporan Cabang", "Laporan unit yang kemudian diringkas untuk owner."],
+    ["Laporan Cabang", "Laporan operasional dan keuangan unit untuk dipantau owner.", "/dashboard/sidoarjo/laporan", "Siap digunakan"],
 ];
 
 /**
