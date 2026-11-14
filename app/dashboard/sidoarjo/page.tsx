@@ -4,8 +4,8 @@ import Link from "next/link";
 
 const MODULES = [
     ["Data Karyawan", "Karyawan Sidoarjo sudah siap diisi dan tidak bercampur dengan HR pusat.", "/dashboard/sidoarjo/karyawan", "Siap digunakan"],
-    ["Input Pesanan", "Pesanan cabang akan memiliki nomor dan data terpisah."],
-    ["Status Barang", "Progres produksi cabang tanpa menampilkan PO Toto Pusat."],
+    ["Input Pesanan", "Masukkan pesanan cabang secara manual; setiap baris otomatis disimpan sebagai data Sidoarjo.", "/dashboard/sidoarjo/pesanan", "Siap digunakan"],
+    ["Status Barang", "Progres produksi cabang tanpa menampilkan PO Toto Pusat.", "/dashboard/sidoarjo/status-barang", "Siap digunakan"],
     ["Keuangan", "Rekening, kas, tagihan, dan jurnal khusus Sidoarjo."],
     ["Stok Bahan", "Persediaan Sidoarjo berdiri sendiri dari gudang pusat."],
     ["Karyawan & Absensi", "Rekap selfie masuk/pulang cabang. Karyawan dan absensi selalu terpisah dari pusat.", "/dashboard/sidoarjo/absensi", "Siap digunakan"],
@@ -53,7 +53,7 @@ export default function SidoarjoDashboardPage() {
                                 <span style={{ fontSize: 11, color: "#A67B5B", fontWeight: 700 }}>{status ?? "Berikutnya"}</span>
                             </div>
                             <p style={{ margin: 0, color: "#7B6656", fontSize: 12, lineHeight: 1.55 }}>{description}</p>
-                            {href && <Link href={href} style={{ display: "inline-block", marginTop: 12, color: "#8B5E3C", fontSize: 12, fontWeight: 800, textDecoration: "none" }}>Buka data karyawan →</Link>}
+                            {href && <Link href={href} style={{ display: "inline-block", marginTop: 12, color: "#8B5E3C", fontSize: 12, fontWeight: 800, textDecoration: "none" }}>Buka menu →</Link>}
                         </div>
                     </div>
                 ))}
