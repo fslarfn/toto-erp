@@ -129,6 +129,7 @@ const SIDOARJO_NAV_ITEMS = [
         items: [
             { href: "/dashboard/sidoarjo/karyawan", label: "Karyawan", icon: KaryawanIcon },
             { href: "/dashboard/sidoarjo/absensi", label: "Absensi", icon: AbsensiIcon },
+            { href: "/dashboard/sidoarjo/gaji", label: "Gaji & Slip", icon: WalletIcon },
         ],
     },
 ];

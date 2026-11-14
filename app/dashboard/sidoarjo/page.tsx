@@ -9,6 +9,7 @@ const MODULES = [
     ["Keuangan", "Rekening, kas, tagihan, dan jurnal khusus Sidoarjo."],
     ["Stok Bahan", "Persediaan Sidoarjo berdiri sendiri dari gudang pusat."],
     ["Karyawan & Absensi", "Rekap selfie masuk/pulang cabang. Karyawan dan absensi selalu terpisah dari pusat.", "/dashboard/sidoarjo/absensi", "Siap digunakan"],
+    ["Gaji & Slip", "Hitung gaji cabang dari absensi, dengan aturan khusus gaji pokok tetap.", "/dashboard/sidoarjo/gaji", "Siap digunakan"],
     ["Laporan Cabang", "Laporan unit yang kemudian diringkas untuk owner."],
 ];
 
