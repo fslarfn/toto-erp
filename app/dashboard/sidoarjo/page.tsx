@@ -7,7 +7,7 @@ const MODULES = [
     ["Input Pesanan", "Masukkan pesanan cabang secara manual; setiap baris otomatis disimpan sebagai data Sidoarjo.", "/dashboard/sidoarjo/pesanan", "Siap digunakan"],
     ["Status Barang", "Progres produksi cabang tanpa menampilkan PO Toto Pusat.", "/dashboard/sidoarjo/status-barang", "Siap digunakan"],
     ["Keuangan", "Rekening, kas, dan transaksi khusus Sidoarjo.", "/dashboard/sidoarjo/keuangan", "Siap digunakan"],
-    ["Stok Bahan", "Persediaan Sidoarjo berdiri sendiri dari gudang pusat."],
+    ["Stok Bahan", "Persediaan Sidoarjo berdiri sendiri dari gudang pusat.", "/dashboard/sidoarjo/stok-bahan", "Siap digunakan"],
     ["Karyawan & Absensi", "Rekap selfie masuk/pulang cabang. Karyawan dan absensi selalu terpisah dari pusat.", "/dashboard/sidoarjo/absensi", "Siap digunakan"],
     ["Gaji & Slip", "Hitung gaji cabang dari absensi, dengan aturan khusus gaji pokok tetap.", "/dashboard/sidoarjo/gaji", "Siap digunakan"],
     ["Laporan Cabang", "Laporan unit yang kemudian diringkas untuk owner."],
