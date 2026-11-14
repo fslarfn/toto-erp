@@ -8,7 +8,7 @@ const MODULES = [
     ["Status Barang", "Progres produksi cabang tanpa menampilkan PO Toto Pusat."],
     ["Keuangan", "Rekening, kas, tagihan, dan jurnal khusus Sidoarjo."],
     ["Stok Bahan", "Persediaan Sidoarjo berdiri sendiri dari gudang pusat."],
-    ["Karyawan & Absensi", "Karyawan cabang serta penggajian yang terpisah."],
+    ["Karyawan & Absensi", "Rekap selfie masuk/pulang cabang. Karyawan dan absensi selalu terpisah dari pusat.", "/dashboard/sidoarjo/absensi", "Siap digunakan"],
     ["Laporan Cabang", "Laporan unit yang kemudian diringkas untuk owner."],
 ];
 

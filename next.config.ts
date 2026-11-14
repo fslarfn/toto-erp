@@ -34,7 +34,10 @@ const withPWA = withPWAInit({
 const nextConfig: NextConfig = {
   // turbopack config kept for dev (next dev uses Turbopack by default in v16)
   // production build uses --webpack flag so next-pwa can generate the SW
-  turbopack: {},
+  // Mesin pengembangan harus memakai folder ERP ini sebagai akar. Di komputer
+  // ini terdapat package-lock lain di C:\\Users\\ASUS yang sebelumnya membuat
+  // Next.js salah mendeteksi root dan mengembalikan 404 untuk rute dashboard.
+  turbopack: { root: __dirname },
   async headers() {
     return [
       {
