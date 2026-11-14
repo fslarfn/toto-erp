@@ -122,6 +122,7 @@ const SIDOARJO_NAV_ITEMS = [
             { href: "/dashboard/sidoarjo", label: "Dashboard Cabang", icon: HomeIcon },
             { href: "/dashboard/sidoarjo/pesanan", label: "Input Pesanan", icon: ClipboardIcon },
             { href: "/dashboard/sidoarjo/status-barang", label: "Status Barang", icon: PackageIcon },
+            { href: "/dashboard/sidoarjo/keuangan", label: "Keuangan", icon: WalletIcon },
         ],
     },
     {

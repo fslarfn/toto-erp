@@ -6,7 +6,7 @@ const MODULES = [
     ["Data Karyawan", "Karyawan Sidoarjo sudah siap diisi dan tidak bercampur dengan HR pusat.", "/dashboard/sidoarjo/karyawan", "Siap digunakan"],
     ["Input Pesanan", "Masukkan pesanan cabang secara manual; setiap baris otomatis disimpan sebagai data Sidoarjo.", "/dashboard/sidoarjo/pesanan", "Siap digunakan"],
     ["Status Barang", "Progres produksi cabang tanpa menampilkan PO Toto Pusat.", "/dashboard/sidoarjo/status-barang", "Siap digunakan"],
-    ["Keuangan", "Rekening, kas, tagihan, dan jurnal khusus Sidoarjo."],
+    ["Keuangan", "Rekening, kas, dan transaksi khusus Sidoarjo.", "/dashboard/sidoarjo/keuangan", "Siap digunakan"],
     ["Stok Bahan", "Persediaan Sidoarjo berdiri sendiri dari gudang pusat."],
     ["Karyawan & Absensi", "Rekap selfie masuk/pulang cabang. Karyawan dan absensi selalu terpisah dari pusat.", "/dashboard/sidoarjo/absensi", "Siap digunakan"],
     ["Gaji & Slip", "Hitung gaji cabang dari absensi, dengan aturan khusus gaji pokok tetap.", "/dashboard/sidoarjo/gaji", "Siap digunakan"],
