@@ -34,7 +34,8 @@ interface AppStore {
     /** Mengembalikan record yang dibuat (id dipakai penaut, mis. gaji.cash_flow_id). */
     addCashFlow: (c: CashFlowInput) => CashFlow;
     updateCashFlow: (id: string, updates: Partial<CashFlow>) => Promise<void>;
-    deleteCashFlow: (id: string) => void;
+    /** Menghapus mutasi beserta rekonsiliasi dan jurnal sumber yang terkait. */
+    deleteCashFlow: (id: string) => Promise<void>;
     /** Mutasi antar-kas: catat sebagai pasangan expense(sumber)+income(tujuan). */
     addTransfer: (p: { fromAccountId: string; toAccountId: string; amount: number; date: string; description?: string; createdBy?: string }) => void;
     addPayment: (p: Omit<Payment, "id">) => void;
@@ -493,15 +494,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
     }, [cashFlow, bankAccounts]);
 
-    const deleteCashFlow = useCallback((id: string) => {
+    const deleteCashFlow = useCallback(async (id: string) => {
         const target = cashFlow.find(c => c.id === id);
-        if (!target) return;
+        if (!target) throw new Error("Transaksi tidak ditemukan. Muat ulang halaman.");
 
-        setCashFlow((prev) => prev.filter((c) => c.id !== id));
-        runWrite("Menghapus transaksi keuangan", supabase.from("cash_flow").delete().eq("id", id), () => {
-            setCashFlow((prev) => prev.some((row) => row.id === target.id) ? prev : [target, ...prev]);
-        });
-        // Saldo = TERHITUNG dari cash_flow → recalc effect akan menyesuaikan cache.
+        pendingStoreWrites++;
+        storeWriteRevision++;
+        try {
+            const { error } = await supabase.rpc("delete_cash_flow_with_dependents", {
+                p_cash_flow_id: id,
+            });
+            if (error) throw new Error(error.message);
+
+            setCashFlow((prev) => prev.filter((c) => c.id !== id));
+            if (typeof window !== "undefined") {
+                window.dispatchEvent(new Event("erp:payment-changed"));
+                window.dispatchEvent(new Event("erp:invoice-adjustments-changed"));
+            }
+        } finally {
+            pendingStoreWrites--;
+        }
+        // Saldo diturunkan dari cash_flow sehingga akan ikut berubah bersama data.
     }, [cashFlow]);
 
     const addPayment = useCallback((payment: Omit<Payment, "id">) => {

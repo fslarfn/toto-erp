@@ -342,14 +342,15 @@ export default function KeuanganPage() {
     };
 
     const handleDelete = async (id: string) => {
-        try {
-            if (await isCashFlowJournalLocked(id)) {
-                showToast("Transaksi sudah masuk jurnal terkunci dan tidak dapat dihapus. Buat jurnal koreksi bila diperlukan.");
-                return;
-            }
-        } catch { showToast("Gagal memeriksa status jurnal. Penghapusan dibatalkan untuk keamanan."); return; }
         if (confirm("Apakah Anda yakin ingin menghapus transaksi ini?")) {
-            deleteCashFlow(id);
+            try {
+                await deleteCashFlow(id);
+                await refreshFinance();
+                showToast("✅ Transaksi, rekonsiliasi, dan jurnal terkait telah dihapus.");
+            } catch (error) {
+                const message = error instanceof Error ? error.message : "Penghapusan transaksi gagal.";
+                showToast(`❌ ${message}`);
+            }
         }
     };
 
