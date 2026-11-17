@@ -5,7 +5,6 @@ import { supabase } from "@/lib/supabase-client";
 
 const UNIT = "toto_sidoarjo";
 const pad = (n: number) => String(n).padStart(2, "0");
-const dateString = (value: Date) => `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
 const firstOfMonth = () => { const now = new Date(); return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`; };
 const lastOfMonth = () => { const now = new Date(); return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate())}`; };
 const money = (value: number) => `Rp ${Math.round(value || 0).toLocaleString("id-ID")}`;
@@ -40,9 +39,9 @@ export default function SidoarjoGajiPage() {
         else { setEmployees((employeeRows ?? []) as Employee[]); setHistory((salaryRows ?? []) as Salary[]); }
         setLoading(false);
     }, []);
-    useEffect(() => { void load(); }, [load]);
+    useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
     useEffect(() => {
-        if (!employeeId) { setAttendance([]); return; }
+        if (!employeeId) { const timer = window.setTimeout(() => setAttendance([]), 0); return () => window.clearTimeout(timer); }
         const run = async () => {
             const { data, error } = await supabase.from("absensi").select("karyawan_id,tanggal,overtime_hours").eq("operating_unit", UNIT).eq("karyawan_id", Number(employeeId)).gte("tanggal", start).lte("tanggal", end);
             if (error) setMessage({ ok: false, text: `Gagal membaca absensi: ${error.message}` }); else setAttendance((data ?? []) as Attendance[]);

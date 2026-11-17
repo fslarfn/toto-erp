@@ -41,7 +41,7 @@ export default function SidoarjoKaryawanPage() {
         setLoading(false);
     };
 
-    useEffect(() => { void load(); }, []);
+    useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, []);
 
     const visibleRows = useMemo(() => {
         const needle = query.trim().toLocaleLowerCase("id-ID");
@@ -82,14 +82,15 @@ export default function SidoarjoKaryawanPage() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap", marginBottom: 20 }}>
                 <div>
                     <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".08em", color: "#A67B5B", marginBottom: 7 }}>SDM · TOTO SIDOARJO</div>
-                    <h1 className="page-title-h1" style={{ marginBottom: 6 }}>Data Karyawan Cabang</h1>
-                    <p className="page-subtitle">Data ini khusus Sidoarjo dan tidak muncul pada daftar karyawan Toto Pusat.</p>
+                    <h1 className="page-title-h1" style={{ marginBottom: 6 }}>Karyawan</h1>
+                    <p className="page-subtitle">Data karyawan, gaji, dan slip Sidoarjo — terpisah dari data Toto Pusat.</p>
                 </div>
                 <div style={{ padding: "10px 14px", border: "1px solid #E8DCCF", borderRadius: 10, background: "#FFFDF9", color: "#6B4423", fontSize: 13, fontWeight: 800 }}>
                     {rows.length} karyawan cabang
                 </div>
             </div>
 
+            <div style={{ display: "flex", gap: 22, borderBottom: "1px solid #E8DCCF", marginBottom: 18, paddingLeft: 4 }}><span style={{ padding: "0 8px 10px", color: "#6B4423", borderBottom: "3px solid #A67B5B", fontWeight: 800, fontSize: 13 }}>👥 Data Karyawan</span><a href="/dashboard/sidoarjo/gaji" style={{ padding: "0 8px 10px", color: "#7B6656", textDecoration: "none", fontWeight: 700, fontSize: 13 }}>💰 Gaji & Slip</a><a href="/dashboard/sidoarjo/absensi" style={{ padding: "0 8px 10px", color: "#7B6656", textDecoration: "none", fontWeight: 700, fontSize: 13 }}>📋 Absensi</a></div>
             <form onSubmit={save} className="card" style={{ marginBottom: 18 }}>
                 <div className="card-body">
                     <div style={{ fontWeight: 800, color: "#3C2F2F", marginBottom: 14 }}>Tambah Karyawan Sidoarjo</div>

@@ -111,10 +111,8 @@ const ALUCURV_NAV_ITEMS = [
     },
 ];
 
-// Menu Cabang Sidoarjo sengaja memiliki URL sendiri. Pada tahap fondasi ini
-// hanya Dashboard Cabang yang dibuka; menu berikutnya ditambahkan setelah
-// tiap modul telah memakai filter unit data, supaya data Toto Pusat tidak
-// pernah tercampur atau terlihat dari cabang.
+// Seluruh menu Cabang memakai URL sendiri dan selalu menyaring data per unit.
+// Susunannya mengikuti Toto Pusat agar operator tidak perlu belajar alur baru.
 const SIDOARJO_NAV_ITEMS = [
     {
         section: "Menu Utama",
@@ -122,12 +120,31 @@ const SIDOARJO_NAV_ITEMS = [
             { href: "/dashboard/sidoarjo", label: "Dashboard Cabang", icon: HomeIcon },
             { href: "/dashboard/sidoarjo/pesanan", label: "Input Pesanan", icon: ClipboardIcon },
             { href: "/dashboard/sidoarjo/status-barang", label: "Status Barang", icon: PackageIcon },
+            { href: "/dashboard/sidoarjo/kalender", label: "Kalender Operasional", icon: CalendarIcon },
+        ],
+    },
+    {
+        section: "Keuangan",
+        items: [
+            { href: "/dashboard/sidoarjo/crm", label: "CRM Customer", icon: CustomerIcon },
+            { href: "/dashboard/sidoarjo/penawaran", label: "Penawaran", icon: PenawaranIcon },
             { href: "/dashboard/sidoarjo/invoice", label: "Invoice", icon: InvoiceIcon },
             { href: "/dashboard/sidoarjo/tagihan", label: "Tagihan", icon: TagihanIcon },
-            { href: "/dashboard/sidoarjo/surat-jalan", label: "Surat Jalan", icon: TruckIcon },
+            { href: "/dashboard/sidoarjo/tagihan-bahan", label: "Tagihan Bahan Baku", icon: BoxIcon },
+            { href: "/dashboard/sidoarjo/hpp", label: "HPP Barang", icon: CalculatorIcon },
             { href: "/dashboard/sidoarjo/laporan", label: "Laporan", icon: BarChartIcon },
             { href: "/dashboard/sidoarjo/keuangan", label: "Keuangan", icon: WalletIcon },
+            { href: "/dashboard/sidoarjo/pajak", label: "Akuntansi & Pajak", icon: CalculatorIcon },
+        ],
+    },
+    {
+        section: "Gudang & Produksi",
+        items: [
             { href: "/dashboard/sidoarjo/stok-bahan", label: "Stok Bahan", icon: BoxIcon },
+            { href: "/dashboard/sidoarjo/sj-bahan", label: "SJ Bahan Baku", icon: ColorPaletteIcon },
+            { href: "/dashboard/sidoarjo/produksi", label: "Alur Pesanan", icon: FactoryIcon },
+            { href: "/dashboard/sidoarjo/print-po", label: "Print PO", icon: PrinterIcon },
+            { href: "/dashboard/sidoarjo/surat-jalan", label: "Surat Jalan", icon: TruckIcon },
         ],
     },
     {
@@ -135,7 +152,14 @@ const SIDOARJO_NAV_ITEMS = [
         items: [
             { href: "/dashboard/sidoarjo/karyawan", label: "Karyawan", icon: KaryawanIcon },
             { href: "/dashboard/sidoarjo/absensi", label: "Absensi", icon: AbsensiIcon },
+            { href: "/dashboard/sidoarjo/absensi/edit", label: "Edit Absen", icon: EditAbsenIcon },
             { href: "/dashboard/sidoarjo/gaji", label: "Gaji & Slip", icon: WalletIcon },
+        ],
+    },
+    {
+        section: "Administrasi",
+        items: [
+            { href: "/dashboard/sidoarjo/akun", label: "Akun Saya", icon: UserCircleIcon },
         ],
     },
 ];

@@ -27,7 +27,7 @@ export default function SidoarjoDashboardPage() {
             <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
                 <div>
                     <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".08em", color: "#A67B5B", marginBottom: 8 }}>
-                        UNIT OPERASIONAL BARU
+                        DASHBOARD OPERASIONAL · TOTO SIDOARJO
                     </div>
                     <h1 className="page-title-h1" style={{ marginBottom: 8 }}>Toto Sidoarjo</h1>
                     <p className="page-subtitle" style={{ maxWidth: 690 }}>
@@ -36,15 +36,15 @@ export default function SidoarjoDashboardPage() {
                     </p>
                 </div>
                 <span style={{ padding: "8px 12px", borderRadius: 999, background: "#FDF3E7", border: "1px solid #E8DCCF", color: "#8B5E3C", fontSize: 12, fontWeight: 800 }}>
-                    Tahap 1 · Fondasi unit
+                    Unit terpisah · Siap diaudit
                 </span>
             </div>
 
             <section style={{ marginTop: 24, padding: 18, border: "1px solid #E8DCCF", borderRadius: 12, background: "#FFFDF9" }}>
-                <div style={{ fontSize: 15, fontWeight: 800, color: "#3C2F2F", marginBottom: 6 }}>Data cabang belum diisi</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: "#3C2F2F", marginBottom: 6 }}>Area kerja cabang terpisah</div>
                 <p style={{ margin: 0, maxWidth: 810, color: "#7B6656", fontSize: 13, lineHeight: 1.6 }}>
-                    Halaman ini sengaja belum memakai data Toto Pusat. Sebelum cabang mulai digunakan, kami menyelesaikan
-                    pemisahan unit pada database dan hak akses agar tidak ada pesanan, harga, saldo, atau data karyawan pusat yang tercampur.
+                    Setiap menu menggunakan data Toto Sidoarjo sendiri. Pesanan, harga, saldo, stok, karyawan, absensi, dan gaji Toto Pusat
+                    tidak ditampilkan atau dapat diubah dari area ini.
                 </p>
             </section>
 

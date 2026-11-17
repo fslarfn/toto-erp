@@ -1,104 +1,85 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
 import { supabase } from "@/lib/supabase-client";
 
 const UNIT = "toto_sidoarjo";
+const PAGE_SIZE = 100;
+const EMPTY_ROWS = 12;
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 const today = () => new Date().toISOString().slice(0, 10);
-const number = (value: string) => value.replace(/\D/g, "");
+const emptyRow = (id: string) => ({ id, tanggal: today(), customer: "", deskripsi: "", ukuran: "", qty: "", persisted: false });
 
-type Row = { id: number; tanggal: string; customer: string; deskripsi: string; ukuran: string; qty: string; no_inv: string; harga: string; di_produksi: boolean; di_warna: boolean; siap_kirim: boolean; di_kirim: boolean };
-const empty = () => ({ tanggal: today(), customer: "", deskripsi: "", ukuran: "", qty: "1", no_inv: "", harga: "" });
+type Order = { id: number; tanggal: string; customer: string; deskripsi: string; ukuran: string; qty: string; no_inv: string; harga: string };
+type Draft = { id: string | number; tanggal: string; customer: string; deskripsi: string; ukuran: string; qty: string; persisted: boolean };
+
+function periodOf(value: string) {
+    const iso = value.match(/^(\d{4})-(\d{2})/);
+    if (iso) return { year: Number(iso[1]), month: Number(iso[2]) };
+    const id = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    return id ? { year: Number(id[3]), month: Number(id[2]) } : null;
+}
 
 export default function SidoarjoPesananPage() {
-    const [form, setForm] = useState(empty);
-    const [rows, setRows] = useState<Row[]>([]);
-    const [query, setQuery] = useState("");
-    const [saving, setSaving] = useState(false);
+    const currentYear = new Date().getFullYear();
+    const [rows, setRows] = useState<Order[]>([]);
+    const [drafts, setDrafts] = useState<Draft[]>(() => Array.from({ length: EMPTY_ROWS }, (_, i) => emptyRow(`new-${i}`)));
+    const [month, setMonth] = useState<number | "all">(new Date().getMonth() + 1);
+    const [year, setYear] = useState(currentYear);
+    const [mode, setMode] = useState<"input" | "history">("input");
+    const [page, setPage] = useState(1);
     const [loading, setLoading] = useState(true);
-    const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+    const [saving, setSaving] = useState(false);
+    const [notice, setNotice] = useState<string>("");
+    const years = useMemo(() => Array.from({ length: Math.max(4, currentYear - 2023 + 2) }, (_, i) => 2023 + i), [currentYear]);
 
     const load = useCallback(async () => {
         setLoading(true);
-        const all: Row[] = [];
-        let from = 0;
-        while (true) {
-            const { data, error } = await supabase.from("pesanan_rows")
-                .select("id,tanggal,customer,deskripsi,ukuran,qty,no_inv,harga,di_produksi,di_warna,siap_kirim,di_kirim")
-                .eq("operating_unit", UNIT).order("id", { ascending: false }).range(from, from + 999);
-            if (error) { setMessage({ ok: false, text: `Gagal memuat pesanan cabang: ${error.message}` }); break; }
-            all.push(...((data ?? []) as Row[]));
-            if (!data || data.length < 1000) break;
-            from += 1000;
+        const data: Order[] = [];
+        for (let from = 0; ; from += 1000) {
+            const { data: pageData, error } = await supabase.from("pesanan_rows").select("id,tanggal,customer,deskripsi,ukuran,qty,no_inv,harga").eq("operating_unit", UNIT).order("id", { ascending: false }).range(from, from + 999);
+            if (error) { setNotice(`Gagal memuat pesanan: ${error.message}`); break; }
+            data.push(...((pageData ?? []) as Order[]));
+            if (!pageData || pageData.length < 1000) break;
         }
-        setRows(all);
-        setLoading(false);
+        setRows(data); setLoading(false);
     }, []);
-
     useEffect(() => { void load(); }, [load]);
-
     useEffect(() => {
-        const channel = supabase.channel("sidoarjo-orders")
-            .on("postgres_changes", { event: "*", schema: "public", table: "pesanan_rows", filter: `operating_unit=eq.${UNIT}` }, () => void load())
-            .subscribe();
+        const channel = supabase.channel("sidoarjo-grid-pesanan").on("postgres_changes", { event: "*", schema: "public", table: "pesanan_rows", filter: `operating_unit=eq.${UNIT}` }, () => void load()).subscribe();
         return () => { void supabase.removeChannel(channel); };
     }, [load]);
 
-    const visible = useMemo(() => {
-        const needle = query.trim().toLowerCase();
-        return !needle ? rows : rows.filter((row) => [row.customer, row.deskripsi, row.no_inv, row.tanggal].join(" ").toLowerCase().includes(needle));
-    }, [query, rows]);
-
-    const save = async (event: FormEvent) => {
-        event.preventDefault();
-        if (!form.customer.trim() || !form.deskripsi.trim()) {
-            setMessage({ ok: false, text: "Nama customer dan deskripsi pesanan wajib diisi." });
-            return;
-        }
-        setSaving(true); setMessage(null);
-        const syncId = `sidoarjo-${crypto.randomUUID()}`;
-        const { error } = await supabase.from("pesanan_rows").insert({
-            ...form,
-            tanggal: form.tanggal || today(), customer: form.customer.trim(), deskripsi: form.deskripsi.trim(),
-            ukuran: form.ukuran.trim(), qty: form.qty || "1", no_inv: form.no_inv.trim(), harga: form.harga || "",
-            sync_id: syncId, operating_unit: UNIT,
-        });
+    const periodRows = useMemo(() => rows.filter((row) => { const period = periodOf(row.tanggal); return period && period.year === year && (month === "all" || period.month === month); }), [rows, year, month]);
+    const historyPages = Math.max(1, Math.ceil(periodRows.length / PAGE_SIZE));
+    const visibleRows = useMemo(() => mode === "history" ? periodRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((row) => ({ ...row, persisted: true })) : drafts, [drafts, mode, page, periodRows]);
+    const filledDrafts = drafts.filter((row) => row.customer.trim() || row.deskripsi.trim());
+    useEffect(() => { setPage(1); }, [month, year]);
+    const changeDraft = (id: string | number, key: keyof Omit<Draft, "id" | "persisted">, value: string) => setDrafts((current) => current.map((row) => row.id === id ? { ...row, [key]: value } : row));
+    const addRows = (amount: number) => setDrafts((current) => [...current, ...Array.from({ length: amount }, (_, i) => emptyRow(`new-${Date.now()}-${i}`))]);
+    const saveAll = async () => {
+        const valid = filledDrafts.filter((row) => row.customer.trim() && row.deskripsi.trim());
+        if (!valid.length) { setNotice("Isi minimal nama customer dan deskripsi pesanan pada satu baris."); return; }
+        if (valid.length !== filledDrafts.length) { setNotice("Setiap baris yang diisi wajib memiliki customer dan deskripsi pesanan."); return; }
+        setSaving(true); setNotice("");
+        const { error } = await supabase.from("pesanan_rows").insert(valid.map((row) => ({ tanggal: row.tanggal || today(), customer: row.customer.trim(), deskripsi: row.deskripsi.trim(), ukuran: row.ukuran.trim(), qty: row.qty || "1", operating_unit: UNIT, sync_id: `sidoarjo-${crypto.randomUUID()}` })));
         setSaving(false);
-        if (error) { setMessage({ ok: false, text: `Pesanan belum tersimpan: ${error.message}` }); return; }
-        setForm(empty()); setMessage({ ok: true, text: "Pesanan Sidoarjo tersimpan dan siap diproses." }); await load();
+        if (error) { setNotice(`Pesanan belum tersimpan: ${error.message}`); return; }
+        setDrafts(Array.from({ length: EMPTY_ROWS }, (_, i) => emptyRow(`new-${Date.now()}-${i}`)));
+        setNotice(`${valid.length} pesanan berhasil disimpan.`); await load();
     };
+    const exportExcel = () => { const book = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(periodRows.map((row, i) => ({ No: i + 1, Tanggal: row.tanggal, "Nama Customer": row.customer, "Deskripsi Pesanan": row.deskripsi, Ukuran: row.ukuran, Qty: row.qty }))), "Pesanan Sidoarjo"); XLSX.writeFile(book, `pesanan-sidoarjo-${year}-${month === "all" ? "semua" : String(month).padStart(2, "0")}.xlsx`); };
 
-    return <div className="page-content" style={{ maxWidth: 1320, paddingTop: 28 }}>
-        <div style={header}><div><div style={eyebrow}>OPERASIONAL · TOTO SIDOARJO</div><h1 className="page-title-h1" style={{ marginBottom: 6 }}>Input Pesanan Cabang</h1><p className="page-subtitle">Pesanan di sini hanya untuk Sidoarjo. Nomor invoice tetap dapat diisi manual setelah harga disepakati.</p></div><button onClick={() => void load()} style={secondary}>↻ Muat ulang</button></div>
-        <form onSubmit={save} style={panel}>
-            <strong style={{ color: "#3C2F2F" }}>Tambah baris pesanan</strong>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 10, marginTop: 14 }}>
-                <Field label="Tanggal"><input type="date" required value={form.tanggal} onChange={(e) => setForm((v) => ({ ...v, tanggal: e.target.value }))} style={input} /></Field>
-                <Field label="Customer *"><input required value={form.customer} onChange={(e) => setForm((v) => ({ ...v, customer: e.target.value }))} style={input} placeholder="Nama customer" /></Field>
-                <Field label="Deskripsi pesanan *"><input required value={form.deskripsi} onChange={(e) => setForm((v) => ({ ...v, deskripsi: e.target.value }))} style={input} placeholder="Jenis / barang" /></Field>
-                <Field label="Ukuran"><input value={form.ukuran} onChange={(e) => setForm((v) => ({ ...v, ukuran: e.target.value }))} style={input} placeholder="cth: 1,9" /></Field>
-                <Field label="Qty"><input inputMode="decimal" value={form.qty} onChange={(e) => setForm((v) => ({ ...v, qty: number(e.target.value) }))} style={input} /></Field>
-                <Field label="No. invoice"><input value={form.no_inv} onChange={(e) => setForm((v) => ({ ...v, no_inv: e.target.value }))} style={input} placeholder="Diisi setelah deal" /></Field>
-                <Field label="Harga / unit"><input inputMode="numeric" value={form.harga} onChange={(e) => setForm((v) => ({ ...v, harga: number(e.target.value) }))} style={input} placeholder="0" /></Field>
-            </div>
-            <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 14, flexWrap: "wrap" }}><button disabled={saving} type="submit" style={primary}>{saving ? "Menyimpan…" : "＋ Simpan Pesanan"}</button>{message && <span style={{ fontSize: 13, fontWeight: 700, color: message.ok ? "#15803D" : "#B91C1C" }}>{message.text}</span>}</div>
-        </form>
-        <section style={{ ...panel, marginTop: 18, padding: 0, overflow: "hidden" }}>
-            <div style={{ padding: 16, display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}><strong style={{ color: "#3C2F2F" }}>Pesanan terbaru Sidoarjo</strong><input value={query} onChange={(e) => setQuery(e.target.value)} style={{ ...input, width: 280, maxWidth: "100%" }} placeholder="Cari customer, invoice, pesanan…" /></div>
-            <div style={{ overflowX: "auto" }}><table style={table}><thead><tr>{["Tanggal", "Customer", "Deskripsi", "Ukuran", "Qty", "Invoice", "Harga", "Status"].map((title) => <th key={title} style={th}>{title}</th>)}</tr></thead><tbody>{loading ? <tr><td colSpan={8} style={emptyCell}>Memuat pesanan cabang…</td></tr> : visible.length === 0 ? <tr><td colSpan={8} style={emptyCell}>Belum ada pesanan Sidoarjo.</td></tr> : visible.map((row) => <tr key={row.id}><td style={td}>{row.tanggal}</td><td style={{ ...td, fontWeight: 800 }}>{row.customer}</td><td style={td}>{row.deskripsi}</td><td style={td}>{row.ukuran || "—"}</td><td style={td}>{row.qty || "—"}</td><td style={td}>{row.no_inv || "—"}</td><td style={td}>{row.harga ? `Rp ${Number(row.harga).toLocaleString("id-ID")}` : "—"}</td><td style={td}>{row.di_kirim ? "Terkirim" : row.siap_kirim ? "Siap kirim" : row.di_warna ? "Warna" : row.di_produksi ? "Produksi" : "Menunggu"}</td></tr>)}</tbody></table></div>
-            <div style={{ padding: "10px 16px", borderTop: "1px solid #F0E7DE", color: "#7B6656", fontSize: 12 }}>Seluruh pesanan Sidoarjo dimuat bertahap. Gunakan pencarian untuk menyaring daftar.</div>
-        </section>
+    return <div style={shell}>
+        <div style={toolbar}><div><span style={title}>Input Pesanan</span><span style={sub}>{mode === "input" ? `0 tersimpan · ${periodRows.length} pesanan total` : `Hal. ${page}/${historyPages} · ${periodRows.length} pesanan total`}</span></div><div style={filters}><select value={month} onChange={(e) => setMonth(e.target.value === "all" ? "all" : Number(e.target.value))} style={select}><option value="all">Semua Bulan</option>{MONTHS.map((label, index) => <option key={label} value={index + 1}>{label}</option>)}</select><select value={year} onChange={(e) => setYear(Number(e.target.value))} style={select}>{years.map((value) => <option key={value}>{value}</option>)}</select></div><span style={hint}>↑↓←→ navigasi · Ctrl+C salin · Ctrl+V tempel · input langsung dalam tabel</span><div style={{ marginLeft: "auto", display: "flex", gap: 8 }}><button disabled={saving} onClick={() => void saveAll()} style={saveButton}>{saving ? "⏳ Menyimpan..." : "💾 SIMPAN DATA"}</button><button onClick={exportExcel} style={exportButton}>↧ Excel</button></div></div>
+        {notice && <div style={{ padding: "7px 14px", fontSize: 12, fontWeight: 700, color: notice.includes("berhasil") ? "#15803D" : "#B91C1C", background: notice.includes("berhasil") ? "#F0FDF4" : "#FEF2F2" }}>{notice}</div>}
+        <div style={gridWrap}><table style={grid}><colgroup><col style={{ width: 56 }} /><col style={{ width: 160 }} /><col style={{ width: "26%" }} /><col style={{ width: "42%" }} /><col style={{ width: 110 }} /><col style={{ width: 80 }} /></colgroup><thead><tr>{["No", "Tanggal", "Nama Customer", "Deskripsi Pesanan", "Ukuran", "Qty"].map((label) => <th key={label} style={th}>{label}</th>)}</tr></thead><tbody>{loading ? <tr><td colSpan={6} style={empty}>Memuat pesanan Sidoarjo…</td></tr> : visibleRows.map((row, index) => <tr key={row.id} style={{ background: row.persisted ? "white" : "#FAFAF8" }}><td style={numberCell}>{mode === "history" ? (page - 1) * PAGE_SIZE + index + 1 : index + 1}</td>{(["tanggal", "customer", "deskripsi", "ukuran", "qty"] as const).map((key) => <td key={key} style={cell}><input type={key === "tanggal" ? "date" : "text"} inputMode={key === "ukuran" || key === "qty" ? "decimal" : "text"} value={row[key]} disabled={row.persisted} onChange={(e: ChangeEvent<HTMLInputElement>) => changeDraft(row.id, key, e.target.value)} placeholder={key === "customer" ? "Nama customer..." : key === "deskripsi" ? "Deskripsi pesanan..." : key === "ukuran" ? "cth: 1,9" : key === "qty" ? "0" : ""} style={gridInput} /></td>)}</tr>)}</tbody></table></div>
+        <div style={pager}><button onClick={() => { setMode("history"); setPage((value) => Math.max(1, value - 1)); }} disabled={mode !== "history" || page === 1} style={pageButton}>◀ Sebelumnya</button>{Array.from({ length: Math.min(7, historyPages) }, (_, index) => index + 1).map((value) => <button key={value} onClick={() => { setMode("history"); setPage(value); }} style={{ ...pageButton, background: mode === "history" && page === value ? "#A67B5B" : "white", color: mode === "history" && page === value ? "white" : "#5C4033" }}>{value}</button>)}<button onClick={() => setPage((value) => Math.min(historyPages, value + 1))} disabled={mode !== "history" || page === historyPages} style={pageButton}>Berikutnya ▶</button><button onClick={() => addRows(100)} style={{ ...pageButton, background: "#DCFCE7", color: "#15803D", width: "auto" }}>＋ 100 Baris</button><button onClick={() => setMode("input")} style={{ ...pageButton, width: "auto", background: mode === "input" ? "#A67B5B" : "#FEF3E8", color: mode === "input" ? "white" : "#A67B5B" }}>📝 Input Terbaru</button></div>
     </div>;
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label style={{ display: "grid", gap: 5, fontSize: 11, color: "#6B574B", fontWeight: 800, textTransform: "uppercase" }}>{label}{children}</label>; }
-const header: React.CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14, flexWrap: "wrap", marginBottom: 18 };
-const eyebrow: React.CSSProperties = { color: "#A67B5B", fontWeight: 800, letterSpacing: ".08em", fontSize: 12, marginBottom: 7 };
-const panel: React.CSSProperties = { border: "1px solid #E8DCCF", background: "#FFFDF9", borderRadius: 12, padding: 18 };
-const input: React.CSSProperties = { minHeight: 38, padding: "8px 10px", border: "1px solid #D8C1AA", borderRadius: 7, color: "#3C2F2F", background: "white", fontSize: 13 };
-const primary: React.CSSProperties = { minHeight: 38, padding: "0 15px", border: 0, borderRadius: 7, background: "#8B5E3C", color: "white", fontWeight: 800, cursor: "pointer" };
-const secondary: React.CSSProperties = { minHeight: 36, padding: "0 12px", border: "1px solid #D8C1AA", borderRadius: 7, background: "white", color: "#6B4423", fontWeight: 700, cursor: "pointer" };
-const table: React.CSSProperties = { width: "100%", borderCollapse: "collapse", fontSize: 12 };
-const th: React.CSSProperties = { textAlign: "left", padding: "10px 14px", background: "#F4EBDD", color: "#6B4423", fontSize: 10, whiteSpace: "nowrap", textTransform: "uppercase" };
-const td: React.CSSProperties = { padding: "11px 14px", borderTop: "1px solid #F0E7DE", color: "#514036", whiteSpace: "nowrap" };
-const emptyCell: React.CSSProperties = { ...td, textAlign: "center", padding: "30px 12px", color: "#927C6D" };
+const shell: React.CSSProperties = { display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden", background: "#F5EBDD" };
+const toolbar: React.CSSProperties = { display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", background: "white", borderBottom: "1px solid #E6D5BE", flexShrink: 0, flexWrap: "wrap" };
+const title: React.CSSProperties = { fontSize: 15, fontWeight: 700, color: "#5C4033" }; const sub: React.CSSProperties = { fontSize: 11, color: "#B89678", marginLeft: 10 }; const filters: React.CSSProperties = { display: "flex", gap: 6, alignItems: "center", marginLeft: 8 }; const select: React.CSSProperties = { border: "1px solid #D1BFA3", borderRadius: 5, padding: "3px 7px", fontSize: 11, background: "#FFFBF7", color: "#5C4033" }; const hint: React.CSSProperties = { fontSize: 10, color: "#C5A882", marginLeft: 4 }; const saveButton: React.CSSProperties = { border: "none", borderRadius: 6, padding: "6px 16px", fontSize: 12, background: "#15803D", color: "white", cursor: "pointer", fontWeight: 700, minWidth: 130 }; const exportButton: React.CSSProperties = { border: "1px solid #D1BFA3", borderRadius: 5, padding: "4px 14px", fontSize: 12, background: "#F5EBDD", color: "#5C4033", cursor: "pointer", fontWeight: 600 };
+const gridWrap: React.CSSProperties = { flex: 1, overflow: "auto", background: "white" }; const grid: React.CSSProperties = { borderCollapse: "collapse", width: "100%", tableLayout: "fixed", fontSize: 12 }; const th: React.CSSProperties = { background: "#EDE0D4", color: "#5C4033", fontWeight: 700, fontSize: 11, padding: "8px 6px", borderRight: "1px solid #D1BFA3", borderBottom: "2px solid #C5A882", whiteSpace: "nowrap", position: "sticky", top: 0, zIndex: 1, textAlign: "center" }; const cell: React.CSSProperties = { height: 36, padding: 0, borderRight: "1px solid #E6D5BE", borderBottom: "1px solid #E6D5BE" }; const numberCell: React.CSSProperties = { ...cell, textAlign: "center", padding: "2px 4px", color: "#B89678", fontWeight: 700, background: "#F8F4EE" }; const gridInput: React.CSSProperties = { width: "100%", height: "100%", minHeight: 35, border: "none", outline: "none", padding: "5px 7px", background: "transparent", color: "#3C2F2F", fontFamily: "inherit", fontSize: 12, boxSizing: "border-box" }; const empty: React.CSSProperties = { padding: "36px 12px", textAlign: "center", color: "#927C6D" }; const pager: React.CSSProperties = { display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "8px 14px", background: "white", borderTop: "1px solid #E6D5BE", flexShrink: 0, flexWrap: "wrap" }; const pageButton: React.CSSProperties = { width: 38, height: 32, borderRadius: 6, border: "1px solid #D1BFA3", fontSize: 12, background: "white", color: "#5C4033", cursor: "pointer", fontWeight: 700 };

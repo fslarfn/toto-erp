@@ -37,18 +37,24 @@ export default function AlucurvAbsensiPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendance, setAttendance] = useState<Attendance[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const base = typeof window === "undefined" ? "" : window.location.origin;
   const range = useMemo(() => tab === "harian" ? { start: date, end: date } : tab === "mingguan" ? weekRange(weekAnchor) : monthRange(month), [tab, date, weekAnchor, month]);
   const week = useMemo(() => weekRange(weekAnchor), [weekAnchor]);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError("");
     const [{ data: emps, error: employeeError }, { data: rows, error: attendanceError }] = await Promise.all([
       supabase.from("alu_employees").select("id,name,role,division,attendance_token,active").eq("active", true).order("name"),
       supabase.from("absensi").select("id,alu_employee_id,nama_karyawan,tanggal,jam_masuk,jam_keluar,is_telat,selisih_menit,total_jam_kerja,overtime_hours").eq("workspace", "alucurv").gte("tanggal", range.start).lte("tanggal", range.end).order("tanggal", { ascending: true }),
     ]);
-    if (!employeeError) setEmployees((emps ?? []) as Employee[]);
-    if (!attendanceError) setAttendance((rows ?? []) as Attendance[]);
+    if (employeeError || attendanceError) {
+      setError(employeeError?.message || attendanceError?.message || "Gagal memuat data absensi.");
+    } else {
+      setEmployees((emps ?? []) as Employee[]);
+      setAttendance((rows ?? []) as Attendance[]);
+    }
     setLoading(false);
   }, [range.end, range.start]);
 
@@ -74,13 +80,28 @@ export default function AlucurvAbsensiPage() {
     const rows = attendance.filter((row) => row.alu_employee_id === employee.id);
     return { employee, hadir: rows.length, complete: rows.filter((row) => row.jam_keluar).length, late: rows.filter((row) => row.is_telat).length, overtime: rows.reduce((sum, row) => sum + Number(row.overtime_hours || 0), 0) };
   }), [attendance, employees]);
+  const printRecap = () => {
+    if (tab === "link") return alert("Pilih rekap Harian, Mingguan, atau Bulanan terlebih dahulu.");
+    const escape = (value: unknown) => String(value ?? "—").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char] || char));
+    const title = tab === "harian" ? `Rekap Harian ${date}` : tab === "mingguan" ? `Rekap Mingguan ${week.start} s.d. ${week.end}` : `Rekap Bulanan ${monthLabel(month)}`;
+    const body = tab === "harian"
+      ? employees.map((employee, index) => { const row = byEmployee.get(employee.id); return `<tr><td>${index + 1}</td><td><b>${escape(employee.name)}</b><br><small>${escape(employee.role || employee.division || "—")}</small></td><td>${escape(row?.jam_masuk)}</td><td>${escape(row?.jam_keluar)}</td><td>${escape(row?.total_jam_kerja)}</td><td>${row?.overtime_hours ? `${escape(row.overtime_hours)} jam` : "—"}</td><td>${!row ? "Belum absen" : row.jam_keluar ? "Lengkap" : row.is_telat ? `Telat ${row.selisih_menit}m` : "Sudah masuk"}</td></tr>`; }).join("")
+      : tab === "mingguan"
+        ? weeklyRows.map((row, index) => `<tr><td>${index + 1}</td><td><b>${escape(row.employee.name)}</b><br><small>${escape(row.employee.role || row.employee.division || "—")}</small></td><td>${row.hadir}</td><td>${row.complete}</td><td>${row.late}</td><td>${row.overtime || 0} jam</td></tr>`).join("")
+        : monthlyRows.map((row, index) => `<tr><td>${index + 1}</td><td><b>${escape(row.employee.name)}</b><br><small>${escape(row.employee.role || row.employee.division || "—")}</small></td><td>${row.hadir}</td><td>${row.complete}</td><td>${row.late}</td><td>${row.overtime || 0} jam</td></tr>`).join("");
+    const columns = tab === "harian" ? "<th>No</th><th>Karyawan</th><th>Masuk</th><th>Pulang</th><th>Total kerja</th><th>Lembur</th><th>Status</th>" : "<th>No</th><th>Karyawan</th><th>Hadir</th><th>Sudah pulang</th><th>Telat</th><th>Lembur</th>";
+    const popup = window.open("", "_blank", "width=980,height=720");
+    if (!popup) return alert("Izinkan pop-up browser untuk mencetak rekap.");
+    popup.document.write(`<!doctype html><html><head><title>${escape(title)}</title><style>body{font-family:Arial,sans-serif;color:#123;padding:32px}h1{color:#0f766e;margin:0;font-size:24px}.sub{color:#567;margin:6px 0 22px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#14b8a6;color:white;text-align:left;padding:9px}td{border:1px solid #cde9e5;padding:8px;vertical-align:top}small{color:#567}.foot{margin-top:24px;font-size:11px;color:#678}@media print{body{padding:12px}}</style></head><body><h1>ALUCURV</h1><div class="sub">${escape(title)}<br>Dicetak ${new Date().toLocaleString("id-ID")}</div><table><thead><tr>${columns}</tr></thead><tbody>${body || `<tr><td colspan="7">Belum ada data absensi.</td></tr>`}</tbody></table><p class="foot">Dokumen rekap absensi Alucurv · Sistem ERP Toto</p><script>window.onload=()=>window.print()</script></body></html>`);
+    popup.document.close();
+  };
   const copy = async (value: string) => { await navigator.clipboard.writeText(value); alert("Link absensi tersalin."); };
   const tabs: { key: Tab; label: string }[] = [{ key: "harian", label: "📊 Harian" }, { key: "mingguan", label: "📅 Mingguan" }, { key: "bulanan", label: "🗓️ Bulanan" }, { key: "link", label: "🔗 Link Absen" }];
 
   return <div style={{ padding: 24, maxWidth: 1440, margin: "0 auto" }}>
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "end", marginBottom: 16 }}>
       <div><h1 style={{ margin: 0, color: "var(--text-dark)", fontSize: 23 }}>📋 Absensi Alucurv</h1><p style={{ margin: "5px 0 0", fontSize: 13, color: "var(--text-med)" }}>Rekap kehadiran dan lembur Alucurv. Data terpisah dari Toto, namun memakai jalur penyimpanan absensi yang sama.</p></div>
-      <button onClick={load} style={secondary}>↻ Muat ulang</button>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button onClick={printRecap} disabled={tab === "link"} style={{ ...secondary, opacity: tab === "link" ? .5 : 1 }}>🖨 Cetak Rekap PDF</button><button onClick={load} style={secondary}>↻ Muat ulang</button></div>
     </div>
     <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 16 }}>{tabs.map((item) => <button key={item.key} onClick={() => setTab(item.key)} style={{ ...tabButton, ...(tab === item.key ? tabButtonActive : {}) }}>{item.label}</button>)}</div>
 
@@ -90,6 +111,7 @@ export default function AlucurvAbsensiPage() {
       {tab === "bulanan" && <label style={label}>Bulan<input type="month" value={month} onChange={(event) => setMonth(event.target.value)} style={input} /></label>}
       <span style={{ fontSize: 12, color: "var(--text-med)", paddingBottom: 9 }}>{tab === "mingguan" ? `${shortDate(week.start)} – ${shortDate(week.end)}` : tab === "bulanan" ? monthLabel(month) : ""}</span>
     </div>
+    {error && <div style={{ ...panel, marginBottom: 16, color: "#B91C1C", borderColor: "#FCA5A5" }}>Gagal memuat absensi: {error}</div>}
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 12, marginBottom: 16 }}>
       <Card label="Karyawan aktif" value={employees.length} /><Card label="Hadir" value={attendance.length} /><Card label="Sudah pulang" value={totalDone} /><Card label="Telat" value={totalLate} /><Card label="Lembur" value={`${totalOvertime} jam`} />
     </div></>}
