@@ -169,6 +169,9 @@ const GABUNGAN_NAV_ITEMS = [
         section: "Gabungan",
         items: [
             { href: "/dashboard/gabungan", label: "Dashboard Gabungan", icon: GabunganIcon },
+            { href: "/dashboard/gabungan/operasional", label: "Operasional", icon: FactoryIcon },
+            { href: "/dashboard/gabungan/keuangan", label: "Keuangan & Saldo", icon: WalletIcon },
+            { href: "/dashboard/gabungan/piutang", label: "Piutang & Tagihan", icon: InvoiceIcon },
         ],
     },
 ];
