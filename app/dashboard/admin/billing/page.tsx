@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { ACCOUNTING_TAX_BILLING } from "@/lib/billing/accounting-tax";
+import { BRANCH_EXPANSION_BILLING } from "@/lib/billing/branch-expansion";
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 
@@ -29,7 +30,7 @@ function BillingPage() {
     const [buktiFile, setBuktiFile] = useState<File | null>(null);
     const [buktiPreview, setBuktiPreview] = useState<string>("");
     const [notes, setNotes] = useState("");
-    const [paymentPurpose, setPaymentPurpose] = useState<"perpanjang_web_app" | "aktivasi_absensi" | "akuntansi_pajak">("perpanjang_web_app");
+    const [paymentPurpose, setPaymentPurpose] = useState<"perpanjang_web_app" | "aktivasi_absensi" | "akuntansi_pajak" | "pembukaan_cabang_migrasi_server">("perpanjang_web_app");
     const [showInvoice, setShowInvoice] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showApproveSuccess, setShowApproveSuccess] = useState(false);
@@ -37,11 +38,13 @@ function BillingPage() {
     const [showQrisModal, setShowQrisModal] = useState(false);
     const [showAbsensiConfirmSuccess, setShowAbsensiConfirmSuccess] = useState(false);
     const [confirmingAccountingTax, setConfirmingAccountingTax] = useState(false);
+    const [confirmingBranchExpansion, setConfirmingBranchExpansion] = useState(false);
 
     const isOwner = user?.username === "faisal";
     const isAdminFinance = ["vira", "riska", "toto", "fauzi", "yuni"].includes(user?.username || "");
     const hasAccess = isOwner || isAdminFinance;
     const accountingTaxPayment = history.find(item => item.payment_type === ACCOUNTING_TAX_BILLING.paymentType);
+    const branchExpansionPayment = history.find(item => item.payment_type === BRANCH_EXPANSION_BILLING.paymentType);
     const firstManualReport = manualReports[0];
 
     const refreshLicense = useCallback(async () => {
@@ -106,10 +109,13 @@ function BillingPage() {
 
             const isAbsensi = paymentPurpose === "aktivasi_absensi";
             const isAccountingTax = paymentPurpose === "akuntansi_pajak";
+            const isBranchExpansion = paymentPurpose === "pembukaan_cabang_migrasi_server";
             const amount = isAbsensi
                 ? 6100000
                 : isAccountingTax
                     ? ACCOUNTING_TAX_BILLING.amount
+                    : isBranchExpansion
+                        ? BRANCH_EXPANSION_BILLING.amount
                     : (license?.is_setup_completed ? 6200000 : 20800000);
 
             const reportRes = await fetch("/api/billing/manual-report", {
@@ -263,6 +269,38 @@ function BillingPage() {
         }
     };
 
+    const confirmBranchExpansion = async (reportId?: string) => {
+        if (branchExpansionPayment && !reportId) {
+            setActiveTab("history");
+            openInvoice(branchExpansionPayment);
+            return;
+        }
+        if (!confirm(branchExpansionPayment
+            ? "Tandai bukti pembayaran ini sudah diperiksa? Invoice yang sudah ada tidak dibuat ulang."
+            : `Konfirmasi pembayaran ${formatCurrency(BRANCH_EXPANSION_BILLING.amount)} sudah diterima? Invoice resmi akan dibuat.`)) return;
+
+        setConfirmingBranchExpansion(true);
+        try {
+            const res = await fetch("/api/billing/confirm-branch-expansion", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ reportId }),
+            });
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.error ?? "Gagal mengonfirmasi pembayaran.");
+            await fetchData();
+            setActiveTab("history");
+            if (result.invoice) {
+                setSelectedInvoice(result.invoice);
+                setShowInvoice(true);
+            }
+        } catch (err: unknown) {
+            alert(err instanceof Error ? err.message : "Gagal mengonfirmasi pembayaran.");
+        } finally {
+            setConfirmingBranchExpansion(false);
+        }
+    };
+
     if (!hasAccess) return <div className="page-content text-center py-20 opacity-50">AKSES DITOLAK</div>;
 
     return (
@@ -323,6 +361,35 @@ function BillingPage() {
                 </section>
             )}
 
+            {isOwner && (
+                <section style={{ marginBottom: 24, background: "#fff", border: "1px solid #e5d4c2", borderRadius: 14, overflow: "hidden", boxShadow: "0 8px 24px rgba(91,64,53,0.06)" }}>
+                    <div style={{ height: 5, background: branchExpansionPayment ? "#5a8f6e" : "linear-gradient(90deg, #5C4033 0%, #D4AF37 100%)" }} />
+                    <div style={{ padding: "18px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, flexWrap: "wrap" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 260, flex: "1 1 440px" }}>
+                            <div style={{ width: 44, height: 44, borderRadius: 12, background: branchExpansionPayment ? "#e8f5e9" : "#f7efe5", color: branchExpansionPayment ? "#2e7d32" : "#7a563f", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>
+                                {branchExpansionPayment ? "✓" : "⌘"}
+                            </div>
+                            <div>
+                                <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#3a2e25" }}>{BRANCH_EXPANSION_BILLING.title}</h2>
+                                <p style={{ margin: "4px 0 0", fontSize: 12, lineHeight: 1.5, color: "#8a7e72" }}>
+                                    {branchExpansionPayment
+                                        ? `Pembayaran ${formatCurrency(BRANCH_EXPANSION_BILLING.amount)} sudah dikonfirmasi dan invoice tersimpan.`
+                                        : `Unggah bukti pembayaran ${formatCurrency(BRANCH_EXPANSION_BILLING.amount)}, lalu konfirmasi untuk menerbitkan invoice resmi.`}
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => confirmBranchExpansion()}
+                            disabled={confirmingBranchExpansion}
+                            style={{ background: branchExpansionPayment ? "#edf7f0" : "#5C4033", color: branchExpansionPayment ? "#2e7d32" : "#fff", padding: "11px 18px", borderRadius: 8, fontSize: 12, fontWeight: 700, border: branchExpansionPayment ? "1px solid #b9dfc5" : "1px solid #5C4033", cursor: confirmingBranchExpansion ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, minWidth: 190 }}
+                        >
+                            {confirmingBranchExpansion ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+                            {confirmingBranchExpansion ? "Memproses..." : branchExpansionPayment ? "Lihat invoice" : "Konfirmasi pembayaran"}
+                        </button>
+                    </div>
+                </section>
+            )}
+
             {isOwner && manualReports.length > 0 && (
                 <div style={{ marginBottom: 24, padding: "20px 24px", background: "#d63230", borderRadius: 14, boxShadow: "0 10px 25px rgba(214,50,48,0.2)", border: "4px solid white", display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 16, color: "white" }}>
@@ -334,12 +401,14 @@ function BillingPage() {
                             <p style={{ margin: "4px 0 0", fontSize: 11, fontWeight: 600, opacity: 0.9 }}>
                                 {firstManualReport?.type === "akuntansi_pajak"
                                     ? "Periksa bukti transfer, lalu konfirmasi agar invoice masuk ke riwayat pembayaran."
+                                    : firstManualReport?.type === "pembukaan_cabang_migrasi_server"
+                                        ? "Periksa bukti transfer pembukaan cabang, lalu konfirmasi agar invoice resmi diterbitkan."
                                     : `Klik tombol di samping untuk mengaktifkan lisensi ${license?.is_setup_completed ? "1 Bulan" : "3 Bulan"}.`}
                             </p>
                         </div>
                     </div>
-                    <button onClick={() => firstManualReport?.type === "akuntansi_pajak" ? confirmAccountingTax(firstManualReport!.id) : approveManual(firstManualReport!.id)} style={{ background: "white", color: "#d63230", padding: "12px 24px", borderRadius: 30, fontWeight: 900, textTransform: "uppercase", fontSize: 11, letterSpacing: 1.2, border: "none", cursor: "pointer", boxShadow: "0 4px 10px rgba(0,0,0,0.1)" }}>
-                        {firstManualReport?.type === "akuntansi_pajak" ? "KONFIRMASI & BUAT INVOICE" : "AKTIFKAN LISENSI SEKARANG"}
+                    <button onClick={() => firstManualReport?.type === "akuntansi_pajak" ? confirmAccountingTax(firstManualReport!.id) : firstManualReport?.type === "pembukaan_cabang_migrasi_server" ? confirmBranchExpansion(firstManualReport!.id) : approveManual(firstManualReport!.id)} style={{ background: "white", color: "#d63230", padding: "12px 24px", borderRadius: 30, fontWeight: 900, textTransform: "uppercase", fontSize: 11, letterSpacing: 1.2, border: "none", cursor: "pointer", boxShadow: "0 4px 10px rgba(0,0,0,0.1)" }}>
+                        {(firstManualReport?.type === "akuntansi_pajak" || firstManualReport?.type === "pembukaan_cabang_migrasi_server") ? "KONFIRMASI & BUAT INVOICE" : "AKTIFKAN LISENSI SEKARANG"}
                     </button>
                 </div>
             )}
@@ -500,12 +569,13 @@ function BillingPage() {
                                     </label>
                                     <select
                                         value={paymentPurpose}
-                                        onChange={e => setPaymentPurpose(e.target.value as "perpanjang_web_app" | "aktivasi_absensi" | "akuntansi_pajak")}
+                                        onChange={e => setPaymentPurpose(e.target.value as "perpanjang_web_app" | "aktivasi_absensi" | "akuntansi_pajak" | "pembukaan_cabang_migrasi_server")}
                                         style={{ width: "100%", padding: "11px 14px", borderRadius: 8, border: "1.5px solid #ddd6cd", fontSize: 13.5, fontFamily: "'DM Sans', sans-serif", background: "#faf8f5", outline: "none", boxSizing: "border-box" as const, cursor: "pointer" }}
                                     >
                                         <option value="perpanjang_web_app">Perpanjang Web App</option>
                                         <option value="aktivasi_absensi">Aktivasi Absensi</option>
                                         <option value="akuntansi_pajak">Menu Akuntansi & Perpajakan - Rp7.750.000</option>
+                                        <option value="pembukaan_cabang_migrasi_server">Pembukaan Menu Cabang & Migrasi Server - Rp17.500.000</option>
                                     </select>
                                     {paymentPurpose === "aktivasi_absensi" && (
                                         <div style={{ marginTop: 6, padding: "8px 12px", background: "rgba(29,78,216,0.06)", borderRadius: 8, fontSize: 11.5, color: "#1D4ED8", lineHeight: 1.5 }}>
@@ -515,6 +585,11 @@ function BillingPage() {
                                     {paymentPurpose === "akuntansi_pajak" && (
                                         <div style={{ marginTop: 6, padding: "8px 12px", background: "#f7efe5", borderRadius: 8, fontSize: 11.5, color: "#7a563f", lineHeight: 1.5 }}>
                                             Bayar Rp7.750.000 melalui QRIS pada Portal Pembayaran di atas, lalu unggah bukti. Invoice dibuat setelah Faisal menekan Konfirmasi pembayaran.
+                                        </div>
+                                    )}
+                                    {paymentPurpose === "pembukaan_cabang_migrasi_server" && (
+                                        <div style={{ marginTop: 6, padding: "8px 12px", background: "#f7efe5", borderRadius: 8, fontSize: 11.5, color: "#7a563f", lineHeight: 1.5 }}>
+                                            Tagihan Rp17.500.000 untuk pembukaan menu cabang, migrasi server, dan pemeliharaan awal. Invoice resmi dibuat setelah bukti diverifikasi owner.
                                         </div>
                                     )}
                                 </div>
@@ -578,8 +653,8 @@ function BillingPage() {
                             {history.length > 0 ? history.map(item => (
                                 <tr key={item.order_id} style={{ borderBottom: "1px solid #f5f3f0" }}>
                                     <td style={{ padding: "14px 16px", fontSize: 13, fontWeight: 500 }}>{format(new Date(item.created_at), 'dd MMM yyyy')}</td>
-                                    <td style={{ padding: "14px 16px", fontSize: 11, textTransform: "uppercase", fontWeight: 700, color: item.payment_type === 'absensi_activation' ? "#1D4ED8" : item.payment_type === ACCOUNTING_TAX_BILLING.paymentType ? "#7a563f" : "#8a7e72" }}>
-                                        {item.payment_type === 'initial' ? 'Setup + Lisensi' : item.payment_type === 'absensi_activation' ? '📋 Aktivasi Absensi' : item.payment_type === ACCOUNTING_TAX_BILLING.paymentType ? '▤ Akuntansi & Perpajakan' : item.payment_type === 'extend_5m' ? '🗓️ Langganan 5 Bulan' : 'Langganan Bulanan'}
+                                    <td style={{ padding: "14px 16px", fontSize: 11, textTransform: "uppercase", fontWeight: 700, color: item.payment_type === 'absensi_activation' ? "#1D4ED8" : item.payment_type === ACCOUNTING_TAX_BILLING.paymentType || item.payment_type === BRANCH_EXPANSION_BILLING.paymentType ? "#7a563f" : "#8a7e72" }}>
+                                        {item.payment_type === 'initial' ? 'Setup + Lisensi' : item.payment_type === 'absensi_activation' ? '📋 Aktivasi Absensi' : item.payment_type === ACCOUNTING_TAX_BILLING.paymentType ? '▤ Akuntansi & Perpajakan' : item.payment_type === BRANCH_EXPANSION_BILLING.paymentType ? '⌘ Pembukaan Cabang & Migrasi Server' : item.payment_type === 'extend_5m' ? '🗓️ Langganan 5 Bulan' : 'Langganan Bulanan'}
                                     </td>
                                     <td style={{ padding: "14px 16px", fontSize: 13, fontWeight: 700, fontFamily: "'Playfair Display', serif" }}>{formatCurrency(item.amount)}</td>
                                     <td style={{ padding: "14px 16px", textAlign: "center" }}>
@@ -614,8 +689,8 @@ function BillingPage() {
                                 <div><div style={{ fontSize: 10, fontWeight: 700, color: "#a09488", textTransform: "uppercase", marginBottom: 2 }}>Tanggal</div><div style={{ fontSize: 13, color: "#3a2e25" }}>{format(new Date(report.created_at), "dd MMM yyyy HH:mm", { locale: localeId })}</div></div>
                                 <div>
                                     <div style={{ fontSize: 10, fontWeight: 700, color: "#a09488", textTransform: "uppercase", marginBottom: 4 }}>Keperluan</div>
-                                    <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, background: report.type === "aktivasi_absensi" ? "rgba(29,78,216,0.1)" : report.type === "akuntansi_pajak" ? "#f7efe5" : "rgba(90,143,110,0.1)", color: report.type === "aktivasi_absensi" ? "#1D4ED8" : report.type === "akuntansi_pajak" ? "#7a563f" : "#3d6b50" }}>
-                                        {report.type === "aktivasi_absensi" ? "📋 Aktivasi Absensi" : report.type === "akuntansi_pajak" ? "▤ Akuntansi & Perpajakan" : "🔄 Perpanjang Web App"}
+                                    <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, background: report.type === "aktivasi_absensi" ? "rgba(29,78,216,0.1)" : report.type === "akuntansi_pajak" || report.type === "pembukaan_cabang_migrasi_server" ? "#f7efe5" : "rgba(90,143,110,0.1)", color: report.type === "aktivasi_absensi" ? "#1D4ED8" : report.type === "akuntansi_pajak" || report.type === "pembukaan_cabang_migrasi_server" ? "#7a563f" : "#3d6b50" }}>
+                                        {report.type === "aktivasi_absensi" ? "📋 Aktivasi Absensi" : report.type === "akuntansi_pajak" ? "▤ Akuntansi & Perpajakan" : report.type === "pembukaan_cabang_migrasi_server" ? "⌘ Pembukaan Cabang & Migrasi Server" : "🔄 Perpanjang Web App"}
                                     </span>
                                 </div>
                                 {report.notes && <div style={{ gridColumn: "span 4" }}><div style={{ fontSize: 10, fontWeight: 700, color: "#a09488", textTransform: "uppercase", marginBottom: 2 }}>Catatan</div><div style={{ fontSize: 13, color: "#4a4440" }}>{report.notes}</div></div>}
@@ -643,6 +718,11 @@ function BillingPage() {
                                     <button onClick={() => confirmAccountingTax(report.id)} disabled={confirmingAccountingTax} style={{ background: "#5C4033", color: "white", border: "none", padding: "10px 20px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: confirmingAccountingTax ? "wait" : "pointer", boxShadow: "0 4px 10px rgba(92,64,51,0.2)", display: "flex", alignItems: "center", gap: 7 }}>
                                         {confirmingAccountingTax ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
                                         {confirmingAccountingTax ? "Memproses..." : "Konfirmasi & buat invoice"}
+                                    </button>
+                                ) : report.type === "pembukaan_cabang_migrasi_server" ? (
+                                    <button onClick={() => confirmBranchExpansion(report.id)} disabled={confirmingBranchExpansion} style={{ background: "#5C4033", color: "white", border: "none", padding: "10px 20px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: confirmingBranchExpansion ? "wait" : "pointer", boxShadow: "0 4px 10px rgba(92,64,51,0.2)", display: "flex", alignItems: "center", gap: 7 }}>
+                                        {confirmingBranchExpansion ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                                        {confirmingBranchExpansion ? "Memproses..." : "Konfirmasi & buat invoice"}
                                     </button>
                                 ) : (
                                     <button onClick={() => approveManual(report.id)} style={{ background: "#5a8f6e", color: "white", border: "none", padding: "10px 20px", borderRadius: 8, fontSize: 11, fontWeight: 700, textTransform: "uppercase", cursor: "pointer", boxShadow: "0 4px 10px rgba(90,143,110,0.2)" }}>
@@ -786,7 +866,7 @@ function BillingPage() {
                             <div className="cert-title">
                                 <h2>Payment Successful Notice</h2>
                                 <p className="text-[10px] text-gray-400 mt-1">
-                                    {selectedInvoice.payment_type === ACCOUNTING_TAX_BILLING.paymentType
+                                    {selectedInvoice.payment_type === ACCOUNTING_TAX_BILLING.paymentType || selectedInvoice.payment_type === BRANCH_EXPANSION_BILLING.paymentType
                                         ? "Dokumen ini merupakan pengakuan resmi atas pembayaran pengembangan fitur ERP."
                                         : "Dokumen ini merupakan pengakuan resmi atas transaksi lisensi aktif."}
                                 </p>
@@ -821,6 +901,22 @@ function BillingPage() {
                                         <div className="cert-row !border-none !mb-1">
                                             <span style={{ fontSize: 10, color: "#6b7280", maxWidth: "72%" }}>Pembuatan dan implementasi menu, integrasi data keuangan ERP, serta dukungan alur kerja pelaporan Coretax</span>
                                             <span style={{ fontSize: 11, fontWeight: 900 }}>{formatCurrency(ACCOUNTING_TAX_BILLING.amount)}</span>
+                                        </div>
+                                    </div>
+                                ) : selectedInvoice.payment_type === BRANCH_EXPANSION_BILLING.paymentType ? (
+                                    <div className="mt-4 pt-4 border-t border-dashed border-gray-200">
+                                        <div className="cert-row">
+                                            <span className="cert-label">Jenis Layanan</span>
+                                            <span className="cert-value uppercase">Pembukaan Menu Cabang &amp; Migrasi Server</span>
+                                        </div>
+                                        <div className="cert-row">
+                                            <span className="cert-label">Nomor Invoice</span>
+                                            <span className="cert-value">{BRANCH_EXPANSION_BILLING.invoiceNumber}</span>
+                                        </div>
+                                        <p className="cert-label mb-2">Rincian Pekerjaan:</p>
+                                        <div className="cert-row !border-none !mb-1">
+                                            <span style={{ fontSize: 10, color: "#6b7280", maxWidth: "72%" }}>{BRANCH_EXPANSION_BILLING.description}</span>
+                                            <span style={{ fontSize: 11, fontWeight: 900 }}>{formatCurrency(BRANCH_EXPANSION_BILLING.amount)}</span>
                                         </div>
                                     </div>
                                 ) : selectedInvoice.payment_type === 'initial' ? (

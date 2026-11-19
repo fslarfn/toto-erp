@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 import { FileText, Printer, Loader2 } from "lucide-react";
 import { ACCOUNTING_TAX_BILLING } from "@/lib/billing/accounting-tax";
+import { BRANCH_EXPANSION_BILLING } from "@/lib/billing/branch-expansion";
 
 export default function PublicInvoicePage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
@@ -45,6 +46,17 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ id: st
     }
 
     const isAccountingTaxPayment = invoice.payment_type === ACCOUNTING_TAX_BILLING.paymentType;
+    const isBranchExpansionPayment = invoice.payment_type === BRANCH_EXPANSION_BILLING.paymentType;
+    const serviceTitle = isAccountingTaxPayment
+        ? ACCOUNTING_TAX_BILLING.title
+        : isBranchExpansionPayment
+            ? BRANCH_EXPANSION_BILLING.title
+            : "Langganan Toto ERP";
+    const serviceDescription = isAccountingTaxPayment
+        ? ACCOUNTING_TAX_BILLING.description
+        : isBranchExpansionPayment
+            ? BRANCH_EXPANSION_BILLING.description
+            : "Lisensi valid untuk 7 Akun Pengguna Terdaftar";
 
     return (
         <div className="min-h-screen bg-gray-100 py-10 px-4 flex flex-col items-center print:bg-white print:py-0">
@@ -95,7 +107,7 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ id: st
                         </div>
                         <div className="flex gap-4">
                             <span className="text-slate-400 font-bold uppercase text-[9px] w-16">Keterangan</span>
-                            <span className="text-slate-500 italic">{isAccountingTaxPayment ? ACCOUNTING_TAX_BILLING.title : "Langganan Toto ERP"}</span>
+                            <span className="text-slate-500 italic">{serviceTitle}</span>
                         </div>
                     </div>
                 </div>
@@ -113,14 +125,14 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ id: st
                         <tr className="border-b border-slate-50">
                             <td className="py-6">
                                 <p className="font-bold text-base text-slate-800">
-                                    {isAccountingTaxPayment
-                                        ? ACCOUNTING_TAX_BILLING.title
+                                    {isAccountingTaxPayment || isBranchExpansionPayment
+                                        ? serviceTitle
                                         : invoice.payment_type === 'initial'
                                             ? "Setup Biaya Server + Lisensi Digital (2 Bulan)"
                                             : "Perpanjangan Masa Aktif Lisensi ERP (30 Hari)"}
                                 </p>
                                 <p className="text-[10px] text-slate-400 mt-1 italic">
-                                    {isAccountingTaxPayment ? ACCOUNTING_TAX_BILLING.description : "Lisensi valid untuk 7 Akun Pengguna Terdaftar"}
+                                    {serviceDescription}
                                 </p>
                             </td>
                             <td className="py-6 text-right font-bold text-slate-700">1</td>

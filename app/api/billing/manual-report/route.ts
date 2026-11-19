@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { ACCOUNTING_TAX_BILLING } from "@/lib/billing/accounting-tax";
+import { BRANCH_EXPANSION_BILLING } from "@/lib/billing/branch-expansion";
 
 function getServiceSupabase() {
   return createClient(
@@ -27,11 +28,16 @@ export async function POST(req: Request) {
     // Aktivasi absensi harus menyertakan bukti bayar
     const isAbsensi = type === "aktivasi_absensi";
     const isAccountingTax = type === "akuntansi_pajak";
-    if ((isAbsensi || isAccountingTax) && !bukti_url) {
+    const isBranchExpansion = type === "pembukaan_cabang_migrasi_server";
+    if ((isAbsensi || isAccountingTax || isBranchExpansion) && !bukti_url) {
       return NextResponse.json({ error: "Bukti transfer wajib untuk pembayaran ini" }, { status: 400 });
     }
 
-    const effectiveAmount = isAccountingTax ? ACCOUNTING_TAX_BILLING.amount : Number(amount);
+    const effectiveAmount = isAccountingTax
+      ? ACCOUNTING_TAX_BILLING.amount
+      : isBranchExpansion
+        ? BRANCH_EXPANSION_BILLING.amount
+        : Number(amount);
 
     const supabase = getServiceSupabase();
 
@@ -44,6 +50,18 @@ export async function POST(req: Request) {
       if (paidInvoiceError) throw paidInvoiceError;
       if (paidInvoice) {
         return NextResponse.json({ error: "Pembayaran Akuntansi & Perpajakan sudah dikonfirmasi." }, { status: 409 });
+      }
+    }
+
+    if (isBranchExpansion) {
+      const { data: paidInvoice, error: paidInvoiceError } = await supabase
+        .from("billing_history")
+        .select("id")
+        .eq("order_id", BRANCH_EXPANSION_BILLING.orderId)
+        .maybeSingle();
+      if (paidInvoiceError) throw paidInvoiceError;
+      if (paidInvoice) {
+        return NextResponse.json({ error: "Pembayaran pembukaan cabang & migrasi server sudah dikonfirmasi." }, { status: 409 });
       }
     }
 
