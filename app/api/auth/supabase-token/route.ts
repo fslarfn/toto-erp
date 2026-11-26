@@ -34,7 +34,7 @@ export async function GET(req: Request) {
   const exp = Math.floor(Date.now() / 1000) + ttlSeconds;
 
   const token = await new SignJWT({
-    role: "authenticated",     // dipakai PostgREST/Realtime untuk memilih role DB
+    role: userRole === "sidoarjo_manager" ? "sidoarjo_manager" : "authenticated",     // dipakai PostgREST/Realtime untuk memilih role DB
     user_role: userRole,       // peran aplikasi (owner/finance/...) untuk RLS berbasis peran
     username,
   })
