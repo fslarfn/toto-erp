@@ -30,7 +30,7 @@ export async function POST(req: Request) {
 
     const { data: user } = await supabase
       .from("app_users")
-      .select("id, password_hash")
+      .select("id, password_hash, role")
       .eq("id", userId)
       .single();
 
@@ -38,12 +38,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "User tidak ditemukan" }, { status: 404 });
     }
 
-    // Verifikasi password lama (support bcrypt dan plain text legacy)
-    const isBcrypt = user.password_hash.startsWith("$2");
+    const isSidoarjoManager = user.role === "sidoarjo_manager";
+    let passwordHash = user.password_hash;
+    if (isSidoarjoManager) {
+      const { data: credentials, error } = await supabase
+        .from("sidoarjo_manager_credentials")
+        .select("password_hash")
+        .eq("user_id", userId)
+        .single();
+      if (error || !credentials?.password_hash.startsWith("$2")) {
+        return NextResponse.json({ error: "Kredensial tidak tersedia" }, { status: 503 });
+      }
+      passwordHash = credentials.password_hash;
+    }
+
+    const isBcrypt = passwordHash.startsWith("$2");
     let isMatch = false;
 
     if (isBcrypt) {
-      isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+      isMatch = await bcrypt.compare(currentPassword, passwordHash);
     } else {
       isMatch = user.password_hash === currentPassword;
     }
@@ -55,9 +68,9 @@ export async function POST(req: Request) {
     const hashedNew = await bcrypt.hash(newPassword, 12);
 
     const { error } = await supabase
-      .from("app_users")
+      .from(isSidoarjoManager ? "sidoarjo_manager_credentials" : "app_users")
       .update({ password_hash: hashedNew })
-      .eq("id", userId);
+      .eq(isSidoarjoManager ? "user_id" : "id", userId);
 
     if (error) throw error;
 

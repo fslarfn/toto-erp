@@ -15,6 +15,13 @@ const PUBLIC_PREFIXES = [
   "/api/alucurv/absensi/",
 ];
 
+const SIDOARJO_DASHBOARD = "/dashboard/sidoarjo";
+const SIDOARJO_SESSION_ENDPOINTS = new Set([
+  "/api/auth/supabase-token",
+  "/api/auth/change-password",
+  "/api/profile/update",
+]);
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -32,6 +39,20 @@ export async function proxy(request: NextRequest) {
 
   try {
     const session = await verifySession(token);
+    if (session.role === "sidoarjo_manager") {
+      if (pathname.startsWith("/api/") && !SIDOARJO_SESSION_ENDPOINTS.has(pathname)) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+
+      if (
+        !pathname.startsWith("/api/") &&
+        pathname !== SIDOARJO_DASHBOARD &&
+        !pathname.startsWith(SIDOARJO_DASHBOARD + "/")
+      ) {
+        return NextResponse.redirect(new URL(SIDOARJO_DASHBOARD, request.url));
+      }
+    }
+
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set("x-user-id", session.userId);
     requestHeaders.set("x-user-role", session.role);

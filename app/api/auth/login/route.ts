@@ -40,12 +40,35 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Username atau password salah." }, { status: 401 });
     }
 
-    // Cek apakah password sudah di-hash bcrypt atau masih plain text
-    const isBcrypt = user.password_hash.startsWith("$2");
+    let passwordHash = user.password_hash;
+    if (user.role === "sidoarjo_manager") {
+      const { data: membership, error: membershipError } = await supabase
+        .from("user_workspaces")
+        .select("user_id")
+        .eq("user_id", user.id)
+        .eq("workspace", "sidoarjo")
+        .eq("role", "manager")
+        .maybeSingle();
+      const { data: credentials, error: credentialsError } = await supabase
+        .from("sidoarjo_manager_credentials")
+        .select("password_hash")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (membershipError || credentialsError) {
+        return NextResponse.json({ error: "Layanan login sedang bermasalah." }, { status: 503 });
+      }
+      if (!membership || !credentials?.password_hash.startsWith("$2")) {
+        return NextResponse.json({ error: "Username atau password salah." }, { status: 401 });
+      }
+      passwordHash = credentials.password_hash;
+    }
+
+    const isBcrypt = passwordHash.startsWith("$2");
     let passwordMatch = false;
 
     if (isBcrypt) {
-      passwordMatch = await bcrypt.compare(password, user.password_hash);
+      passwordMatch = await bcrypt.compare(password, passwordHash);
     } else {
       // Legacy: plain text — bandingkan langsung
       passwordMatch = user.password_hash === password;
