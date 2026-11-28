@@ -4,7 +4,7 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useAuth, getRoleDisplay } from "@/lib/auth";
 import { useLicense } from "@/lib/license-store";
-import { useWorkspace, getWorkspaceFromPath } from "@/lib/workspace-store";
+import { useWorkspace, getWorkspaceFromPath, type WorkspaceRole } from "@/lib/workspace-store";
 import WorkspaceSwitcher from "@/components/layout/WorkspaceSwitcher";
 import { PesananProvider } from "@/lib/pesanan-store";
 import { SuratJalanProvider } from "@/lib/surat-jalan-store";
@@ -117,52 +117,64 @@ const SIDOARJO_NAV_ITEMS = [
     {
         section: "Menu Utama",
         items: [
-            { href: "/dashboard/sidoarjo", label: "Dashboard Cabang", icon: HomeIcon },
-            { href: "/dashboard/sidoarjo/pesanan", label: "Input Pesanan", icon: ClipboardIcon },
-            { href: "/dashboard/sidoarjo/status-barang", label: "Status Barang", icon: PackageIcon },
-            { href: "/dashboard/sidoarjo/kalender", label: "Kalender Operasional", icon: CalendarIcon },
+            { href: "/dashboard/sidoarjo", label: "Dashboard Cabang", module: "dashboard", icon: HomeIcon },
+            { href: "/dashboard/sidoarjo/pesanan", label: "Input Pesanan", module: "pesanan", icon: ClipboardIcon },
+            { href: "/dashboard/sidoarjo/status-barang", label: "Status Barang", module: "status-barang", icon: PackageIcon },
+            { href: "/dashboard/sidoarjo/kalender", label: "Kalender Operasional", module: "kalender", icon: CalendarIcon },
         ],
     },
     {
         section: "Keuangan",
         items: [
-            { href: "/dashboard/sidoarjo/crm", label: "CRM Customer", icon: CustomerIcon },
-            { href: "/dashboard/sidoarjo/penawaran", label: "Penawaran", icon: PenawaranIcon },
-            { href: "/dashboard/sidoarjo/invoice", label: "Invoice", icon: InvoiceIcon },
-            { href: "/dashboard/sidoarjo/tagihan", label: "Tagihan", icon: TagihanIcon },
-            { href: "/dashboard/sidoarjo/tagihan-bahan", label: "Tagihan Bahan Baku", icon: BoxIcon },
-            { href: "/dashboard/sidoarjo/hpp", label: "HPP Barang", icon: CalculatorIcon },
-            { href: "/dashboard/sidoarjo/laporan", label: "Laporan", icon: BarChartIcon },
-            { href: "/dashboard/sidoarjo/keuangan", label: "Keuangan", icon: WalletIcon },
-            { href: "/dashboard/sidoarjo/pajak", label: "Akuntansi & Pajak", icon: CalculatorIcon },
+            { href: "/dashboard/sidoarjo/crm", label: "CRM Customer", module: "crm", icon: CustomerIcon },
+            { href: "/dashboard/sidoarjo/penawaran", label: "Penawaran", module: "keuangan", icon: PenawaranIcon },
+            { href: "/dashboard/sidoarjo/invoice", label: "Invoice", module: "keuangan", icon: InvoiceIcon },
+            { href: "/dashboard/sidoarjo/tagihan", label: "Tagihan", module: "keuangan", icon: TagihanIcon },
+            { href: "/dashboard/sidoarjo/tagihan-bahan", label: "Tagihan Bahan Baku", module: "keuangan", icon: BoxIcon },
+            { href: "/dashboard/sidoarjo/hpp", label: "HPP Barang", module: "pajak", icon: CalculatorIcon },
+            { href: "/dashboard/sidoarjo/laporan", label: "Laporan", module: "keuangan", icon: BarChartIcon },
+            { href: "/dashboard/sidoarjo/keuangan", label: "Keuangan", module: "keuangan", icon: WalletIcon },
+            { href: "/dashboard/sidoarjo/pajak", label: "Akuntansi & Pajak", module: "pajak", icon: CalculatorIcon },
         ],
     },
     {
         section: "Gudang & Produksi",
         items: [
-            { href: "/dashboard/sidoarjo/stok-bahan", label: "Stok Bahan", icon: BoxIcon },
-            { href: "/dashboard/sidoarjo/sj-bahan", label: "SJ Bahan Baku", icon: ColorPaletteIcon },
-            { href: "/dashboard/sidoarjo/produksi", label: "Alur Pesanan", icon: FactoryIcon },
-            { href: "/dashboard/sidoarjo/print-po", label: "Print PO", icon: PrinterIcon },
-            { href: "/dashboard/sidoarjo/surat-jalan", label: "Surat Jalan", icon: TruckIcon },
+            { href: "/dashboard/sidoarjo/stok-bahan", label: "Stok Bahan", module: "stok-bahan", icon: BoxIcon },
+            { href: "/dashboard/sidoarjo/sj-bahan", label: "SJ Bahan Baku", module: "stok-bahan", icon: ColorPaletteIcon },
+            { href: "/dashboard/sidoarjo/produksi", label: "Alur Pesanan", module: "produksi", icon: FactoryIcon },
+            { href: "/dashboard/sidoarjo/print-po", label: "Print PO", module: "produksi", icon: PrinterIcon },
+            { href: "/dashboard/sidoarjo/surat-jalan", label: "Surat Jalan", module: "produksi", icon: TruckIcon },
         ],
     },
     {
         section: "SDM",
         items: [
-            { href: "/dashboard/sidoarjo/karyawan", label: "Karyawan", icon: KaryawanIcon },
-            { href: "/dashboard/sidoarjo/absensi", label: "Absensi", icon: AbsensiIcon },
-            { href: "/dashboard/sidoarjo/absensi/edit", label: "Edit Absen", icon: EditAbsenIcon },
-            { href: "/dashboard/sidoarjo/gaji", label: "Gaji & Slip", icon: WalletIcon },
+            { href: "/dashboard/sidoarjo/karyawan", label: "Karyawan", module: "karyawan", icon: KaryawanIcon },
+            { href: "/dashboard/sidoarjo/absensi", label: "Absensi", module: "absensi", icon: AbsensiIcon },
+            { href: "/dashboard/sidoarjo/absensi/edit", label: "Edit Absen", module: "absensi-edit", icon: EditAbsenIcon },
+            { href: "/dashboard/sidoarjo/gaji", label: "Gaji & Slip", module: "keuangan", icon: WalletIcon },
         ],
     },
     {
         section: "Administrasi",
         items: [
-            { href: "/dashboard/sidoarjo/akun", label: "Akun Saya", icon: UserCircleIcon },
+            { href: "/dashboard/sidoarjo/akun", label: "Akun Saya", module: "any", icon: UserCircleIcon },
         ],
     },
 ];
+
+const SIDOARJO_ROLE_ACCESS: Record<WorkspaceRole, readonly string[]> = {
+    owner: ["*"],
+    manager: ["*"],
+    // Finance mengikuti cakupan kerja finance Toto Pusat, tetapi tidak dapat
+    // mengubah absensi manual cabang.
+    finance: ["dashboard", "pesanan", "status-barang", "kalender", "crm", "keuangan", "pajak", "stok-bahan", "produksi", "karyawan", "absensi", "any"],
+    sales: ["pesanan", "status-barang", "kalender", "crm", "any"],
+    produksi: ["dashboard", "pesanan", "status-barang", "kalender", "stok-bahan", "produksi", "any"],
+    barang: ["dashboard", "pesanan", "status-barang", "kalender", "stok-bahan", "produksi", "any"],
+    finishing: ["status-barang", "produksi", "any"],
+};
 
 const GABUNGAN_NAV_ITEMS = [
     {
@@ -210,6 +222,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const hasActiveWorkspace = activeWorkspace === "gabungan"
         ? canViewGabungan
         : hasWorkspace(activeWorkspace);
+    const sidoarjoRole = memberships.find((membership) => membership.workspace === "sidoarjo")?.role;
+    const canShowSidoarjoItem = (item: (typeof SIDOARJO_NAV_ITEMS)[number]["items"][number]) => {
+        if (!sidoarjoRole) return false;
+        const allowed = SIDOARJO_ROLE_ACCESS[sidoarjoRole];
+        return allowed.includes("*") || allowed.includes(item.module);
+    };
+    const activeSidoarjoItem = SIDOARJO_NAV_ITEMS
+        .flatMap((group) => group.items)
+        .filter((item) => pathname === item.href || (item.href !== "/dashboard/sidoarjo" && pathname.startsWith(`${item.href}/`)))
+        .sort((a, b) => b.href.length - a.href.length)[0];
+    const hasSidoarjoPageAccess = activeWorkspace !== "sidoarjo"
+        || Boolean(activeSidoarjoItem && canShowSidoarjoItem(activeSidoarjoItem));
 
     useEffect(() => {
         if (!user) router.replace("/login");
@@ -220,12 +244,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             // Pengaman ini melengkapi RLS; apabila membership belum tersedia
             // (mis. saat migrasi awal), perilaku lama tetap tidak terputus.
             router.replace(nonPusatHome);
+        } else if (!workspaceLoading && activeWorkspace === "sidoarjo" && !hasSidoarjoPageAccess) {
+            // Menyembunyikan menu saja tidak cukup: URL yang ditempel langsung
+            // juga harus kembali ke dashboard cabang bila role tidak berhak.
+            router.replace("/dashboard/sidoarjo");
         } else if (restrictedToNonPusat && !pathname.startsWith("/dashboard/alucurv") && !pathname.startsWith("/dashboard/sidoarjo") && !pathname.startsWith("/dashboard/gabungan")) {
             router.replace(nonPusatHome);
         } else if (!isFinishing && !restrictedToNonPusat && license && !license.is_setup_completed) {
             setShowTrialModal(true);
         }
-    }, [user, router, license, isFinishing, restrictedToNonPusat, nonPusatHome, pathname, workspaceLoading, memberships.length, hasActiveWorkspace]);
+    }, [user, router, license, isFinishing, restrictedToNonPusat, nonPusatHome, pathname, workspaceLoading, memberships.length, hasActiveWorkspace, activeWorkspace, hasSidoarjoPageAccess]);
 
     if (!user) return null;
     // Tahan render sampai redirect selesai agar tidak crash di provider
@@ -310,16 +338,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const searchableMenuItems: GlobalSearchMenuItem[] = (
         activeWorkspace === "toto"
             ? NAV_ITEMS.flatMap((group) => group.items.filter(canShowTotoItem).map((item) => ({ href: item.href, label: item.label, section: group.section })))
-            : (activeWorkspace === "alucurv" ? ALUCURV_NAV_ITEMS : activeWorkspace === "sidoarjo" ? SIDOARJO_NAV_ITEMS : GABUNGAN_NAV_ITEMS)
+            : (activeWorkspace === "alucurv" ? ALUCURV_NAV_ITEMS : activeWorkspace === "sidoarjo" ? SIDOARJO_NAV_ITEMS.map((group) => ({ ...group, items: group.items.filter(canShowSidoarjoItem) })) : GABUNGAN_NAV_ITEMS)
                 .flatMap((group) => group.items.map((item) => ({ href: item.href, label: item.label, section: group.section })))
     );
 
     return (
         <PesananProvider>
             <SuratJalanProvider>
-                <SJBahanProvider>
-                    <TagihanBahanProvider>
-                        <QuotationProvider>
+                <SJBahanProvider key={`sj-bahan-${activeWorkspace}`} operatingUnit={activeWorkspace === "sidoarjo" ? "toto_sidoarjo" : "toto_pusat"}>
+                    <TagihanBahanProvider key={`tagihan-bahan-${activeWorkspace}`} operatingUnit={activeWorkspace === "sidoarjo" ? "toto_sidoarjo" : "toto_pusat"}>
+                        <QuotationProvider key={`quotation-${activeWorkspace}`} operatingUnit={activeWorkspace === "sidoarjo" ? "toto_sidoarjo" : "toto_pusat"}>
                         <CrmProvider>
                 <div id="app-container" className={containerClass} style={{ background: isCockpit ? "#F5EBDD" : "var(--bg)" }}>
                     {/* Mobile Backdrop */}
@@ -362,7 +390,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                     </div>
                                 );
                             })}
-                            {activeWorkspace !== "toto" && (activeWorkspace === "alucurv" ? ALUCURV_NAV_ITEMS : activeWorkspace === "sidoarjo" ? SIDOARJO_NAV_ITEMS : GABUNGAN_NAV_ITEMS).map((group) => (
+                            {activeWorkspace !== "toto" && (activeWorkspace === "alucurv" ? ALUCURV_NAV_ITEMS : activeWorkspace === "sidoarjo" ? SIDOARJO_NAV_ITEMS.map((group) => ({ ...group, items: group.items.filter(canShowSidoarjoItem) })) : GABUNGAN_NAV_ITEMS).map((group) => (
+                                group.items.length > 0 &&
                                 <div key={group.section}>
                                     <div className="section-label">{group.section}</div>
                                     {group.items.map((item) => {

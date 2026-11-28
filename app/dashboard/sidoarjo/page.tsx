@@ -3,17 +3,28 @@
 import Link from "next/link";
 
 const MODULES = [
-    ["Data Karyawan", "Karyawan Sidoarjo sudah siap diisi dan tidak bercampur dengan HR pusat.", "/dashboard/sidoarjo/karyawan", "Siap digunakan"],
+    ["CRM Customer", "Pantau customer dan riwayat pesanan khusus Sidoarjo.", "/dashboard/sidoarjo/crm", "Siap digunakan"],
     ["Input Pesanan", "Masukkan pesanan cabang secara manual; setiap baris otomatis disimpan sebagai data Sidoarjo.", "/dashboard/sidoarjo/pesanan", "Siap digunakan"],
     ["Status Barang", "Progres produksi cabang tanpa menampilkan PO Toto Pusat.", "/dashboard/sidoarjo/status-barang", "Siap digunakan"],
+    ["Kalender Operasional", "Atur dan pantau jadwal kerja operasional cabang.", "/dashboard/sidoarjo/kalender", "Siap digunakan"],
+    ["Penawaran", "Buat penawaran harga dengan nomor dan riwayat khusus cabang.", "/dashboard/sidoarjo/penawaran", "Siap digunakan"],
     ["Invoice", "Invoice cabang dibuat dari nomor invoice pada pesanan Sidoarjo.", "/dashboard/sidoarjo/invoice", "Siap digunakan"],
     ["Tagihan", "Pantau pembayaran cabang dan tandai lunas setelah penerimaan diterima.", "/dashboard/sidoarjo/tagihan", "Siap digunakan"],
+    ["Tagihan Bahan Baku", "Catat tagihan supplier bahan cabang beserta status pembayarannya.", "/dashboard/sidoarjo/tagihan-bahan", "Siap digunakan"],
+    ["HPP Barang", "Hitung dan simpan harga pokok per meter untuk barang Sidoarjo.", "/dashboard/sidoarjo/hpp", "Siap digunakan"],
+    ["Akuntansi & Pajak", "Review perlakuan pajak transaksi cabang per periode.", "/dashboard/sidoarjo/pajak", "Siap digunakan"],
     ["Surat Jalan", "Catat dan pantau pengiriman barang khusus Sidoarjo.", "/dashboard/sidoarjo/surat-jalan", "Siap digunakan"],
     ["Keuangan", "Rekening, kas, dan transaksi khusus Sidoarjo.", "/dashboard/sidoarjo/keuangan", "Siap digunakan"],
     ["Stok Bahan", "Persediaan Sidoarjo berdiri sendiri dari gudang pusat.", "/dashboard/sidoarjo/stok-bahan", "Siap digunakan"],
+    ["SJ Bahan Baku", "Buat surat jalan bahan untuk proses warna/produksi cabang.", "/dashboard/sidoarjo/sj-bahan", "Siap digunakan"],
+    ["Alur Pesanan", "Pantau perpindahan pesanan dari produksi sampai pengiriman.", "/dashboard/sidoarjo/produksi", "Siap digunakan"],
+    ["Print PO", "Cetak daftar produksi cabang dari pesanan yang dipilih.", "/dashboard/sidoarjo/print-po", "Siap digunakan"],
+    ["Data Karyawan", "Karyawan Sidoarjo sudah siap diisi dan tidak bercampur dengan HR pusat.", "/dashboard/sidoarjo/karyawan", "Siap digunakan"],
     ["Karyawan & Absensi", "Rekap selfie masuk/pulang cabang. Karyawan dan absensi selalu terpisah dari pusat.", "/dashboard/sidoarjo/absensi", "Siap digunakan"],
+    ["Edit Absen", "Koreksi data kehadiran cabang sesuai kewenangan pengguna.", "/dashboard/sidoarjo/absensi/edit", "Siap digunakan"],
     ["Gaji & Slip", "Hitung gaji cabang dari absensi, dengan aturan khusus gaji pokok tetap.", "/dashboard/sidoarjo/gaji", "Siap digunakan"],
     ["Laporan Cabang", "Laporan operasional dan keuangan unit untuk dipantau owner.", "/dashboard/sidoarjo/laporan", "Siap digunakan"],
+    ["Akun Saya", "Kelola profil dan keamanan akun tanpa mengubah data unit lain.", "/dashboard/sidoarjo/akun", "Siap digunakan"],
 ];
 
 /**

@@ -92,7 +92,7 @@ async function fetchAllTagihanItems(ids: string[]): Promise<Record<string, unkno
     return all;
 }
 
-export function TagihanBahanProvider({ children }: { children: ReactNode }) {
+export function TagihanBahanProvider({ children, operatingUnit = "toto_pusat" }: { children: ReactNode; operatingUnit?: string }) {
     const [tagihanList, setTagihanList] = useState<TagihanBahan[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -119,6 +119,7 @@ export function TagihanBahanProvider({ children }: { children: ReactNode }) {
                 while (true) {
                     const { data, error } = await supabase
                         .from("tagihan_bahan").select("*")
+                        .eq("operating_unit", operatingUnit)
                         .order("tanggal", { ascending: false })
                         .range(from, from + 999);
                     if (error) { console.error("Error fetching tagihan_bahan:", error); break; }
@@ -140,7 +141,7 @@ export function TagihanBahanProvider({ children }: { children: ReactNode }) {
                 if (!cancelled()) setLoading(false);
             }
         })();
-    }, []);
+    }, [operatingUnit]);
 
     // Realtime Subscriptions — ikut lazy: baru connect setelah data mulai dimuat.
     useEffect(() => {
@@ -151,6 +152,7 @@ export function TagihanBahanProvider({ children }: { children: ReactNode }) {
             .on("postgres_changes", { event: "*", schema: "public", table: "tagihan_bahan" }, (payload) => {
                 const { eventType, new: n, old: o } = payload;
                 if (eventType === "INSERT") {
+                    if ((n as { operating_unit?: string }).operating_unit !== operatingUnit) return;
                     // Idempoten: hindari dobel bila sudah ditambah optimistic di addTagihan.
                     setTagihanList(prev => prev.some(x => x.id === (n as { id: string }).id) ? prev : [dbToTagihan(n, []), ...prev]);
                 } else if (eventType === "UPDATE") {
@@ -185,7 +187,7 @@ export function TagihanBahanProvider({ children }: { children: ReactNode }) {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [started]);
+    }, [started, operatingUnit]);
 
     const addTagihan = useCallback((t: Omit<TagihanBahan, "id">): string => {
         const id = `TB-${Date.now()}`;
@@ -204,6 +206,7 @@ export function TagihanBahanProvider({ children }: { children: ReactNode }) {
                 paid_amount: t.paidAmount,
                 is_paid: t.isPaid,
                 paid_date: t.paidDate,
+                operating_unit: operatingUnit,
             });
             if (t.items.length > 0) {
                 await supabase.from("tagihan_bahan_items").insert(
@@ -220,7 +223,7 @@ export function TagihanBahanProvider({ children }: { children: ReactNode }) {
             }
         })();
         return id;
-    }, []);
+    }, [operatingUnit]);
 
     const updateTagihan = useCallback((id: string, updates: Partial<TagihanBahan>) => {
         setTagihanList(prev => prev.map(t => (t.id === id ? { ...t, ...updates } : t)));

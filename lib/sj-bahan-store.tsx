@@ -84,7 +84,7 @@ async function fetchAllSJBahanItems(ids: string[]): Promise<Record<string, unkno
 
 const SJBahanCtx = createContext<Ctx | null>(null);
 
-export function SJBahanProvider({ children }: { children: ReactNode }) {
+export function SJBahanProvider({ children, operatingUnit = "toto_pusat" }: { children: ReactNode; operatingUnit?: string }) {
     const [sjBahan, setSjBahan] = useState<SJBahanRow[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -111,6 +111,7 @@ export function SJBahanProvider({ children }: { children: ReactNode }) {
                 while (true) {
                     const { data, error } = await supabase
                         .from("sj_bahan").select("*")
+                        .eq("operating_unit", operatingUnit)
                         .order("tanggal", { ascending: false })
                         .range(from, from + 999);
                     if (error) { console.error("Error fetching sj_bahan:", error); break; }
@@ -129,7 +130,7 @@ export function SJBahanProvider({ children }: { children: ReactNode }) {
             } catch (e) { console.error("SJ Bahan fetch error:", e); }
             finally { if (!cancelled()) setLoading(false); }
         })();
-    }, []);
+    }, [operatingUnit]);
 
     // Realtime Subscriptions — ikut lazy: baru connect setelah data mulai dimuat.
     useEffect(() => {
@@ -140,6 +141,7 @@ export function SJBahanProvider({ children }: { children: ReactNode }) {
             .on("postgres_changes", { event: "*", schema: "public", table: "sj_bahan" }, (payload) => {
                 const { eventType, new: n, old: o } = payload;
                 if (eventType === "INSERT") {
+                    if ((n as { operating_unit?: string }).operating_unit !== operatingUnit) return;
                     setSjBahan(prev => prev.some(x => x.id === (n as { id: string }).id) ? prev : [dbToSJBahan(n, []), ...prev]);
                 } else if (eventType === "UPDATE") {
                     const row = n as Record<string, any>;
@@ -187,7 +189,7 @@ export function SJBahanProvider({ children }: { children: ReactNode }) {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [started]);
+    }, [started, operatingUnit]);
 
     const addSJBahan = useCallback(async (sj: Omit<SJBahanRow, "id">): Promise<string> => {
         const id = `SJB-${Date.now()}`;
@@ -203,6 +205,7 @@ export function SJBahanProvider({ children }: { children: ReactNode }) {
                 total_batang: sj.totalBatang,
                 total_meter: sj.totalMeter,
                 status: sj.status,
+                operating_unit: operatingUnit,
             });
             if (err1) throw err1;
 
@@ -228,7 +231,7 @@ export function SJBahanProvider({ children }: { children: ReactNode }) {
             alert("Gagal menyimpan SJ Bahan: " + (err.message || "Unknown Error"));
             throw err;
         }
-    }, []);
+    }, [operatingUnit]);
 
     const updateSJBahan = useCallback((id: string, updates: Partial<SJBahanRow>) => {
         setSjBahan(prev => prev.map(s => (s.id === id ? { ...s, ...updates } : s)));

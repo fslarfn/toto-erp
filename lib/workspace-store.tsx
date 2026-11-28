@@ -10,7 +10,7 @@ import { supabase } from "@/lib/supabase-client";
  */
 export type Workspace = "toto" | "sidoarjo" | "alucurv";
 export type ActiveWorkspace = Workspace | "gabungan";
-export type WorkspaceRole = "owner" | "manager" | "finance" | "sales" | "produksi" | "barang";
+export type WorkspaceRole = "owner" | "manager" | "finance" | "sales" | "produksi" | "barang" | "finishing";
 
 export interface WorkspaceMembership {
     workspace: Workspace;

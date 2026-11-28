@@ -28,6 +28,7 @@ export interface Quotation {
     notes: string;
     created_by?: string;
     created_at?: string;
+    operating_unit?: string;
 }
 
 type Ctx = {
@@ -42,7 +43,7 @@ type Ctx = {
 
 const QuoteCtx = createContext<Ctx | null>(null);
 
-export function QuotationProvider({ children }: { children: ReactNode }) {
+export function QuotationProvider({ children, operatingUnit = "toto_pusat" }: { children: ReactNode; operatingUnit?: string }) {
     const [quotations, setQuotations] = useState<Quotation[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -70,6 +71,7 @@ export function QuotationProvider({ children }: { children: ReactNode }) {
                 while (true) {
                     const { data, error } = await supabase
                         .from("quotations").select("*")
+                        .eq("operating_unit", operatingUnit)
                         .order("created_at", { ascending: false })
                         .range(from, from + 999);
                     if (error) throw error;
@@ -83,7 +85,7 @@ export function QuotationProvider({ children }: { children: ReactNode }) {
                 if (isMounted()) setLoading(false);
             }
         })();
-    }, []);
+    }, [operatingUnit]);
 
     // 2. Real-time Subscription — ikut lazy: baru connect setelah data mulai dimuat.
     useEffect(() => {
@@ -97,6 +99,7 @@ export function QuotationProvider({ children }: { children: ReactNode }) {
                     const { eventType, new: n, old: o } = payload;
 
                     if (eventType === "INSERT") {
+                        if ((n as Quotation).operating_unit !== operatingUnit) return;
                         setQuotations(prev => prev.some(q => q.id === (n as Quotation).id) ? prev : [n as Quotation, ...prev]);
                     } else if (eventType === "UPDATE") {
                         setQuotations(prev =>
@@ -112,12 +115,12 @@ export function QuotationProvider({ children }: { children: ReactNode }) {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [started]);
+    }, [started, operatingUnit]);
 
     const addQuotation = useCallback(async (q: Omit<Quotation, "id" | "created_at">) => {
-        const { error } = await supabase.from("quotations").insert([q]);
+        const { error } = await supabase.from("quotations").insert([{ ...q, operating_unit: operatingUnit }]);
         if (error) throw error;
-    }, []);
+    }, [operatingUnit]);
 
     const updateQuotation = useCallback(async (id: string, q: Partial<Quotation>) => {
         const { error } = await supabase
